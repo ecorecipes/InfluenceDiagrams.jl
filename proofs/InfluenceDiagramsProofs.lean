@@ -1,0 +1,5 @@
+import InfluenceDiagramsProofs.Basic
+import InfluenceDiagramsProofs.Finite.InfluenceDiagram
+import InfluenceDiagramsProofs.Finite.Instantiate
+import InfluenceDiagramsProofs.Finite.ExpectedUtility
+import InfluenceDiagramsProofs.Finite.Information

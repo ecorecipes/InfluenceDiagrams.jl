@@ -1,0 +1,42 @@
+name = "InfluenceDiagrams"
+uuid = "cd3dbe2d-275d-4a8e-841a-d44f7f7abf07"
+version = "0.1.0"
+authors = ["Simon Frost"]
+
+[deps]
+ACSets = "227ef7b5-1206-438b-ac65-934d6da304b8"
+BayesianNetworkFormats = "590d4596-919e-4d5f-b4a5-097a6400eab8"
+BayesianNetworkInference = "195c3fd5-7fa7-45ed-aaa0-a92a9a2fe9e5"
+BayesianNetworks = "47d2e50c-3d9a-425e-96fd-023c794d3c65"
+FiniteKernels = "2ee73795-50db-4096-9573-22982ed4949b"
+GATlab = "f0ffcf3b-d13a-433e-917c-cc44ccf5ead2"
+Graphs = "86223c79-3864-5bf0-83f7-82e725a168b6"
+JSON3 = "0f8b85d8-7281-11e9-16c2-39a750bddbf1"
+Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
+StructTypes = "856f2bd8-1eba-4b0a-8007-ebc267875bd4"
+
+[sources]
+FiniteKernels = {path = "../FiniteKernels.jl"}
+BayesianNetworkFormats = {path = "../BayesianNetworkFormats.jl"}
+BayesianNetworks = {path = "../BayesianNetworks.jl"}
+BayesianNetworkInference = {path = "../BayesianNetworkInference.jl"}
+
+[compat]
+ACSets = "0.2.29"
+BayesianNetworkFormats = "0.1"
+BayesianNetworkInference = "0.1"
+BayesianNetworks = "0.1"
+FiniteKernels = "0.1"
+GATlab = "0.2.4"
+Graphs = "1"
+JSON3 = "1"
+Random = "1"
+StructTypes = "1"
+Test = "1"
+julia = "1.12"
+
+[extras]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Test"]

@@ -1,0 +1,192 @@
+---
+title: "Policies, instantiation and expected utility"
+author: "Simon Frost"
+format:
+  html:
+    code-fold: false
+    toc: true
+  gfm:
+    toc: true
+  pdf: default
+engine: julia
+---
+
+## Overview
+
+The syntax of the first vignette says which variables exist and who reads what. The
+`InfluenceDiagramModel` adds the numbers: chance kernels, utility functions and a
+strategy of policies. This vignette follows SPEC sections 26 to 31 on the umbrella
+problem: policies as kernels, the central reduction `instantiate` (Proposition 5) and
+the reference computation of expected utility (Proposition 6).
+
+## Setup
+
+
+```{julia}
+using InfluenceDiagrams
+m = umbrella_model()
+```
+
+`umbrella_model` binds the numbers of @Shachter1986 to `umbrella_diagram`: the weather
+is sunny
+with probability 0.7, the forecast is right most of the time, and the utility rewards
+leaving the umbrella at home when it is sunny.
+
+```{julia}
+cpt(kernel(m, :Forecast))
+```
+
+```{julia}
+utility_table(utility(m, :U))
+```
+
+## Policies
+
+A policy for decision $D$ is a stochastic kernel from its information set to its
+action space, $\delta_D : I_D \to A_D$. Three kinds are provided:
+
+- `DeterministicPolicy`: a table, dictionary or function from information states to
+  actions;
+- `StochasticPolicy`: any normalised `FiniteKernel` with the right domain and codomain;
+- `ConstantPolicy`: always the same action, whatever the information.
+
+`deterministic_policy` reads the axes from the model, so only the rule has to be given.
+
+```{julia}
+take_when_rainy = deterministic_policy(m, :Umbrella, f -> f == :rainy ? :take : :leave)
+policy_table(take_when_rainy)
+```
+
+`policy_kernel` is the kernel that `instantiate` binds to the decision: a one-hot
+kernel for a deterministic policy, the kernel itself for a stochastic one, and the
+discard-then-point-mass kernel for a constant one (which needs the spaces of the
+model).
+
+```{julia}
+k = policy_kernel(take_when_rainy)
+cpt(k)
+```
+
+```{julia}
+cpt(policy_kernel(ConstantPolicy(:take), m, :Umbrella))
+```
+
+Every policy is checked against its decision (`validate_policy`, SPEC section 37 item
+9): the information axes must match the information set in order, the action axis
+must be the action variable's, a constant must be one of its states.
+
+```{julia}
+try
+    set_policy(m, :Umbrella, ConstantPolicy(:sideways))
+catch e
+    e
+end
+```
+
+## Strategies
+
+A `Strategy` holds one policy per decision. Models are immutable values:
+`set_policy` and `fix_decision` return new models and leave the original untouched.
+
+```{julia}
+m1 = set_policy(m, :Umbrella, take_when_rainy)
+m2 = fix_decision(m, :Umbrella => :leave)
+strategy(m), strategy(m1), strategy(m2)
+```
+
+## Instantiate: the central reduction
+
+Substituting a complete strategy into the diagram yields an ordinary Bayesian network
+(SPEC section 28): each decision gets a mechanism named `policy[D]` with reference
+`PolicyRef(D)`, whose inputs are the information set in `information_position` order,
+and the Bayesian-network part of the diagram is copied into a fresh `BayesNet`. This
+is the only place where information arcs turn into causal inputs, and only for the
+policies supplied.
+
+```{julia}
+bn = instantiate(m1)
+```
+
+```{julia}
+syntax(bn)
+```
+
+Proposition 5 says the result is a valid closed network, which is checked structurally
+and numerically:
+
+```{julia}
+validate(bn; closed = true, unique_names = true, semantics = true)
+sum(joint_distribution(bn).table)
+```
+
+```{julia}
+to_graphviz(bn)
+```
+
+The Lean development in `proofs/` proves the same statement for the finite model
+(`closed_instantiate`, `sum_joint_instantiate_eq_one`) and the factorisation of the
+joint law of SPEC section 31, `joint_instantiate`.
+
+## Expected utility
+
+Under a strategy the joint law is $P_\sigma(x) = \prod_X \kappa_X \prod_D \delta_D$,
+the total utility is additive, $U(x) = \sum_j u_j(x)$, and
+$EU(\sigma) = \sum_x P_\sigma(x) U(x)$ (Proposition 6). `expected_utility` follows the
+reference algorithm of SPEC section 31 literally: instantiate, enumerate the joint
+by brute force, evaluate the total utility of every assignment, take the expectation.
+
+```{julia}
+expected_utility(m1)
+```
+
+Fixed actions are the two extremes: always leaving the umbrella gives 70, always
+taking it 35. Pairs `:D => :a` are a shortcut for `fix_decision`.
+
+```{julia}
+expected_utility(m, :Umbrella => :leave), expected_utility(m, :Umbrella => :take)
+```
+
+Every deterministic policy of the decision can be enumerated; the best of the eight
+is the one that reacts to a rainy forecast, with expected utility 77.
+
+```{julia}
+[(policy_table(p), expected_utility(m, Strategy(:Umbrella => p)))
+ for p in all_deterministic_policies(m, :Umbrella)]
+```
+
+Fixing a decision and intervening on its action variable are different operations
+(SPEC section 41). `fix_decision` keeps the decision and gives it a constant policy;
+`do_intervention` on the action removes the decision (with its information set) and
+installs a constant mechanism, a physical override recorded in the history. For the
+same action they give the same expected utility, but the diagrams differ.
+
+```{julia}
+done = do_intervention(m, :Umbrella => :take)
+nparts(syntax(m2), :Decision), nparts(syntax(done), :Decision), history(done)[1].note
+```
+
+```{julia}
+expected_utility(m2), expected_utility(instantiate(done))
+```
+
+Evidence conditions the expectation: with a rainy forecast recorded by `observe`, the
+posterior probability of rain is 0.72 and taking the umbrella is worth more.
+
+```{julia}
+e = observe(m, :Forecast => :rainy)
+expected_utility(e, :Umbrella => :take), expected_utility(e, :Umbrella => :leave)
+```
+
+## Summary
+
+A policy is an ordinary kernel from a decision's information set to its action, a
+strategy is one policy per decision, and `instantiate` substitutes them into the syntax
+to produce a plain `BayesModel` -- which is why expected utility needs no new machinery
+beyond inference on that model. Evidence conditions the expectation exactly as it
+conditions a posterior. The next vignette, *Optimisation: exhaustive versus decision
+variable elimination*, searches over strategies instead of evaluating a given one.
+
+## References
+
+::: {#refs}
+:::

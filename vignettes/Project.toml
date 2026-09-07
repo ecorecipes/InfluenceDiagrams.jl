@@ -1,0 +1,14 @@
+[deps]
+InfluenceDiagrams = "cd3dbe2d-275d-4a8e-841a-d44f7f7abf07"
+BayesianNetworks = "47d2e50c-3d9a-425e-96fd-023c794d3c65"
+BayesianNetworkInference = "195c3fd5-7fa7-45ed-aaa0-a92a9a2fe9e5"
+BayesianNetworkFormats = "590d4596-919e-4d5f-b4a5-097a6400eab8"
+FiniteKernels = "2ee73795-50db-4096-9573-22982ed4949b"
+Graphs = "86223c79-3864-5bf0-83f7-82e725a168b6"
+
+[sources]
+InfluenceDiagrams = {path = ".."}
+FiniteKernels = {path = "../../FiniteKernels.jl"}
+BayesianNetworkFormats = {path = "../../BayesianNetworkFormats.jl"}
+BayesianNetworks = {path = "../../BayesianNetworks.jl"}
+BayesianNetworkInference = {path = "../../BayesianNetworkInference.jl"}

@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE language SYSTEM "language.dtd">
+<!-- Minimal Lean 4 syntax definition for pandoc/skylighting (pandoc has none built in):
+     keywords, tactics, nested block comments, doc comments, strings, attributes, #commands. -->
+<language name="Lean" section="Sources" version="1" kateversion="5.0" extensions="*.lean"
+          mimetype="text/x-lean" author="ecorecipes" license="MIT">
+  <highlighting>
+    <list name="keywords">
+      <item>theorem</item><item>lemma</item><item>def</item><item>abbrev</item><item>structure</item>
+      <item>class</item><item>instance</item><item>inductive</item><item>where</item><item>namespace</item>
+      <item>section</item><item>end</item><item>open</item><item>variable</item><item>universe</item>
+      <item>import</item><item>example</item><item>attribute</item><item>deriving</item>
+      <item>noncomputable</item><item>private</item><item>protected</item><item>partial</item>
+      <item>set_option</item><item>fun</item><item>let</item><item>have</item><item>show</item>
+      <item>from</item><item>if</item><item>then</item><item>else</item><item>match</item><item>with</item>
+      <item>do</item><item>for</item><item>in</item><item>return</item><item>by</item><item>at</item>
+      <item>using</item><item>calc</item><item>mut</item><item>extends</item><item>scoped</item>
+      <item>local</item><item>letI</item><item>haveI</item><item>generalizing</item>
+      <item>sorry</item><item>Type</item><item>Prop</item><item>Sort</item>
+    </list>
+    <list name="tactics">
+      <item>intro</item><item>intros</item><item>rintro</item><item>exact</item><item>refine</item>
+      <item>apply</item><item>rw</item><item>rwa</item><item>rfl</item><item>simp</item><item>simpa</item>
+      <item>simp_rw</item><item>simp_all</item><item>dsimp</item><item>unfold</item><item>constructor</item>
+      <item>rcases</item><item>obtain</item><item>cases</item><item>induction</item><item>funext</item>
+      <item>ext</item><item>congr</item><item>subst</item><item>by_cases</item><item>by_contra</item>
+      <item>use</item><item>ring</item><item>norm_num</item><item>linarith</item><item>omega</item>
+      <item>decide</item><item>infer_instance</item><item>split_ifs</item><item>choose</item>
+      <item>push</item><item>specialize</item><item>trivial</item><item>aesop</item><item>exfalso</item>
+      <item>left</item><item>right</item><item>contradiction</item><item>assumption</item>
+      <item>positivity</item><item>field_simp</item><item>norm_cast</item><item>push_cast</item>
+    </list>
+    <contexts>
+      <context name="Normal" attribute="Normal Text" lineEndContext="#stay">
+        <StringDetect attribute="Documentation" context="DocComment" String="/--" beginRegion="Comment"/>
+        <StringDetect attribute="Documentation" context="DocComment" String="/-!" beginRegion="Comment"/>
+        <Detect2Chars attribute="Comment" context="BlockComment" char="/" char1="-" beginRegion="Comment"/>
+        <Detect2Chars attribute="Comment" context="LineComment" char="-" char1="-"/>
+        <DetectChar attribute="String" context="String" char="&quot;"/>
+        <RegExpr attribute="Attribute" context="#stay" String="@\[[^\]]*\]"/>
+        <RegExpr attribute="Command" context="#stay" String="#[A-Za-z_]+"/>
+        <keyword attribute="Keyword" context="#stay" String="keywords"/>
+        <keyword attribute="Tactic" context="#stay" String="tactics"/>
+        <Float attribute="Float" context="#stay"/>
+        <Int attribute="Decimal" context="#stay"/>
+      </context>
+      <context name="BlockComment" attribute="Comment" lineEndContext="#stay">
+        <Detect2Chars attribute="Comment" context="BlockComment" char="/" char1="-" beginRegion="Comment"/>
+        <Detect2Chars attribute="Comment" context="#pop" char="-" char1="/" endRegion="Comment"/>
+      </context>
+      <context name="DocComment" attribute="Documentation" lineEndContext="#stay">
+        <Detect2Chars attribute="Documentation" context="DocComment" char="/" char1="-" beginRegion="Comment"/>
+        <Detect2Chars attribute="Documentation" context="#pop" char="-" char1="/" endRegion="Comment"/>
+      </context>
+      <context name="LineComment" attribute="Comment" lineEndContext="#pop"/>
+      <context name="String" attribute="String" lineEndContext="#stay">
+        <Detect2Chars attribute="String" context="#stay" char="\" char1="&quot;"/>
+        <DetectChar attribute="String" context="#pop" char="&quot;"/>
+      </context>
+    </contexts>
+    <itemDatas>
+      <itemData name="Normal Text" defStyleNum="dsNormal"/>
+      <itemData name="Keyword" defStyleNum="dsKeyword"/>
+      <itemData name="Tactic" defStyleNum="dsControlFlow"/>
+      <itemData name="Comment" defStyleNum="dsComment"/>
+      <itemData name="Documentation" defStyleNum="dsDocumentation"/>
+      <itemData name="String" defStyleNum="dsString"/>
+      <itemData name="Decimal" defStyleNum="dsDecVal"/>
+      <itemData name="Float" defStyleNum="dsFloat"/>
+      <itemData name="Attribute" defStyleNum="dsAttribute"/>
+      <itemData name="Command" defStyleNum="dsPreprocessor"/>
+    </itemDatas>
+  </highlighting>
+  <general>
+    <comments>
+      <comment name="singleLine" start="--"/>
+      <comment name="multiLine" start="/-" end="-/"/>
+    </comments>
+    <keywords casesensitive="1" weakDeliminator="'._"/>
+  </general>
+</language>

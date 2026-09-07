@@ -1,0 +1,208 @@
+---
+title: "Optimisation: exhaustive search versus decision variable elimination"
+author: "Simon Frost"
+format:
+  html:
+    code-fold: false
+    toc: true
+  gfm:
+    toc: true
+  pdf: default
+engine: julia
+---
+
+## Overview
+
+`optimize` solves $\sigma^* = \arg\max_\sigma EU(\sigma)$ (SPEC section 32) with one
+of two backends:
+
+- `ExhaustivePolicySearch` enumerates every deterministic strategy; it is the
+  correctness oracle of SPEC section 55.6;
+- `DecisionVariableElimination` generalises variable elimination with a valuation
+  algebra that sums out chance variables and maximises out decisions (SPEC section 33).
+  This is dynamic programming over the diagram [@TatmanShachter1990] carried out on the
+  division algebra of @JensenJensenDittmer1994.
+
+Both return a `DecisionSolution` with the maximal expected utility, an optimal
+strategy of deterministic policies, and diagnostics.
+
+## Setup
+
+
+```{julia}
+using InfluenceDiagrams
+using BayesianNetworkInference: unit_factor, reorder
+m = umbrella_model()
+```
+
+## Exhaustive policy search
+
+The number of deterministic strategies is the product over decisions of
+$|A_D|^{|I_D|}$; the umbrella decision has $2^3 = 8$.
+
+```{julia}
+n_deterministic_policies(m, :Umbrella)
+```
+
+```{julia}
+ex = optimize(m, ExhaustivePolicySearch())
+```
+
+```{julia}
+ex.expected_utility, policy_table(ex.strategy[:Umbrella]), ex.diagnostics
+```
+
+By default each strategy is scored from a value table built once by enumerating all
+joint states with the actions left free; `brute_force = true` instead evaluates every
+strategy through `instantiate` and `expected_utility`, the slowest and most literal
+form of the oracle. The search refuses more than `max_policies` strategies.
+
+```{julia}
+optimize(m, ExhaustivePolicySearch(; brute_force = true)).expected_utility
+```
+
+## The valuation algebra
+
+Decision variable elimination works on pairs $(\phi, \psi)$ of factors: a probability
+potential and a utility potential in "already divided" form, together denoting the
+contribution $\phi \cdot \psi$ to the expected utility (the division algebra of
+@JensenJensenDittmer1994). The operations are
+
+- combination: $(\phi_1, \psi_1) \otimes (\phi_2, \psi_2) = (\phi_1 \phi_2, \psi_1 + \psi_2)$;
+- sum-elimination of a chance variable $X$: $\phi' = \sum_X \phi$,
+  $\psi' = \sum_X \phi \psi / \phi'$ with $0/0 := 0$;
+- max-elimination of a decision $D$: $\psi' = \max_D \psi$, with $\phi$ constant in
+  $D$ (an error otherwise) and the maximising action recorded as a policy table.
+
+A set of valuations denotes $(\prod_i \phi_i)(\sum_i \psi_i)$, so eliminating a variable
+only combines the valuations whose scope contains it. The initial valuations are
+$(\kappa_X, 0)$ per chance mechanism and $(1, u_j)$ per utility; at the end $\phi$ is the
+probability of the evidence and $\psi$ the maximal expected utility.
+
+```{julia}
+W = FiniteAxis(:Weather, [:sunny, :rainy]); F = FiniteAxis(:Forecast, [:sunny, :cloudy, :rainy])
+U = FiniteAxis(:Umbrella, [:take, :leave])
+pw = Valuation(Factor([W], [0.7, 0.3]))
+pf = Valuation(Factor([W, F], [0.7 0.2 0.1; 0.15 0.25 0.6]))
+u = Valuation(unit_factor(), Factor([W, U], [20.0 100.0; 70.0 0.0]))
+v = combine([pw, pf, u])
+```
+
+Summing out the weather divides by the marginal of the forecast, so $\psi$ becomes the
+conditional expected utility $E[U \mid F, D]$:
+
+```{julia}
+s = sum_out(v, :Weather)
+reorder(s.ψ, [:Forecast, :Umbrella]).table
+```
+
+Maximising out the umbrella records the argmax for every forecast and leaves
+$E[\max_D E[U \mid F, D]]$ to be summed over the forecast:
+
+```{julia}
+r, policy, policy_scope = max_out(s, :Umbrella)
+policy, policy_scope, sum_out(r, :Forecast).ψ.table[]
+```
+
+## The strong elimination order
+
+Chance variables must be summed out and decisions maximised in an order compatible
+with what the decision maker knows: the variables are partitioned into blocks
+$I_0 \prec D_1 \prec I_1 \prec \dots \prec D_n \prec I_n$, where $I_{k-1}$ holds the
+chance variables first observed at $D_k$ and $I_n$ the ones never observed, and
+elimination runs from the last block backwards with a min-fill order inside each chance
+block (`BayesianNetworkInference.elimination_order` on the current interaction graph).
+
+```{julia}
+strong_elimination_order(m)
+```
+
+```{julia}
+dve = optimize(m, DecisionVariableElimination())
+```
+
+```{julia}
+dve.expected_utility, policy_table(dve.strategy[:Umbrella]), dve.diagnostics
+```
+
+The algorithm is exact when, at each maximisation, the utility potential depends only
+on variables the decision maker observes: the *no-forgetting* (perfect recall) subset,
+in which everything known at a decision is still known at every later one. (@Shachter1986
+reserves *regular* for the weaker property that a directed path runs through all the
+decisions.) No-forgetting is not a validity condition -- a diagram that
+forgets is a well-formed limited-memory diagram [@LauritzenNilsson2001], which
+`ExhaustivePolicySearch` solves exactly -- so
+it is checked at run time instead: the two-stage test-then-act problem satisfies it, and
+the same diagram with `Drill` forgetting `Test` does not.
+
+```{julia}
+t = two_stage_model()
+sol = optimize(t)
+sol.expected_utility, sol.strategy[:Test](), policy_table(sol.strategy[:Drill])
+```
+
+```{julia}
+try
+    optimize(without_information(t, :Drill, :Test))
+catch e
+    println(sprint(showerror, e))
+end
+```
+
+The error names the variables the decision maker would have to remember and the two
+ways out: `no_forgetting_arcs` lists the missing arcs, `with_no_forgetting` adds them,
+and `ExhaustivePolicySearch` solves the diagram as it stands. Vignette 04 works through
+the repair.
+
+```{julia}
+forgetful = without_information(t, :Drill, :Test)
+(missing_arcs = no_forgetting_arcs(forgetful),
+ repaired = optimize(with_no_forgetting(forgetful)).expected_utility,
+ limited_memory = optimize(forgetful, ExhaustivePolicySearch()).expected_utility)
+```
+
+## Agreement and timing
+
+SPEC section 55.6 requires the two backends to agree on expected utility and optimal
+policy; the test suite checks this on the umbrella, the SPEC section 46 grazing diagram,
+the two-stage problem and random tiny diagrams. On the grazing diagram exhaustive
+search enumerates $3^9 = 19683$ strategies.
+
+```{julia}
+g = reference_grazing_model()
+optimize(g, ExhaustivePolicySearch()); optimize(g);   # compile both backends first
+t_ex = @elapsed sol_ex = optimize(g, ExhaustivePolicySearch())
+t_dve = @elapsed sol_dve = optimize(g)
+(exhaustive = sol_ex.expected_utility, dve = sol_dve.expected_utility,
+ seconds_exhaustive = round(t_ex; digits = 3), seconds_dve = round(t_dve; digits = 3))
+```
+
+```{julia}
+policy_table(sol_ex.strategy[:GrazingManagement]) == policy_table(sol_dve.strategy[:GrazingManagement])
+```
+
+Ties between actions are broken in favour of the first action label by both backends
+(`argmax_table` for elimination, enumeration order for the search), so the recovered
+tables also agree whenever the optimum is unique on every reachable information state.
+The elimination diagnostics record the order used, the largest potential and the
+variables each policy really depends on:
+
+```{julia}
+sol_dve.diagnostics
+```
+
+## Summary
+
+Both backends return the same maximal expected utility and, where the optimum is unique
+on every reachable information state, the same policy tables: exhaustive search is the
+oracle, and decision variable elimination is the algorithm that scales, eliminating in a
+strong order that sums out chance variables and maximises out decisions on the valuation
+algebra. Elimination is exact only under no-forgetting, which is checked at run time
+rather than by `validate`, so a genuinely limited-memory diagram falls back to the
+oracle. The next vignette, *Value of information*, uses the same two optimisations twice
+over to price an observation.
+
+## References
+
+::: {#refs}
+:::

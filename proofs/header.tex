@@ -1,0 +1,37 @@
+% header.tex — LaTeX preamble additions for the pandoc/lualatex build of the proofs document
+% (`make pdf`). Included after pandoc's own font and highlighting setup, so everything here
+% overrides the defaults.
+\usepackage{fontspec}
+\usepackage{unicode-math}
+
+% JuliaMono (SIL OFL, https://juliamono.netlify.app) covers the whole of Lean's Unicode
+% (∀ ∃ λ ⟨⟩ ≫ ⊗ Δ ε ⊣ ≃ ∑ ∏ ℝ ≥ ≠ ∘ ↦ ⁻¹ and subscripts). It lives in the repository-level
+% `fonts/JuliaMono/` directory (not installed system-wide). `\JuliaMonoDir` is normally defined
+% by the Makefile as an absolute path (pandoc runs lualatex in a temporary directory); the
+% fallback below is for running lualatex by hand from `proofs/`.
+\providecommand{\JuliaMonoDir}{../../fonts/JuliaMono/}
+
+% Body text: STIX Two Text (macOS system font / TeX Live `stix2-otf`); maths: STIX Two Math.
+% Any glyph missing from STIX Two Text (arrows, ⟦ ⟧, ⨂, ◁ ▷ ...) falls back to STIX Two Math
+% and then to JuliaMono, glyph by glyph, via luaotfload's fallback mechanism.
+\directlua{luaotfload.add_fallback("proofsfallback", {
+  "STIXTwoMath-Regular.otf:mode=node;",
+  "[\JuliaMonoDir JuliaMono-Regular.ttf]:mode=node;"
+})}
+\setmainfont{STIX Two Text}[RawFeature={fallback=proofsfallback}]
+\setsansfont{STIX Two Text}[RawFeature={fallback=proofsfallback}]
+\setmathfont{STIX Two Math}
+\setmonofont{JuliaMono-Regular}[
+  Path=\JuliaMonoDir, Extension=.ttf, Scale=MatchLowercase,
+  BoldFont=JuliaMono-Bold, ItalicFont=JuliaMono-RegularItalic, BoldItalicFont=JuliaMono-BoldItalic]
+
+% Wrap long code lines (Lean lines run to 100 characters) in both highlighted and plain
+% code blocks, at a slightly smaller size.
+\usepackage{fvextra}
+\DefineVerbatimEnvironment{Highlighting}{Verbatim}{breaklines,breakanywhere,commandchars=\\\{\},fontsize=\small}
+\RecustomVerbatimEnvironment{verbatim}{Verbatim}{breaklines,breakanywhere,fontsize=\small}
+\fvset{breaklines=true,breakanywhere=true}
+
+% Let inline code in tables and headings break too.
+\usepackage{xurl}
+\sloppy

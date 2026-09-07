@@ -1,0 +1,52 @@
+name: Lean
+# The readable documents (proofs/*Proofs.md, .html, .pdf) are generated locally with `make docs`
+# (mdgen, pandoc, lualatex) and committed; this workflow only checks the proofs themselves.
+on:
+  push:
+    branches: [main]
+    paths: ['proofs/**']
+  pull_request:
+    paths: ['proofs/**']
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      # proofs/lakefile.toml has `[[require]] name = "bayesian_networks_proofs", path =
+      # "../../BayesianNetworks.jl/proofs"`, a Lake *path* dependency: a lone clone of this
+      # repository cannot `lake build`. Both repositories are checked out side by side, as the
+      # Julia CI does for the package sources, and the sibling ref is pinned explicitly so the
+      # proofs are not silently checked against whatever the default branch happens to be.
+      - uses: actions/checkout@v4
+        with:
+          path: InfluenceDiagrams.jl
+      - uses: actions/checkout@v4
+        with:
+          repository: ecorecipes/BayesianNetworks.jl
+          ref: main
+          path: BayesianNetworks.jl
+      - name: Use a local packages directory in CI (the shared one is a sibling path on developer machines)
+        working-directory: InfluenceDiagrams.jl/proofs
+        # Lake reads the packages directory from lake-manifest.json, not from lakefile.toml
+        # (`Workspace.materializeDeps` in Lake/Load/Resolve.lean of leanprover/lean4:v4.30.0
+        # uses `manifest.packagesDir?.getD ws.relPkgsDir`), and logs "manifest out of date"
+        # when the two disagree, which --wfail turns into a failure. There is no environment
+        # variable override in this toolchain, so both files are rewritten.
+        run: |
+          sed -i 's#^packagesDir = .*#packagesDir = ".lake/packages"#' lakefile.toml
+          python3 -c 'import json; p = "lake-manifest.json"; m = json.load(open(p)); m["packagesDir"] = ".lake/packages"; json.dump(m, open(p, "w"), indent=1)'
+      - uses: leanprover/lean-action@v1
+        with:
+          lake-package-directory: InfluenceDiagrams.jl/proofs
+          use-github-cache: false
+          # ADR 0005 promises `lake exe cache get`; lean-action runs it when this is true.
+          # Set explicitly rather than relying on `auto`, so Mathlib's prebuilt oleans are
+          # always fetched instead of a ~7 GB Mathlib build.
+          use-mathlib-cache: 'true'
+          build-args: "--wfail"
+      - name: Axiom audit
+        working-directory: InfluenceDiagrams.jl/proofs
+        run: lake env lean Audit.lean
+      - name: Committed schema JSON matches the Lean schema terms
+        working-directory: InfluenceDiagrams.jl/proofs
+        run: lake exe emit_schema --check

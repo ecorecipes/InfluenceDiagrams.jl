@@ -1,0 +1,12 @@
+# Lake build products (also ignored at the repository root)
+.lake/
+# Intermediates of `make docs` (the .md/.html/.pdf documents themselves are committed)
+.mdgen_tmp/
+.fonts.tex
+*.tex
+# ...but the hand-written lualatex preamble is source, not an intermediate
+!header.tex
+*.aux
+*.log
+*.out
+*.toc
