@@ -3,3 +3,8 @@ import InfluenceDiagramsProofs.Finite.InfluenceDiagram
 import InfluenceDiagramsProofs.Finite.Instantiate
 import InfluenceDiagramsProofs.Finite.ExpectedUtility
 import InfluenceDiagramsProofs.Finite.Information
+import InfluenceDiagramsProofs.Finite.Optimization
+import InfluenceDiagramsProofs.Finite.OptimalInformation
+import InfluenceDiagramsProofs.Finite.DVE.Example
+import InfluenceDiagramsProofs.Finite.DVE.Guard.Boundary
+import InfluenceDiagramsProofs.Finite.OrderedPolicies

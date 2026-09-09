@@ -17,4 +17,6 @@ include("helpers.jl")
     include("test_formats.jl")
     include("test_graphics.jl")
     include("test_serialization.jl")
+    include("test_regressions.jl")
+    include("test_certificates.jl")
 end

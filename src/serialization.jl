@@ -78,8 +78,14 @@ decision_name)`, information inputs by `(decision, information_position)`, utili
 canonical forms; [`is_isomorphic`](@ref) compares them.
 """
 function canonicalize(id::AbstractInfluenceDiagram)
+    return BayesianNetworks._canonical_copy(id,
+                                            sort(variables(id);
+                                                 by=v -> (variable_name(id, v), v)))
+end
+
+function BayesianNetworks._canonical_copy(id::AbstractInfluenceDiagram,
+                                          old_vars::AbstractVector{Int})
     out = constructor(id)()
-    old_vars = sort(variables(id); by=v -> (variable_name(id, v), v))
     new_var = Dict{Int,Int}()
     for v in old_vars
         new_var[v] = add_part!(out, :Variable; variable_name=variable_name(id, v),
@@ -120,7 +126,12 @@ function canonicalize(id::AbstractInfluenceDiagram)
                       information_position=subpart(id, i, :information_position))
         end
     end
-    old_utils = sort(utilities(id); by=u -> (subpart(id, u, :utility_name), u))
+    old_utils = sort(utilities(id);
+                     by=u -> (subpart(id, u, :utility_name),
+                              repr(subpart(id, u, :utility_ref)),
+                              Tuple((subpart(id, i, :utility_position),
+                                     get(new_var, subpart(id, i, :utility_variable), 0))
+                                    for i in utility_input_ids(id, u))))
     for u in old_utils
         new_u = add_part!(out, :Utility; utility_name=subpart(id, u, :utility_name),
                           utility_ref=subpart(id, u, :utility_ref))
@@ -140,16 +151,19 @@ function canonicalize(id::AbstractInfluenceDiagram)
 end
 
 """
-    is_isomorphic(a::AbstractInfluenceDiagram, b::AbstractInfluenceDiagram) -> Bool
+    is_isomorphic(a::AbstractInfluenceDiagram, b::AbstractInfluenceDiagram; max_orderings=100_000) -> Bool
 
 Whether two diagrams are the same up to renumbering of parts, as equality of their
 [`canonicalize`](@ref)d forms (exact when variable, mechanism, decision and utility
-names are unique; otherwise the search over equally named variables decides).
+names are unique; otherwise a bounded search over equally named variables decides).
+Every candidate retains decision information, utility scopes/references and
+precedence rows. `max_orderings` has the same meaning as for Bayesian networks.
 """
-function is_isomorphic(a::AbstractInfluenceDiagram, b::AbstractInfluenceDiagram)
+function is_isomorphic(a::AbstractInfluenceDiagram, b::AbstractInfluenceDiagram;
+                       max_orderings::Integer=100_000)
     canonicalize(a) == canonicalize(b) && return true
     _names_unique(a) && _names_unique(b) && return false
-    return invoke(is_isomorphic, Tuple{ACSet,ACSet}, a, b)
+    return BayesianNetworks._isomorphic_by_search(a, b, max_orderings)
 end
 
 function _names_unique(id::AbstractInfluenceDiagram)

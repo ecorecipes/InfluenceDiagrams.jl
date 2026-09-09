@@ -4,9 +4,9 @@ name: Lean
 on:
   push:
     branches: [main]
-    paths: ['proofs/**']
+    paths: ['proofs/**', '.github/workflows/lean.yml']
   pull_request:
-    paths: ['proofs/**']
+    paths: ['proofs/**', '.github/workflows/lean.yml']
   workflow_dispatch:
 jobs:
   build:
@@ -15,15 +15,16 @@ jobs:
       # proofs/lakefile.toml has `[[require]] name = "bayesian_networks_proofs", path =
       # "../../BayesianNetworks.jl/proofs"`, a Lake *path* dependency: a lone clone of this
       # repository cannot `lake build`. Both repositories are checked out side by side, as the
-      # Julia CI does for the package sources, and the sibling ref is pinned explicitly so the
-      # proofs are not silently checked against whatever the default branch happens to be.
+      # Julia CI does for the package sources. For reproducible releases, configure
+      # BAYESIAN_NETWORKS_PROOFS_REF to an immutable companion commit. A companion branch
+      # may be used during coordinated development; main is the compatibility default.
       - uses: actions/checkout@v4
         with:
           path: InfluenceDiagrams.jl
       - uses: actions/checkout@v4
         with:
           repository: ecorecipes/BayesianNetworks.jl
-          ref: main
+          ref: ${{ vars.BAYESIAN_NETWORKS_PROOFS_REF || 'main' }}
           path: BayesianNetworks.jl
       - name: Use a local packages directory in CI (the shared one is a sibling path on developer machines)
         working-directory: InfluenceDiagrams.jl/proofs
@@ -46,7 +47,9 @@ jobs:
           build-args: "--wfail"
       - name: Axiom audit
         working-directory: InfluenceDiagrams.jl/proofs
-        run: lake env lean Audit.lean
+        run: |
+          python3 ../../BayesianNetworks.jl/proofs/scripts/audit.py --self-test
+          make audit
       - name: Committed schema JSON matches the Lean schema terms
         working-directory: InfluenceDiagrams.jl/proofs
         run: lake exe emit_schema --check

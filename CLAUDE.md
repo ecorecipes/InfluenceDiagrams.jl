@@ -47,7 +47,35 @@ Decision variable elimination is exact only under no-forgetting. The choice made
 Note that `decision_order` linearises a partial order by part id, so two decisions with no arcs between them are
 ordered but neither knows the other's action: that is a forgetting diagram, and `with_no_forgetting` is the repair.
 - `src/formats_bridge.jl`, `src/examples.jl`: Netica/GeNIe/HUGIN bridge; umbrella, SPEC §46 grazing, two-stage examples.
-- `proofs/`: the Lean model (`instantiate`, `strategyKernel`, `expectedUtility`, `Strategy.fix`, information enlargement); do not edit. Propositions 5 and 6 and `fix_decision` = hard intervention are proved `sorry`-free, but over the abstract `FinInfluenceDiagram`/`FinBayesNet` model (unordered parent sets, kernels as functions), not over the ACSet types in `src/`. Proposition 7 is **not** proved: only a single-decision shadow with a `sorry` in `Roadmap.lean`, outside the default target; DVE correctness rests on the property tests against `ExhaustivePolicySearch`. "Information monotonicity" is proved in the weak form "some strategy on the enlarged information set attains the same expected utility".
+- `src/certificates.jl`: complete version-1 DVE model-data export. Source IDs are strings;
+  explicit zero-based coordinates are lexicographic, not `vec` order. Raw CPTs and actual
+  diagonal factors must agree. Binary64 bits are retained; rational companions are explicit,
+  complete and checked with exact nearest-even midpoint arithmetic. No silent normalization,
+  intrinsic-rational inference from floats or execution-trace profile is supported.
+- `proofs/`: the Lean model (`instantiate`, `strategyKernel`, `expectedUtility`, `Strategy.fix`,
+  information enlargement). Propositions 5 and 6 and `fix_decision` = hard intervention
+  are proved over the abstract finite model, not the ACSet or Julia arrays.
+  `Finite/Optimization.lean` now proves exact deterministic-table mixture identities and
+  global deterministic sufficiency for any finite number of independently parameterised
+  decisions, including limited memory. `Finite/OptimalInformation.lean` proves attained
+  optimal-value monotonicity, not merely inclusion of an equal-value strategy.
+  `Finite/DVE/` now proves the actual exact finite-function bucket algorithm:
+  generated no-forgetting schedules, structural probability independence, local policy
+  reconstruction and realized global optimality. `Guard/Complete.lean` proves that
+  every exact all-row probability diagnostic holds, including zero-outside contexts.
+  Its normalized smoothing is a proof device, not part of the algorithm.
+  `solveGuarded_spec` has no strict-positivity or assumed-correct-trace premise.
+  Supported evidence is a nonnegative likelihood on an action-free chance-ancestral
+  set; its mass is strategy independent and the checked solver rejects exactly zero
+  mass. All default and Roadmap targets remain `sorry`-free. Do not conflate this
+  exact-model Proposition 7 with verification of the literal Float64 arrays, reference
+  resolution, explicit array conditioning, min-fill implementation or first-label ties.
+  `Finite/OrderedPolicies.lean` separately defines least-state local argmax,
+  reconstructs its admissible information table and proves strict `2*epsilon`
+  gap stability under uniform score error. Its supplied order is state-position
+  order for `Fin n`. It does not establish whole-driver first-label array identity
+  or automatically bound Float64 DVE score errors.
+  Follow the proof README's build, audit and rendering rules when extending this layer.
 
 ## Invariants that must not be broken
 
@@ -57,7 +85,8 @@ ordered but neither knows the other's action: that is a forgetting diagram, and 
 - Information arcs are never causal arcs: `InformationInput` and `Input` are different objects, `variable_graph` ignores information, and only `instantiate` turns an information set into the inputs of a policy mechanism.
 - Observation (`observe`), intervention (`do_intervention`) and fixing a decision (`fix_decision`) are different operations and stay different. Evidence never sits on an action variable: an action has no chance mechanism, so there is nothing to condition. `observe` refuses it and `validate(::InfluenceDiagramModel)` (hence `_check_solvable` and both backends) throws `EvidenceOnActionError`.
 - No-forgetting is a solver precondition, not a validity condition (see above). Do not add it to `validate`.
-- `validate`, `instantiate`, `expected_utility` and `optimize` take the kernel-normalisation `atol` of the sibling packages, so a model read with `read_influence_diagram(path; atol = 1e-6)` can be checked and solved at the same tolerance. (`BayesianNetworks.joint_distribution` has no `atol`, so the brute-force `expected_utility` still needs a normalised model: an API gap, not a local bug.)
+- `validate`, `instantiate`, `expected_utility` and `optimize` thread the kernel-normalisation `atol` through the joint/conditional oracle as well as validation. DVE checks no-forgetting and action-free causal ancestry of external evidence structurally; its separate probability diagnostic uses a relative tolerance per row, including arbitrarily small rows. Accepted rounded CPTs are not silently renormalized, so tolerance acceptance is not exact arithmetic.
+- The valuation layer reuses BayesianNetworkInference's `_union_axes` and `_broadcastable` helpers for scope/axis agreement and alignment. Keep those internal cross-package contracts in step.
 - Every optimised path is checked against a slower oracle (`joint_distribution`, exhaustive policy search) on small models; DVE ties resolve to the first action label.
 - Models are immutable values: every operation returns a new model.
 
@@ -68,7 +97,7 @@ julia --project -e 'using Pkg; Pkg.instantiate(); Pkg.test()'   # the test suite
 julia --project=docs docs/make.jl                                 # build docs locally
 cd vignettes && quarto render                                     # render vignettes to html/gfm/pdf (julia engine; PDF needs lualatex + ../fonts/JuliaMono)
 julia scripts/sync_vignettes.jl [--check]                         # copy vignettes into docs/src/tutorials
-cd proofs && lake build && lake exe emit_schema --check           # Lean proofs and schema JSON
+cd proofs && lake build --wfail && make audit && lake exe emit_schema --check
 ```
 
 ## Files not to edit by hand

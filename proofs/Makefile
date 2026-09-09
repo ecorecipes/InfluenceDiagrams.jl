@@ -12,11 +12,14 @@ cache:
 build:
 	lake build --wfail
 
-# Print the axioms used by every main theorem (only propext/Quot.sound/Classical.choice expected)
+# Reject missing audit results, nonstandard axioms and source proof escape hatches.
 audit:
-	lake env lean Audit.lean
+	@mkdir -p .lake
+	@lake env lean Audit.lean > .lake/audit.log 2>&1 || { cat .lake/audit.log; exit 1; }
+	@cat .lake/audit.log
+	python3 scripts/audit.py .lake/audit.log
 
-# Build the deferred statements (may contain sorry); not part of `build` or `audit`
+# Build the remaining-work module; currently contains no unproved declarations
 roadmap:
 	lake build $(LIB).Roadmap
 
@@ -33,10 +36,15 @@ check-schema:
 # Requires pandoc and a TeX distribution with lualatex (TinyTeX or MacTeX); built locally, not
 # in CI. Fonts: STIX Two Text/Math (system or TeX Live) and JuliaMono from ../../fonts/JuliaMono.
 
-# Modules in import (dependency) order, as in $(LIB).lean; Roadmap.lean (contains sorry) last.
+# Modules in import (dependency) order, as in $(LIB).lean; Roadmap.lean last.
 MD_FILES = \
     Basic.md Finite/InfluenceDiagram.md Finite/Instantiate.md Finite/ExpectedUtility.md \
-    Finite/Information.md \
+    Finite/Information.md Finite/Optimization.md Finite/OptimalInformation.md \
+    Finite/DVE/Valuation.md Finite/DVE/Semantics.md Finite/DVE/Driver.md \
+    Finite/DVE/Solver.md Finite/DVE/Schedule.md Finite/DVE/Evidence.md Finite/DVE/Example.md \
+    Finite/DVE/Guard/Positive.md Finite/DVE/Guard/Provenance.md \
+    Finite/DVE/Guard/Complete.md Finite/DVE/Guard/Boundary.md \
+    Finite/OrderedPolicies.md \
     Roadmap.md
 
 JULIAMONO_DIR = $(abspath ../../fonts/JuliaMono)/

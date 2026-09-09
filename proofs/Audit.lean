@@ -1,9 +1,136 @@
 /-
 Axiom audit: `lake env lean Audit.lean` (or `make audit`). Every theorem below must report at
-most `propext`, `Classical.choice` and `Quot.sound`. `InfluenceDiagramsProofs.Roadmap` (which
-contains `sorry`) is intentionally not imported here.
+most `propext`, `Classical.choice` and `Quot.sound`. The completed Roadmap theorem now
+lives in the default library; the remaining-work module itself is not needed here.
 -/
 import InfluenceDiagramsProofs
+import Mathlib.Util.AssertNoSorry
+
+assert_no_sorry InfluenceDiagramsProofs.firstArgmax_stable
+assert_no_sorry InfluenceDiagramsProofs.FinInfluenceDiagram.orderedTable_reconstruct
+#print axioms InfluenceDiagramsProofs.maximizing_nonempty
+#print axioms InfluenceDiagramsProofs.firstArgmax_maximizes
+#print axioms InfluenceDiagramsProofs.firstArgmax_first
+#print axioms InfluenceDiagramsProofs.firstArgmax_stable
+#print axioms InfluenceDiagramsProofs.FinInfluenceDiagram.Policy.ofOrderedScore
+#print axioms InfluenceDiagramsProofs.FinInfluenceDiagram.orderedTable_reconstruct
+#print axioms InfluenceDiagramsProofs.FinInfluenceDiagram.orderedPolicy_table
+#print axioms InfluenceDiagramsProofs.FinInfluenceDiagram.orderedPolicy_is_local
+#print axioms InfluenceDiagramsProofs.FinInfluenceDiagram.orderedPolicy_maximizes
+
+-- Exact multi-decision bucket DVE; the schedule is generated from no-forgetting.
+assert_no_sorry InfluenceDiagramsProofs.DVE.solve_spec
+assert_no_sorry InfluenceDiagramsProofs.DVE.solveEvidence_spec
+assert_no_sorry InfluenceDiagramsProofs.DVE.solveEvidence_eq_optimal
+assert_no_sorry InfluenceDiagramsProofs.DVE.NoForgettingOrder.plan
+assert_no_sorry InfluenceDiagramsProofs.DVE.Example.checked_solution
+assert_no_sorry InfluenceDiagramsProofs.DVE.all_guards_complete
+assert_no_sorry InfluenceDiagramsProofs.DVE.all_guards_complete_evidence
+assert_no_sorry InfluenceDiagramsProofs.DVE.checkedRun_generated_eq
+assert_no_sorry InfluenceDiagramsProofs.DVE.checkedRun_generated_evidence_eq
+assert_no_sorry InfluenceDiagramsProofs.DVE.solveGuarded_spec
+assert_no_sorry InfluenceDiagramsProofs.DVE.solveEvidenceGuarded_none_iff
+
+-- Exact all-row diagnostic completeness, including zero-outside contexts.
+#print axioms InfluenceDiagramsProofs.DVE.spread_zero_iff
+#print axioms InfluenceDiagramsProofs.DVE.exactGuard_iff_diagnostic
+#print axioms InfluenceDiagramsProofs.DVE.checkedRun_eq_run
+#print axioms InfluenceDiagramsProofs.DVE.guards_of_positive
+#print axioms InfluenceDiagramsProofs.DVE.guards_of_positive_weighted
+#print axioms InfluenceDiagramsProofs.DVE.Guard.represents_guards_iff
+#print axioms InfluenceDiagramsProofs.DVE.Guard.initial_represents
+#print axioms InfluenceDiagramsProofs.DVE.Guard.initialEvidence_represents
+#print axioms InfluenceDiagramsProofs.DVE.Guard.argmax_value_eq_sup
+#print axioms InfluenceDiagramsProofs.DVE.Guard.continuousAt_argmax_value
+#print axioms InfluenceDiagramsProofs.DVE.Guard.Expr.continuousAt
+#print axioms InfluenceDiagramsProofs.DVE.Guard.eq_at_zero_of_positive
+#print axioms InfluenceDiagramsProofs.DVE.smoothKernel_zero
+#print axioms InfluenceDiagramsProofs.DVE.smoothKernel_local
+#print axioms InfluenceDiagramsProofs.DVE.smoothKernel_normalised
+#print axioms InfluenceDiagramsProofs.DVE.smoothKernel_positive
+#print axioms InfluenceDiagramsProofs.DVE.smoothKernel_continuousAt_zero
+#print axioms InfluenceDiagramsProofs.DVE.all_guards_complete
+#print axioms InfluenceDiagramsProofs.DVE.all_guards_complete_evidence
+#print axioms InfluenceDiagramsProofs.DVE.checkedRun_generated_eq
+#print axioms InfluenceDiagramsProofs.DVE.checkedRun_generated_evidence_eq
+#print axioms InfluenceDiagramsProofs.DVE.solveGuarded_eq
+#print axioms InfluenceDiagramsProofs.DVE.solveGuarded_spec
+#print axioms InfluenceDiagramsProofs.DVE.solveEvidenceGuarded_eq
+#print axioms InfluenceDiagramsProofs.DVE.solveEvidenceGuarded_none_iff
+#print axioms InfluenceDiagramsProofs.DVE.GuardBoundary.closed
+#print axioms InfluenceDiagramsProofs.DVE.GuardBoundary.κ_normalised
+#print axioms InfluenceDiagramsProofs.DVE.GuardBoundary.zero_outside_context
+#print axioms InfluenceDiagramsProofs.DVE.GuardBoundary.summed_child_retains_action_axis
+#print axioms InfluenceDiagramsProofs.DVE.GuardBoundary.checked_zero_outside_model
+#print axioms InfluenceDiagramsProofs.DVE.GuardBoundary.guard_accepts_zero_evidence
+#print axioms InfluenceDiagramsProofs.DVE.GuardBoundary.mass_check_rejects_zero_evidence
+
+#print axioms InfluenceDiagramsProofs.DVE.Valuation.sumOut_weight
+#print axioms InfluenceDiagramsProofs.DVE.Valuation.chanceStep_prob
+#print axioms InfluenceDiagramsProofs.DVE.Valuation.chanceStep_weight
+#print axioms InfluenceDiagramsProofs.DVE.Valuation.choice_local
+#print axioms InfluenceDiagramsProofs.DVE.Valuation.decisionStep_eval
+#print axioms InfluenceDiagramsProofs.DVE.Valuation.decisionStep_dominates
+#print axioms InfluenceDiagramsProofs.DVE.Valuation.bucket_probability_constant_on_support
+#print axioms InfluenceDiagramsProofs.DVE.Valuation.step_scope_eq
+#print axioms InfluenceDiagramsProofs.DVE.probability_independent_weighted
+#print axioms InfluenceDiagramsProofs.DVE.probability_independent
+#print axioms InfluenceDiagramsProofs.DVE.decision_marginal
+#print axioms InfluenceDiagramsProofs.DVE.decision_marginal_pure
+#print axioms InfluenceDiagramsProofs.DVE.State.policy
+#print axioms InfluenceDiagramsProofs.DVE.run
+#print axioms InfluenceDiagramsProofs.DVE.run_correct
+#print axioms InfluenceDiagramsProofs.DVE.initial_correct
+#print axioms InfluenceDiagramsProofs.DVE.initial_covers_chance
+#print axioms InfluenceDiagramsProofs.DVE.chanceBucketsPresent_of_covers
+#print axioms InfluenceDiagramsProofs.DVE.run_deterministic
+#print axioms InfluenceDiagramsProofs.DVE.solvePlan_spec
+#print axioms InfluenceDiagramsProofs.DVE.buildPlan
+#print axioms InfluenceDiagramsProofs.DVE.NoForgettingOrder.plan
+#print axioms InfluenceDiagramsProofs.DVE.RankedOrder.ofOrder
+#print axioms InfluenceDiagramsProofs.DVE.solve
+#print axioms InfluenceDiagramsProofs.DVE.solve_spec
+#print axioms InfluenceDiagramsProofs.DVE.Evidence.hard
+#print axioms InfluenceDiagramsProofs.DVE.Evidence.ranked
+#print axioms InfluenceDiagramsProofs.DVE.Evidence.probability_independent
+#print axioms InfluenceDiagramsProofs.DVE.evidenceMass_independent
+#print axioms InfluenceDiagramsProofs.DVE.evidenceMass_nonneg
+#print axioms InfluenceDiagramsProofs.DVE.run_weighted_correct
+#print axioms InfluenceDiagramsProofs.DVE.initialEvidence_correct
+#print axioms InfluenceDiagramsProofs.DVE.solveEvidence_spec
+#print axioms InfluenceDiagramsProofs.DVE.runEvidence_mass
+#print axioms InfluenceDiagramsProofs.DVE.solveEvidenceChecked_eq
+#print axioms InfluenceDiagramsProofs.DVE.solveEvidenceChecked_none_iff
+#print axioms InfluenceDiagramsProofs.DVE.expectedUtility_weighted
+#print axioms InfluenceDiagramsProofs.DVE.solveEvidence_eq_optimal
+#print axioms InfluenceDiagramsProofs.DVE.Example.closed
+#print axioms InfluenceDiagramsProofs.DVE.Example.order
+#print axioms InfluenceDiagramsProofs.DVE.Example.noForgetting
+#print axioms InfluenceDiagramsProofs.DVE.Example.local_kernels
+#print axioms InfluenceDiagramsProofs.DVE.Example.normalised_kernels
+#print axioms InfluenceDiagramsProofs.DVE.Example.nonnegative_kernels
+#print axioms InfluenceDiagramsProofs.DVE.Example.local_utility
+#print axioms InfluenceDiagramsProofs.DVE.Example.hidden_state_never_observed
+#print axioms InfluenceDiagramsProofs.DVE.Example.unreachable_row
+#print axioms InfluenceDiagramsProofs.DVE.Example.checked_solution
+
+-- Finite/Optimization.lean: exact mixtures and genuinely multi-decision global optimality.
+#print axioms InfluenceDiagramsProofs.FinInfluenceDiagram.tableStrategy_deterministic
+#print axioms InfluenceDiagramsProofs.FinInfluenceDiagram.tableStrategy_nonneg
+#print axioms InfluenceDiagramsProofs.FinInfluenceDiagram.sum_table_indicator
+#print axioms InfluenceDiagramsProofs.FinInfluenceDiagram.sum_policyWeight
+#print axioms InfluenceDiagramsProofs.FinInfluenceDiagram.policyWeight_indicator
+#print axioms InfluenceDiagramsProofs.FinInfluenceDiagram.sum_tableWeight
+#print axioms InfluenceDiagramsProofs.FinInfluenceDiagram.tableWeight_nonneg
+#print axioms InfluenceDiagramsProofs.FinInfluenceDiagram.joint_table_mixture
+#print axioms InfluenceDiagramsProofs.FinInfluenceDiagram.expectedUtility_table_mixture
+#print axioms InfluenceDiagramsProofs.FinInfluenceDiagram.exists_deterministic_optimal_all
+#print axioms InfluenceDiagramsProofs.FinInfluenceDiagram.exists_deterministic_optimal
+#print axioms InfluenceDiagramsProofs.FinInfluenceDiagram.signed_weights_exceed_every_action
+#print axioms InfluenceDiagramsProofs.FinInfluenceDiagram.optimalValue_attained
+#print axioms InfluenceDiagramsProofs.FinInfluenceDiagram.expectedUtility_le_optimalValue
+#print axioms InfluenceDiagramsProofs.FinInfluenceDiagram.optimalValue_info_mono
+#print axioms InfluenceDiagramsProofs.FinInfluenceDiagram.optimal_information_value_nonneg
 
 open InfluenceDiagramsProofs InfluenceDiagramsProofs.FinInfluenceDiagram
 

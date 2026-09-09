@@ -29,6 +29,12 @@ remember. Note that [`decision_order`](@ref) linearises a partial order by part 
 two decisions with no arcs between them are ordered but do not know each other's
 actions: that is a forgetting diagram, and `with_no_forgetting` is the repair.
 
+External evidence must have no action among its causal ancestors. This structural
+precondition is checked before elimination, independently of likelihood scale.
+Action-descendant evidence can have a policy-dependent normalizer and must instead
+be handled by exhaustive search. This does not forbid later information variables
+whose chance mechanisms depend on earlier actions.
+
 Every optimised run is checked against [`ExhaustivePolicySearch`](@ref) in the test
 suite (SPEC §55.6, §56 item 6).
 """
@@ -40,7 +46,7 @@ Solve an influence diagram by decision variable elimination: chance variables ar
 summed out and decisions maximised in the strong elimination order (see the module
 documentation of `decision_elimination.jl`), with `order` (an `EliminationStrategy`
 of BayesianNetworkInference.jl) choosing the order inside each chance block and `atol`
-the tolerance of the constancy check of the probability potential at each
+the relative per-row tolerance of the constancy check of the probability potential at each
 maximisation. Returns the maximal expected utility and the recovered strategy of
 deterministic policies, with ties broken in favour of the first action label.
 """
@@ -50,6 +56,7 @@ struct DecisionVariableElimination{O<:EliminationStrategy} <: DecisionBackend
 end
 function DecisionVariableElimination(; order::EliminationStrategy=MinFill(),
                                      atol::Real=1e-9)
+    _check_probability_tolerance(atol)
     return DecisionVariableElimination(order, Float64(atol))
 end
 
@@ -116,7 +123,7 @@ function _dummy_factor_graph(id::AbstractInfluenceDiagram)
     fs = Factor{Float64}[]
     ax = v -> FiniteAxis(variable_name(id, v), states(id, v))
     for mech in mechanisms(id)
-        vars = vcat(inputs(id, mech), target(id, mech))
+        vars = unique(vcat(inputs(id, mech), target(id, mech)))
         push!(fs,
               Factor(FiniteAxis[ax(v) for v in vars],
                      ones(Tuple(nstates(id, v) for v in vars))))
@@ -142,11 +149,39 @@ end
 # The run
 #########
 
+function _check_dve_structure(id::AbstractInfluenceDiagram, ev)
+    missing = no_forgetting_arcs(id)
+    if !isempty(missing)
+        d = first(missing).first
+        throw(IrregularDiagramError(d, Symbol[p.second for p in missing if p.first == d],
+                                    :information))
+    end
+    observed = Set(variable_id(id, x) for x in keys(ev))
+    isempty(observed) && return nothing
+    graph = variable_graph(id)
+    for d in decisions(id)
+        seen = Set{Int}()
+        pending = Int[decision_variable(id, d)]
+        while !isempty(pending)
+            v = pop!(pending)
+            v in seen && continue
+            push!(seen, v)
+            append!(pending, outneighbors(graph, v))
+        end
+        affected = sort!(collect(intersect(seen, observed)))
+        isempty(affected) ||
+            throw(IrregularDiagramError(decision_name(id, d),
+                                        Symbol[variable_name(id, v) for v in affected],
+                                        :evidence))
+    end
+    return nothing
+end
+
 """
     decision_elimination(m::InfluenceDiagramModel; order = MinFill(), atol = 1e-9, normalization_atol = 1e-8) -> DecisionSolution
 
 Run decision variable elimination on `m` (see [`DecisionVariableElimination`](@ref)).
-`atol` is the tolerance of the constancy check of the probability potential at each
+`atol` is the relative per-row tolerance of the constancy check at each
 maximisation; `normalization_atol` is the tolerance of the kernel-normalisation
 precondition check (`optimize`'s `atol`).
 The initial valuations are `(κ_X, 0)` for every chance mechanism (the factor
@@ -160,9 +195,11 @@ function decision_elimination(m::InfluenceDiagramModel;
                               atol::Real=1e-9,
                               normalization_atol::Real=BayesianNetworks.DEFAULT_ATOL)
     _check_solvable(m; atol=normalization_atol)
+    _check_probability_tolerance(atol)
     id = syntax(m)
     bm = m.model
     ev = evidence(m)
+    _check_dve_structure(id, ev)
     vals = Valuation{Float64}[]
     for mech in mechanisms(id)
         x = variable_name(id, target(id, mech))

@@ -29,8 +29,9 @@ Validity (SPEC §37):
 * `IDOrder` — a topological order of the variables in which parents precede mechanism targets and
   information variables precede actions (items 4, 8, 11).
 
-A `Policy id R d` is a stochastic kernel `Assignment → states (action d) → R` that reads only
-`info d` (`LocalOn`) and is normalised (SPEC §26); a deterministic policy is `Policy.ofFun`, a
+A `Policy id R d` is a normalised kernel `Assignment → states (action d) → R` that reads only
+`info d` (`LocalOn`) (SPEC §26). Over `ℝ`, nonnegativity must be supplied separately for a
+stochastic interpretation (`Strategy.Nonneg` in `Optimization.lean`). A deterministic policy is `Policy.ofFun`, a
 constant one `Policy.const`. A `Strategy id R` is one policy per decision — complete by
 construction (SPEC §27).
 -/
@@ -140,14 +141,15 @@ structure IDOrder where
 
 variable {id} {R : Type} [CommSemiring R]
 
-/-- A (stochastic) policy for decision `d`: a normalised kernel from assignments to actions that
-reads only the information set `info d` (SPEC §26, §37 item 9). -/
+/-- A policy for decision `d`: a normalised kernel from assignments to actions that reads only
+the information set `info d` (SPEC §26, §37 item 9). Real-valued policies may be signed unless
+nonnegativity is required separately. -/
 structure Policy (id : FinInfluenceDiagram) (R : Type) [CommSemiring R] (d : id.D) where
-  /-- `kernel x a` is the probability of choosing action `a` given the assignment `x`. -/
+  /-- `kernel x a` is the weight of action `a` given assignment `x`. -/
   kernel : id.Assignment → id.states (id.action d) → R
   /-- The policy reads only its information set. -/
   localOn : LocalOn (id.info d) kernel
-  /-- The policy is a stochastic map. -/
+  /-- Action weights sum to one; nonnegativity is a separate condition over `ℝ`. -/
   normalised : ∀ x, ∑ a, kernel x a = 1
 
 /-- A complete strategy: one policy per decision (SPEC §27, §37 item 10). -/

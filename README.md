@@ -45,7 +45,8 @@ Semantic layer:
   are proved in Lean for an abstract finite model, not for the ACSet types themselves.
 - `optimize` with `ExhaustivePolicySearch` (the oracle, capped) and `DecisionVariableElimination`
   over the `Valuation` algebra `(φ, ψ)` with the strong elimination order and policy recovery
-  (Proposition 7, property-tested against the oracle on random diagrams). Decision variable
+  (the Julia implementation is property-tested against the oracle; the exact finite-model
+  algorithm is now proved in Lean as described below). Decision variable
   elimination is exact only on diagrams with *no-forgetting* (perfect recall). That is not a
   validity condition, because a diagram that forgets is a well-formed limited-memory influence
   diagram (Lauritzen and Nilsson, 2001; see References) which exhaustive search solves exactly: `validate` accepts
@@ -59,6 +60,57 @@ Semantic layer:
 - `read_influence_diagram` / `write_influence_diagram` for Netica `.dne`, GeNIe `.xdsl` and HUGIN
   `.net` through BayesianNetworkFormats.jl; `umbrella_model`, `reference_grazing_model`
   (SPEC section 46) and `two_stage_model` examples.
+
+## Formal proof scope
+
+The Julia DVE backend checks no-forgetting and rejects external evidence with
+an action among its causal ancestors before elimination. Exhaustive search remains
+available for such policy-dependent conditioning. The probability diagnostic is
+relative to each row, so tiny likelihoods do not bypass it. `atol` is forwarded
+through validation and oracle evaluation, but accepted rounded tables are not
+silently renormalized and do not imply exact floating-point backend agreement.
+
+The Lean project now proves global deterministic optimality for any finite number of
+decisions, including limited-memory diagrams: every nonnegative strategy is a convex
+mixture of deterministic policy tables. Policy rows are independently parameterised;
+constraints tying different decisions' policies and absent-minded games are not part of
+this model. It also proves attainment and monotonicity of the cost-free optimal
+information value. All former Roadmap holes are discharged, with only `propext`,
+`Classical.choice` and `Quot.sound` in the audit.
+
+`Finite/DVE/` now proves the algorithmic result as well. It compiles separate
+probability/utility valuations, generates a strong schedule from no-forgetting,
+performs bucket summation/division and decision maximization, and reconstructs local
+deterministic policies. `solveGuarded_spec` proves that the checked exact driver returns
+a policy realizing the reported value and attaining the existing global optimum.
+Probability independence is derived from structure and normalization, and the all-row
+diagnostic is proved complete even when outside factors are zero; no strict-positivity
+premise or assumed correct trace is used.
+
+For nonnegative evidence likelihoods on action-free chance-ancestral sets, evidence mass
+is proved independent of strategy. The guarded solver returns a conditional optimum at
+positive mass and rejects exactly zero mass. This does not cover arbitrary
+action-descendant evidence.
+
+`Finite/OrderedPolicies.lean` separately proves least-state local argmax,
+admissible information-table reconstruction, and label stability under a strict
+`2*epsilon` action gap when every row score has error at most `epsilon`.
+The order is state-position order when states are `Fin n`, not alphabetical
+label order. This does not identify the entire existing DVE driver with that
+separate tie selector or certify its floating-point score errors.
+
+These are exact finite-function results, not a complete refinement of the Julia
+Float64 arrays, reference lookup, explicit array conditioning or first-label tie rule.
+In particular, literal floating-point DVE/oracle equality is not a theorem. See
+[`proofs/README.md`](proofs/README.md) for exact statements and implementation boundaries.
+
+## Model certificates
+
+`export_dve_certificate(model)` captures the complete ordered model, including
+raw Float64 bits, original part IDs and repeated-slot CPT/factor correspondence.
+An explicit rational-companion mode checks exact nearest-even agreement without
+renormalizing. See [the model certificate guide](docs/src/certificates.md).
+This data export is not a proof of a production optimization trace.
 
 ## Installation
 

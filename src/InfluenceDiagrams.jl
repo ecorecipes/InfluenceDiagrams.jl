@@ -94,7 +94,8 @@ export InfluenceDiagramError, UnknownDecisionError, UnknownUtilityError,
        DecisionUniquenessError, InvalidInformationSetError, DecisionPrecedenceCycleError,
        PolicySignatureError, UtilityScopeError, IncompleteStrategyError,
        MissingUtilityError, PolicySearchTooLargeError, UnsupportedAggregationError,
-       IrregularDiagramError, EvidenceOnActionError, UneliminatedVariablesError
+       IrregularDiagramError, EvidenceOnActionError, UneliminatedVariablesError,
+       DVEExportError
 # schemas.jl
 export SchInfluenceDiagram, AbstractInfluenceDiagram, InfluenceDiagramUntyped,
        InfluenceDiagram
@@ -137,6 +138,8 @@ export DecisionVariableElimination, strong_elimination_order, decision_eliminati
        admissible_information
 # formats_bridge.jl
 export read_influence_diagram, write_influence_diagram
+# certificates.jl
+export export_dve_certificate
 # graphics.jl
 export to_graphviz
 # examples.jl
@@ -157,6 +160,7 @@ include("expected_utility.jl")
 include("exhaustive.jl")
 include("valuation.jl")
 include("decision_elimination.jl")
+include("certificates.jl")
 include("formats_bridge.jl")
 include("graphics.jl")
 include("examples.jl")

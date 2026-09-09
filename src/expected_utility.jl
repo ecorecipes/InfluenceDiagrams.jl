@@ -68,20 +68,22 @@ function _expectation(J::JointTable, us::AbstractDict{Symbol,<:AbstractUtility},
 end
 
 """
-    expected_utility(bn::BayesModel; max_states = 1_000_000) -> Float64
+    expected_utility(bn::BayesModel; max_states = 1_000_000, atol = DEFAULT_ATOL) -> Float64
 
 The expected total utility of an instantiated network (as returned by
 [`instantiate`](@ref), which stores the utilities in `extras(bn)[:utilities]`) by
 brute force: `Σ_x P(x | e) U(x)` over the joint law conditioned on the network's
 evidence (`joint_distribution` / `marginal` of BayesianNetworks.jl).
 """
-function expected_utility(bm::BayesModel; max_states::Integer=1_000_000)
+function expected_utility(bm::BayesModel; max_states::Integer=1_000_000,
+                          atol::Real=BayesianNetworks.DEFAULT_ATOL)
     us = _utilities_of(bm)
     vars = variable_names(syntax(bm))
     J = if isempty(evidence(bm))
-        JointTable(joint_distribution(bm; max_states=max_states))
+        JointTable(joint_distribution(bm; max_states=max_states, atol=atol))
     else
-        JointTable(marginal(bm, vars; evidence=evidence(bm), max_states=max_states))
+        JointTable(marginal(bm, vars; evidence=evidence(bm), max_states=max_states,
+                            atol=atol))
     end
     return _expectation(J, us, u -> _scope_axes(bm, u))
 end
@@ -97,17 +99,15 @@ of every assignment and take the expectation. Given `:D => :a` pairs, the decisi
 first fixed with [`fix_decision`](@ref) (the expected utility of a fixed action, SPEC §46
 analysis 1). Throws [`IncompleteStrategyError`](@ref) when a decision has no policy, and
 [`EvidenceOnActionError`](@ref) when the model carries evidence on an action variable.
-`atol` is the kernel-normalisation tolerance of [`instantiate`](@ref)'s validation. The
-brute-force joint that follows goes through `BayesianNetworks.joint_distribution`, which
-has no tolerance of its own, so a model read from a file with rows that are off by more
-than the package default has to be renormalised for this reference algorithm (the two
-[`optimize`](@ref) backends take `atol` all the way through).
+`atol` is forwarded through [`instantiate`](@ref)'s validation and the brute-force
+joint or conditional evaluation, so rounded models use the same normalization
+tolerance throughout both oracle and optimized paths.
 """
 function expected_utility(m::InfluenceDiagramModel, σ::Strategy=m.strategy;
                           max_states::Integer=1_000_000,
                           atol::Real=BayesianNetworks.DEFAULT_ATOL)
     _check_evidence_variables(syntax(m), evidence(m))
-    return expected_utility(instantiate(m, σ; atol=atol); max_states=max_states)
+    return expected_utility(instantiate(m, σ; atol=atol); max_states=max_states, atol=atol)
 end
 
 function expected_utility(m::InfluenceDiagramModel, f::Pair{Symbol,Symbol}; kw...)

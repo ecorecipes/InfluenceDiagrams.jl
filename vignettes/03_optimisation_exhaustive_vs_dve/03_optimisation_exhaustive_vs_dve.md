@@ -223,7 +223,19 @@ t_dve = @elapsed sol_dve = optimize(g)
  seconds_exhaustive = round(t_ex; digits = 3), seconds_dve = round(t_dve; digits = 3))
 ```
 
-    (exhaustive = 36.52414686249998, dve = 36.524146862500004, seconds_exhaustive = 0.25, seconds_dve = 0.001)
+    (exhaustive = 36.52414686249998, dve = 36.524146862500004, seconds_exhaustive = 0.518, seconds_dve = 0.001)
+
+``` julia
+(julia = string(VERSION), cpu = Sys.CPU_NAME, threads = Threads.nthreads(),
+ repetitions = 1, statistic = "single run after warm-up")
+```
+
+    (julia = "1.12.7", cpu = "apple-m1", threads = 1, repetitions = 1, statistic = "single run after warm-up")
+
+These times describe this execution, not a portable speedup guarantee.
+Agreement here is numerical evidence on this example; exact-model
+theorems do not imply bit-for-bit agreement for arbitrary floating-point
+utilities.
 
 ``` julia
 policy_table(sol_ex.strategy[:GrazingManagement]) == policy_table(sol_dve.strategy[:GrazingManagement])
@@ -246,16 +258,18 @@ sol_dve.diagnostics
 
 ## Summary
 
-Both backends return the same maximal expected utility and, where the
-optimum is unique on every reachable information state, the same policy
-tables: exhaustive search is the oracle, and decision variable
-elimination is the algorithm that scales, eliminating in a strong order
-that sums out chance variables and maximises out decisions on the
-valuation algebra. Elimination is exact only under no-forgetting, which
-is checked at run time rather than by `validate`, so a genuinely
-limited-memory diagram falls back to the oracle. The next vignette,
-*Value of information*, uses the same two optimisations twice over to
-price an observation.
+In exact arithmetic on the supported model class, both backends return
+the same maximal expected utility and, where the optimum is unique on
+every reachable information state, the same policy tables: exhaustive
+search is the oracle, and decision variable elimination is the algorithm
+that scales, eliminating in a strong order that sums out chance
+variables and maximises out decisions on the valuation algebra.
+Elimination is exact only under no-forgetting, which is checked at run
+time rather than by `validate`; external evidence must also have no
+action among its causal ancestors. Unsupported cases require explicitly
+choosing the exhaustive oracle rather than an automatic fallback. The
+next vignette, *Value of information*, uses the same two optimisations
+twice over to price an observation.
 
 ## References
 

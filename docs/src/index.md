@@ -24,12 +24,15 @@ Part of the ecorecipes compositional Bayesian-network ecosystem:
   (Proposition 5), and `expected_utility` by the reference algorithm (Proposition 6).
   Both are proved in the Lean project in `proofs/`, for an abstract finite model
   (`FinInfluenceDiagram` over `FinBayesNet`, with unordered parent sets and kernels as
-  functions) rather than for the ACSet types themselves. Proposition 7 has no proof: the
-  Lean file carries a single-decision shadow with a `sorry`, so DVE correctness rests on
-  the property tests below.
+  functions) rather than for the ACSet types themselves. The former single-decision
+  Roadmap theorem is now proved and strengthened to global deterministic sufficiency
+  for any finite number of independently parameterised decisions, even with limited
+  memory. That mixture proof is now complemented by an actual exact finite-function
+  DVE algorithm and its correctness proof, rather than being relabelled as an
+  algorithm theorem.
 - `optimize` with `ExhaustivePolicySearch` (the oracle) and
   `DecisionVariableElimination` over the `Valuation` algebra with the strong
-  elimination order (Proposition 7, property-tested against the oracle). The latter is
+  elimination order (the Julia implementation remains property-tested against the oracle). The latter is
   exact only on diagrams with *no-forgetting* (perfect recall), which `validate`
   deliberately does not require: a diagram that forgets is a well-formed limited-memory
   influence diagram ([LauritzenNilsson2001](@cite)) that exhaustive search solves exactly.
@@ -44,6 +47,31 @@ Part of the ecorecipes compositional Bayesian-network ecosystem:
   reading.
 - `read_influence_diagram` / `write_influence_diagram` for Netica, GeNIe and HUGIN
   files through BayesianNetworkFormats.jl, and `to_graphviz` drawings.
+
+The Lean information theorem now concerns attained optimal values: enlarging the
+information sets cannot decrease the cost-free optimum. It does not verify a temporal
+information edit, an acquisition-cost recommendation or the Julia solver. All default
+and compatibility Roadmap targets are `sorry`-free; the axiom audit uses only
+`propext`, `Classical.choice` and `Quot.sound`.
+
+The exact DVE development generates its structural schedule from no-forgetting,
+compiles separate valuations, executes chance/max bucket steps and reconstructs local
+deterministic policies. `solveGuarded_spec` proves realized optimality and acceptance
+of the exact probability diagnostic on every row, including zero-outside contexts.
+Supported action-free ancestral evidence has a proved strategy-independent normalizer;
+the checked solver rejects exactly zero evidence mass. The proof does not add
+strict positivity or smooth the input at runtime.
+
+`Finite/OrderedPolicies.lean` adds a separate ordered local argmax and its
+admissible information-table reconstruction. A strict `2*epsilon` action gap
+protects the selected label against uniformly bounded score errors of
+`epsilon`; ties and unreachable rows have no such stability guarantee.
+This does not silently replace the DVE driver's existing selector.
+
+The Julia array/reference representation, whole-driver first-label identity and floating-point
+rounding remain outside that theorem. The general open-network syntax category is
+proved separately in `CategoricalBayesianNetworks.jl/proofs/`; neither result is a
+semantic-equality quotient that silently erases hidden mechanisms.
 
 ## Quick start
 

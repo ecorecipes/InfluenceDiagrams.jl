@@ -74,22 +74,7 @@ end
 # Factor helpers: broadcasting addition and division
 ###################################################
 
-function _union_axes(f::Factor, g::Factor)
-    vars = copy(f.vars)
-    axes = copy(f.axes)
-    for (x, a) in zip(g.vars, g.axes)
-        i = findfirst(==(x), vars)
-        if i === nothing
-            push!(vars, x)
-            push!(axes, a)
-        elseif axes[i] != a
-            throw(BayesianNetworkInference.ShapeError(:Valuation,
-                                                      "factors disagree about the states of $(repr(x))",
-                                                      axes[i].labels, a.labels))
-        end
-    end
-    return vars, axes
-end
+_union_axes(f::Factor, g::Factor) = BayesianNetworkInference._union_axes(f, g, :Valuation)
 
 # `f` extended to the scope `vars` (a superset, with `axes`) by constant broadcasting,
 # in the order `vars`.
@@ -107,9 +92,10 @@ end
 # Pointwise sum with broadcasting over the union scope.
 function _add(f::Factor, g::Factor)
     vars, axes = _union_axes(f, g)
-    fe = _extend(f, vars, axes)
-    ge = _extend(g, vars, axes)
-    return Factor(vars, axes, _as_array(fe.table .+ ge.table))
+    size = Tuple(length.(axes))
+    fe = BayesianNetworkInference._broadcastable(f, vars, size)
+    ge = BayesianNetworkInference._broadcastable(g, vars, size)
+    return Factor(vars, axes, _as_array(fe .+ ge))
 end
 
 # Broadcasting two 0-dimensional arrays yields a scalar; factors need an array.
@@ -174,14 +160,17 @@ end
     max_out(v::Valuation, d::Symbol; atol = 1e-9) -> (Valuation, policy::Array{Symbol}, policy_scope::Vector{Symbol})
 
 Max-elimination of the decision variable `d`: `ψ' = max_d ψ`, `φ' = φ` with the axis
-of `d` dropped after checking that `φ` is constant in `d` (up to `atol` relative to its
-largest entry; [`IrregularDiagramError`](@ref) with `what == :probability` otherwise).
+of `d` dropped after checking that `φ` is constant in `d` (up to `atol` relative to
+each row's largest absolute entry; [`IrregularDiagramError`](@ref) with
+`what == :probability` otherwise). Zero rows pass exactly; positive rescaling
+of a row does not change the mathematical acceptance criterion.
 Also returns the maximising action for every configuration of the other variables of
 `ψ` (`policy`, indexed in the order `policy_scope`; ties resolve to the first label).
 When `ψ` does not depend on `d` every action is optimal and the first label of `d`
 (read from `φ`) is chosen.
 """
 function max_out(v::Valuation, d::Symbol; atol::Real=1e-9)
+    _check_probability_tolerance(atol)
     φ = v.φ
     dlabels = Symbol[]
     if d in φ.vars
@@ -189,11 +178,12 @@ function max_out(v::Valuation, d::Symbol; atol::Real=1e-9)
         dlabels = φ.axes[i].labels
         mx = maximum(φ.table; dims=i)
         mn = minimum(φ.table; dims=i)
-        tol = atol * max(1.0, maximum(abs, φ.table; init=0.0))
-        if maximum(mx .- mn; init=0.0) > tol
+        scale = max.(abs.(mx), abs.(mn))
+        if any(mx .- mn .> atol .* scale)
             others = [x for x in φ.vars if x != d]
             throw(IrregularDiagramError(d, others, :probability))
         end
+
         keep = setdiff(1:ndims(φ), i)
         φ = Factor(φ.vars[keep], φ.axes[keep], dropdims(mx; dims=i))
     end
@@ -213,4 +203,10 @@ function max_out(v::Valuation, d::Symbol; atol::Real=1e-9)
         pscope = Symbol[]
     end
     return Valuation(φ, ψ), policy, pscope
+end
+
+function _check_probability_tolerance(atol::Real)
+    isfinite(atol) && 0 <= atol < 1 ||
+        throw(ArgumentError("the relative probability-constancy tolerance must be finite and in [0, 1), got $atol"))
+    return nothing
 end

@@ -167,6 +167,30 @@ struct UneliminatedVariablesError <: InfluenceDiagramError
 end
 
 """
+    DVEExportError(code, owner_kind, owner_id, owner_name, coordinates, message)
+
+A model cannot be represented by the requested DVE certificate profile.
+`code` identifies the unsupported mode, scalar, companion, structure or resource
+condition. The owner and zero-based coordinates identify an offending table cell
+when applicable. No partial certificate is returned.
+"""
+struct DVEExportError <: InfluenceDiagramError
+    code::Symbol
+    owner_kind::Symbol
+    owner_id::Union{Nothing,Int}
+    owner_name::String
+    coordinates::Vector{Int}
+    message::String
+end
+
+function Base.showerror(io::IO, e::DVEExportError)
+    print(io, "DVEExportError(", e.code, ") in ", e.owner_kind, " ", repr(e.owner_name))
+    e.owner_id === nothing || print(io, " [part ", e.owner_id, "]")
+    isempty(e.coordinates) || print(io, " at ", Tuple(e.coordinates))
+    return print(io, ": ", e.message)
+end
+
+"""
     UnsupportedAggregationError(node, weights)
 
 A multi-attribute utility node of a GeNIe file weights its utilities by `weights`, which
@@ -184,8 +208,9 @@ end
 `:information` (when `decision` is maximised out, the utility potential still depends on
 `variables`, which the decision maker does not observe: the diagram lacks no-forgetting
 (perfect recall) and is a limited-memory influence diagram in the sense of
-[LauritzenNilsson2001](@cite)) or `:probability` (the probability potential depends on the decision
-`decision`, which happens when the evidence conditions on a descendant of the action).
+[LauritzenNilsson2001](@cite)), `:evidence` (the named evidence variables have
+`decision`'s action as a causal ancestor), or `:probability` (a numerical bucket
+probability row is not constant in the decision within the specified tolerance).
 
 A diagram that is merely missing the no-forgetting arcs is repaired by
 [`with_no_forgetting`](@ref); a diagram that is deliberately limited-memory must be
@@ -286,10 +311,15 @@ function Base.showerror(io::IO, e::IrregularDiagramError)
               "elimination is exact only for diagrams with no-forgetting (perfect ",
               "recall). Add the missing information arcs with with_no_forgetting, or ",
               "solve this limited-memory diagram with ExhaustivePolicySearch")
+    elseif e.what == :evidence
+        print(io, "IrregularDiagramError: evidence on ", join(e.variables, ", "),
+              " is downstream of decision :", e.decision,
+              "; its probability may depend on the policy. Use ExhaustivePolicySearch ",
+              "for action-descendant evidence")
     else
         print(io, "IrregularDiagramError: the probability potential depends on decision :",
               e.decision, " (variables ", join(e.variables, ", "),
-              "); evidence on descendants of an action is not supported")
+              "); the probability-constancy precondition failed. Use ExhaustivePolicySearch")
     end
     return nothing
 end

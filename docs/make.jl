@@ -33,6 +33,7 @@ bib = CitationBibliography(joinpath(@__DIR__, "src", "references.bib");
                            style=:authoryear)
 
 pages = Any["Home" => "index.md", "API Reference" => "api.md",
+            "Model certificates" => "certificates.md",
             "References" => "references.md"]
 tutorials = tutorial_pages()
 isempty(tutorials) || push!(pages, "Tutorials" => tutorials)
@@ -56,7 +57,7 @@ makedocs(;
                                 edit_link="main",
                                 # The generated API reference exceeds Documenter's page-size
                                 # warning threshold; it is a reference page, not an example.
-                                size_threshold_ignore=["api.md"],),
+                                size_threshold_ignore=["api.md"]),
          plugins=[bib],
          pages=pages)
 

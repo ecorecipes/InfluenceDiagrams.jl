@@ -81,6 +81,7 @@ UnsupportedAggregationError
 IrregularDiagramError
 EvidenceOnActionError
 UneliminatedVariablesError
+DVEExportError
 ```
 
 ## Policies and strategies
@@ -148,6 +149,13 @@ expected_utility
 ```
 
 ## Optimisation
+
+The complete model-data interface is documented under
+[Exact-data model certificates](certificates.md).
+
+```@docs
+export_dve_certificate
+```
 
 ```@docs
 DecisionBackend

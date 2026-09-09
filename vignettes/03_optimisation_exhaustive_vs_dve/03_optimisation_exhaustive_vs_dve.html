@@ -2558,18 +2558,26 @@ window.Quarto = {
 <span id="cb29-5"><a href="#cb29-5" aria-hidden="true" tabindex="-1"></a>(exhaustive <span class="op">=</span> sol_ex.expected_utility, dve <span class="op">=</span> sol_dve.expected_utility,</span>
 <span id="cb29-6"><a href="#cb29-6" aria-hidden="true" tabindex="-1"></a> seconds_exhaustive <span class="op">=</span> <span class="fu">round</span>(t_ex; digits <span class="op">=</span> <span class="fl">3</span>), seconds_dve <span class="op">=</span> <span class="fu">round</span>(t_dve; digits <span class="op">=</span> <span class="fl">3</span>))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display" data-execution_count="1">
-<pre><code>(exhaustive = 36.52414686249998, dve = 36.524146862500004, seconds_exhaustive = 0.254, seconds_dve = 0.001)</code></pre>
+<pre><code>(exhaustive = 36.52414686249998, dve = 36.524146862500004, seconds_exhaustive = 0.272, seconds_dve = 0.001)</code></pre>
 </div>
 </div>
 <div id="32" class="cell" data-execution_count="1">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb31"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb31-1"><a href="#cb31-1" aria-hidden="true" tabindex="-1"></a><span class="fu">policy_table</span>(sol_ex.strategy[<span class="op">:</span>GrazingManagement]) <span class="op">==</span> <span class="fu">policy_table</span>(sol_dve.strategy[<span class="op">:</span>GrazingManagement])</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb31"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb31-1"><a href="#cb31-1" aria-hidden="true" tabindex="-1"></a>(julia <span class="op">=</span> <span class="fu">string</span>(<span class="cn">VERSION</span>), cpu <span class="op">=</span> <span class="bu">Sys</span>.CPU_NAME, threads <span class="op">=</span> <span class="bu">Threads</span>.<span class="fu">nthreads</span>(),</span>
+<span id="cb31-2"><a href="#cb31-2" aria-hidden="true" tabindex="-1"></a> repetitions <span class="op">=</span> <span class="fl">1</span>, statistic <span class="op">=</span> <span class="st">&quot;single run after warm-up&quot;</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-display" data-execution_count="1">
+<pre><code>(julia = &quot;1.12.7&quot;, cpu = &quot;apple-m1&quot;, threads = 1, repetitions = 1, statistic = &quot;single run after warm-up&quot;)</code></pre>
+</div>
+</div>
+<p>These times describe this execution, not a portable speedup guarantee. Agreement here is numerical evidence on this example; exact-model theorems do not imply bit-for-bit agreement for arbitrary floating-point utilities.</p>
+<div id="34" class="cell" data-execution_count="1">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb33"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb33-1"><a href="#cb33-1" aria-hidden="true" tabindex="-1"></a><span class="fu">policy_table</span>(sol_ex.strategy[<span class="op">:</span>GrazingManagement]) <span class="op">==</span> <span class="fu">policy_table</span>(sol_dve.strategy[<span class="op">:</span>GrazingManagement])</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display" data-execution_count="1">
 <pre><code>true</code></pre>
 </div>
 </div>
 <p>Ties between actions are broken in favour of the first action label by both backends (<code>argmax_table</code> for elimination, enumeration order for the search), so the recovered tables also agree whenever the optimum is unique on every reachable information state. The elimination diagnostics record the order used, the largest potential and the variables each policy really depends on:</p>
-<div id="34" class="cell" data-execution_count="1">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb33"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb33-1"><a href="#cb33-1" aria-hidden="true" tabindex="-1"></a>sol_dve.diagnostics</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div id="36" class="cell" data-execution_count="1">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb35"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb35-1"><a href="#cb35-1" aria-hidden="true" tabindex="-1"></a>sol_dve.diagnostics</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display" data-execution_count="1">
 <pre><code>(order = [:Biodiversity, :GrazingPressure, :Occupancy, :HabitatQuality, :Vegetation, :SoilMoisture, :Climate, :GrazingManagement, :CurrentVegetation, :ClimateForecast], max_factor_size = 162, policy_scopes = Dict(:GrazingManagement =&gt; [:ClimateForecast, :CurrentVegetation]), evidence_probability = 0.9999999999999999)</code></pre>
 </div>
@@ -2577,7 +2585,7 @@ window.Quarto = {
 </section>
 <section id="summary" class="level2">
 <h2 class="anchored" data-anchor-id="summary">Summary</h2>
-<p>Both backends return the same maximal expected utility and, where the optimum is unique on every reachable information state, the same policy tables: exhaustive search is the oracle, and decision variable elimination is the algorithm that scales, eliminating in a strong order that sums out chance variables and maximises out decisions on the valuation algebra. Elimination is exact only under no-forgetting, which is checked at run time rather than by <code>validate</code>, so a genuinely limited-memory diagram falls back to the oracle. The next vignette, <em>Value of information</em>, uses the same two optimisations twice over to price an observation.</p>
+<p>In exact arithmetic on the supported model class, both backends return the same maximal expected utility and, where the optimum is unique on every reachable information state, the same policy tables: exhaustive search is the oracle, and decision variable elimination is the algorithm that scales, eliminating in a strong order that sums out chance variables and maximises out decisions on the valuation algebra. Elimination is exact only under no-forgetting, which is checked at run time rather than by <code>validate</code>; external evidence must also have no action among its causal ancestors. Unsupported cases require explicitly choosing the exhaustive oracle rather than an automatic fallback. The next vignette, <em>Value of information</em>, uses the same two optimisations twice over to price an observation.</p>
 </section>
 <section id="references" class="level2">
 <h2 class="anchored" data-anchor-id="references">References</h2>

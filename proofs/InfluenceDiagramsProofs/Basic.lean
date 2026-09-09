@@ -6,9 +6,9 @@ import BayesianNetworksProofs.Schema.BayesNet
 Lean 4 / Mathlib formalisation accompanying `InfluenceDiagrams.jl` (toolchain
 `leanprover/lean4:v4.30.0`, Mathlib tag `v4.30.0`; ADR 0005). This document is generated from
 the Lean sources by [mdgen](https://github.com/Seasawher/mdgen): the prose is the module
-docstrings and the code blocks are the verbatim, machine-checked sources. Every declaration
-outside the final "Roadmap" section is built by `lake build --wfail` and its axioms are printed
-by `Audit.lean` (only `propext`, `Classical.choice`, `Quot.sound`).
+docstrings and the code blocks are the verbatim, machine-checked sources. Every library module
+is built by `lake build --wfail`; `Audit.lean` prints the axioms of the headline results
+(only `propext`, `Classical.choice`, `Quot.sound`). The Roadmap has no remaining proof holes.
 
 The project depends by path on `BayesianNetworks.jl/proofs` (Lake package
 `bayesian_networks_proofs`), which supplies the finite Bayesian-network model (`FinBayesNet`,
@@ -23,15 +23,30 @@ re-emitted here by `lake exe emit_schema`.
 turns it into a Bayesian network (`instantiate`, SPEC §28) whose joint gives the expected
 utility (`expected_utility`, SPEC §29–§31); fixing a decision (`fix_decision`, SPEC §41) is an
 intervention, and adding information arcs cannot lower the optimal expected utility
-(SPEC §34–§35, §55.7). All results are over an arbitrary commutative semiring `R`.
+(SPEC §34–§35, §55.7). The algebraic results are over an arbitrary commutative semiring `R`;
+the optimisation and attained-optimum information results use `ℝ` and nonnegative strategies.
 
-| Part | Module | Content |
-|:--|:-----------------|:-----------------------------------|
-| 1 | `Finite/InfluenceDiagram.lean` | `FinInfluenceDiagram extends FinBayesNet` (decisions, `action`, `info`, utility nodes, `uscope`); validity (`GeneratorsDisjoint`, `GeneratorsCover`, `Closed`, `closed_iff`, `IDOrder`); `Policy`, `Policy.ofFun`, `Policy.const`, `Strategy`, `Strategy.fix`. |
-| 2 | `Finite/Instantiate.lean` | Proposition 5: `instantiate`, `strategyKernel`, `closed_instantiate`, `IDOrder.toTopoOrder`, `local_instantiate`, `normalised_instantiate`, `sum_joint_instantiate_eq_one`, `joint_instantiate`. |
-| 3 | `Finite/ExpectedUtility.lean` | Proposition 6: `Utility`, `totalUtility`, `expectedUtility`, `expectedUtility_eq`, linearity, `expectedUtility_eq_sum`, `expectedUtility_const`; `fix_decision` as a hard intervention (`strategyKernel_fix_eq_intervene`, `joint_fix`, `expectedUtility_fix`). |
-| 4 | `Finite/Information.lean` | Information monotonicity: `localOn_mono`, `withInfo`, `Policy.enlarge`, `Strategy.enlarge`, `expectedUtility_enlarge`, `exists_strategy_enlarged_eq`. |
-| — | `Roadmap.lean` | Proposition 7 (single-decision shadow, `sorry`); not in the default target. |
+* `Finite/InfluenceDiagram.lean`: decisions, information and utility scopes, validity,
+  policies, complete strategies and fixed decisions.
+* `Finite/Instantiate.lean`: Proposition 5, policy substitution, factorisation, locality
+  and normalisation of the instantiated joint.
+* `Finite/ExpectedUtility.lean`: Proposition 6, linearity, additive utilities and fixed
+  decisions as hard interventions.
+* `Finite/Information.lean`: strategy inclusion under information enlargement, with exactly
+  the same expected utility.
+* `Finite/Optimization.lean`: exact convex mixtures of deterministic tables and global
+  deterministic optimality for any finite number of decisions, including limited memory.
+  Signed-weight counterexample.
+* `Finite/OptimalInformation.lean`: attainment of the finite optimum, monotonicity of the
+  optimal value and nonnegativity of cost-free information value.
+* `Finite/DVE/`: an actual probability/utility bucket driver, strong schedules generated from
+  no-forgetting, local policy reconstruction, exact realized optimality, and positive-mass
+  action-independent evidence. A hidden-state two-decision example checks nonvacuity.
+* `Finite/DVE/Guard/`: exact max-minus-min diagnostic completeness on all rows, including
+  zero-outside contexts, proved by probability-expression provenance and normalized smoothing.
+* `Finite/OrderedPolicies.lean`: first-state local ties in a supplied finite order, finite
+  information-table reconstruction, and stability under a strict numerical action gap.
+* `Roadmap.lean`: remaining literal-Julia refinement boundaries; no unproved declarations.
 
 ## Correspondence with SPEC and the Julia API
 
@@ -41,9 +56,10 @@ intervention, and adding information arcs cannot lower the optimal expected util
 | §28, §61 Prop 5 — policy instantiation yields a valid BN | `instantiate`, `strategyKernel`, `closed_instantiate`, `IDOrder.toTopoOrder`, `sum_joint_instantiate_eq_one`, `joint_instantiate` | `instantiate(id, strategy) -> BayesNet` (`validate(closed=true)` succeeds) |
 | §29–§31, §61 Prop 6 — `EU(σ) = E_{P_σ}[U]` | `Utility`, `totalUtility`, `expectedUtility`, `expectedUtility_eq`, `expectedUtility_eq_sum` | `expected_utility(id, strategy)` (instantiate, enumerate the joint, sum utilities, take the expectation) |
 | §41 fixed decision | `Policy.const`, `Strategy.fix`, `strategyKernel_fix_eq_intervene`, `joint_fix` | `fix_decision(model, :D => :a)` = `do_intervention` on the instantiated network |
-| §34–§35, §55.7 information monotonicity | `withInfo`, `Strategy.enlarge`, `exists_strategy_enlarged_eq` | `expected_value_of_information` is non-negative |
-| §33, §61 Prop 7 — DVE correctness | `Roadmap.exists_deterministic_optimal` (single-decision shadow, unproved) | `optimize(id; backend=Exhaustive())` versus DVE, property tests (SPEC §55.6) |
-| §24 schema | `schInfluenceDiagram` (BayesianNetworks project), `lake exe emit_schema` | `SchInfluenceDiagram`, compared with `schemas/influence_diagram.schema.json` |
+| §34–§35, §55.7 information monotonicity | `optimalValue_info_mono`, `optimal_information_value_nonneg`, based on attained maxima and `expectedUtility_enlarge` | cost-free exact expected value of information is nonnegative; no solver correctness asserted |
+| §32 global policy optimisation | `exists_deterministic_optimal_all`, with the original single-decision theorem as a corollary | finite exhaustive-table optimum, not an implementation proof |
+| §33, §61 Prop 7 — DVE correctness | Actual finite-function bucket solver, generated strong order, realized optimal policies, and exact all-row diagnostic completeness | Array layout, first-label tie identity and Float64/tolerance behavior remain refinement questions |
+| §24 schema | `schInfluenceDiagram` (BayesianNetworks project), `lake exe emit_schema` | `SchInfluenceDiagram`, compared with the emitted schema JSON |
 -/
 
 namespace InfluenceDiagramsProofs
