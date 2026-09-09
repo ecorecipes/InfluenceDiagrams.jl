@@ -53,6 +53,9 @@ Semantic layer:
   it, `no_forgetting_arcs` / `is_no_forgetting` report what is missing, `with_no_forgetting` adds
   the arcs, and the solver's `IrregularDiagramError` points at both. Shachter's (1986) *regular*
   is the weaker property that a directed path runs through all the decisions.
+  Adding memory is an explicit model change, not a semantics-preserving repair:
+  costly-signaling examples have limited-memory value `3/4` but perfect-recall
+  value `1`, with both optima independently enumerated.
 - `expected_value_of_information`, `expected_value_of_perfect_information` (SPEC section 35).
   `with_information` propagates the new arc to every later decision, which is what `info(X, D)`
   means under perfect recall, so both work with the default backend on sequential diagrams
