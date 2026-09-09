@@ -14,7 +14,7 @@ Abstract supertype of the backends accepted by [`optimize`](@ref):
 abstract type DecisionBackend end
 
 """
-    ExhaustivePolicySearch(; max_policies = 1_000_000, brute_force = false)
+    ExhaustivePolicySearch(; max_policies = 1_000_000, brute_force = false, stable = false)
 
 Enumerate every deterministic strategy (the product over decisions of
 [`all_deterministic_policies`](@ref)) and return the best one; the first strategy in
@@ -28,13 +28,21 @@ strategy's expected utility is the ratio of the two sums over the assignments it
 selects (the denominator matters only with evidence). With `brute_force = true` every
 strategy is instead evaluated through [`instantiate`](@ref) and
 [`expected_utility`](@ref), the reference algorithm of SPEC §31, which is much slower.
+`stable=true` also evaluates strategies individually, using the opt-in stable
+expected-utility path instead of the value-table shortcut. It is deliberately
+slower and avoids merging small utility terms before cancellation.
+Strategies under which the evidence is impossible are excluded. If no strategy
+supports the evidence, throw `BayesianNetworks.ImpossibleEvidenceError`.
 """
 struct ExhaustivePolicySearch <: DecisionBackend
     max_policies::Int
     brute_force::Bool
+    stable::Bool
 end
-function ExhaustivePolicySearch(; max_policies::Integer=1_000_000, brute_force::Bool=false)
-    return ExhaustivePolicySearch(Int(max_policies), brute_force)
+ExhaustivePolicySearch(max_policies::Int, brute_force::Bool) =
+    ExhaustivePolicySearch(max_policies, brute_force, false)
+function ExhaustivePolicySearch(; max_policies::Integer=1_000_000, brute_force::Bool=false, stable::Bool=false)
+    return ExhaustivePolicySearch(Int(max_policies), brute_force, stable)
 end
 
 """
@@ -148,17 +156,23 @@ function optimize(m::InfluenceDiagramModel, b::ExhaustivePolicySearch;
     per_decision = [all_deterministic_policies(m, d) for d in ds]
     best = -Inf
     best_strategy = Strategy()
-    if b.brute_force
+    if b.brute_force || b.stable
         for choice in Iterators.product(per_decision...)
             σ = Strategy(Dict{Symbol,AbstractPolicy}(names_[i] => choice[i]
                                                      for i in eachindex(names_)))
-            eu = expected_utility(m, σ; max_states=max_states, atol=atol)
+            eu = try
+                expected_utility(m, σ; max_states=max_states, atol=atol, stable=b.stable)
+            catch err
+                err isa BayesianNetworks.ImpossibleEvidenceError || rethrow()
+                continue
+            end
             if eu > best
                 best, best_strategy = eu, σ
             end
         end
+        best == -Inf && throw(BayesianNetworks.ImpossibleEvidenceError(copy(evidence(m))))
         return DecisionSolution(best, best_strategy,
-                                (nstrategies=Int(total), method=:brute_force))
+                                (nstrategies=Int(total), method=b.stable ? :stable_brute_force : :brute_force))
     end
     keep = Symbol[]
     for d in ds

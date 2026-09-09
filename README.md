@@ -158,6 +158,22 @@ bn = instantiate(m, sol.strategy)              # an ordinary closed BayesModel
 g = read_influence_diagram(fixture_path("dne/grazing_reference_id.dne"))
 ```
 
+For underflowed evidence or large cancelling utilities, opt into the stable path:
+
+```julia
+sol = optimize(m, ExhaustivePolicySearch(stable=true))
+eu = expected_utility(m, sol.strategy; stable=true)
+```
+
+This evaluates utilities separately using log-domain conditional marginals and
+scaled compensated summation, rather than first adding all utilities in each
+world. Stable exhaustive search scores each strategy independently and is slower
+than the default value-table shortcut; the policy and state-count caps still
+apply. Strategies with impossible evidence are excluded, and an entirely
+unsupported problem raises `ImpossibleEvidenceError`. Default arithmetic and DVE
+are unchanged. This is a numerical option, not a universal floating-point
+guarantee or a log-domain DVE optimizer.
+
 ## Development
 
 ```sh

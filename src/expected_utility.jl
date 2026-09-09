@@ -67,17 +67,66 @@ function _expectation(J::JointTable, us::AbstractDict{Symbol,<:AbstractUtility},
     return eu
 end
 
+function _compensated_sum(values)
+    total, correction = 0.0, 0.0
+    for value in values
+        combined = total + value
+        correction += abs(total) >= abs(value) ? (total - combined) + value : (value - combined) + total
+        total = combined
+    end
+    return total + correction
+end
+
+function _stable_expected_utility(bm::BayesModel, us; max_states, atol)
+    count = prod((BigInt(nstates(syntax(bm), name)) for name in variable_names(syntax(bm))); init=big(1))
+    count <= max_states || throw(ModelTooLargeError(Int(min(count, typemax(Int))), max_states))
+    graph = BayesianNetworkInference.compile(bm; atol)
+    observed = evidence(bm)
+    BayesianNetworkInference.log_evidence_probability(graph; evidence=observed) == -Inf &&
+        throw(BayesianNetworks.ImpossibleEvidenceError(copy(observed)))
+    terms = Float64[]
+    for name in sort!(collect(keys(us)))
+        utility = us[name]
+        factor = utility_factor(utility, _scope_axes(bm, utility))
+        all(isfinite, factor.table) ||
+            throw(UtilityScopeError(name, :value, "finite utility entries", factor.table))
+        factor = condition(factor, observed)
+        if isempty(factor.vars)
+            push!(terms, factor.table[])
+            continue
+        end
+        posterior, _ = BayesianNetworkInference.infer(graph, factor.vars; evidence=observed,
+                                                      backend=BayesianNetworkInference.LogVariableElimination())
+        scale = maximum(abs, factor.table)
+        value = iszero(scale) ? 0.0 :
+                scale * _compensated_sum(p * (u / scale) for (p, u) in zip(posterior.table, factor.table))
+        push!(terms, value)
+    end
+    scale = maximum(abs, terms; init=0.0)
+    result = iszero(scale) ? 0.0 : scale * _compensated_sum(value / scale for value in terms)
+    isfinite(result) || throw(UtilityScopeError(:total, :value, "finite representable expected utility", result))
+    return result
+end
+
 """
-    expected_utility(bn::BayesModel; max_states = 1_000_000, atol = DEFAULT_ATOL) -> Float64
+    expected_utility(bn::BayesModel; max_states = 1_000_000, atol = DEFAULT_ATOL, stable=false) -> Float64
 
 The expected total utility of an instantiated network (as returned by
 [`instantiate`](@ref), which stores the utilities in `extras(bn)[:utilities]`) by
 brute force: `Σ_x P(x | e) U(x)` over the joint law conditioned on the network's
 evidence (`joint_distribution` / `marginal` of BayesianNetworks.jl).
+
+With `stable=true`, compute each utility's conditional marginal using centered
+log-domain variable elimination, accumulate its expectation with scaled
+compensated summation, then add the separate expectations. This avoids losing
+a small additive utility before large per-world terms cancel. The original
+state-count cap and validation tolerance still apply. This opt-in path does not
+assert a universal floating-point error bound.
 """
 function expected_utility(bm::BayesModel; max_states::Integer=1_000_000,
-                          atol::Real=BayesianNetworks.DEFAULT_ATOL)
+                          atol::Real=BayesianNetworks.DEFAULT_ATOL, stable::Bool=false)
     us = _utilities_of(bm)
+    stable && return _stable_expected_utility(bm, us; max_states, atol)
     vars = variable_names(syntax(bm))
     J = if isempty(evidence(bm))
         JointTable(joint_distribution(bm; max_states=max_states, atol=atol))
@@ -89,7 +138,7 @@ function expected_utility(bm::BayesModel; max_states::Integer=1_000_000,
 end
 
 """
-    expected_utility(m::InfluenceDiagramModel, strategy = strategy(m); max_states = 1_000_000, atol = 1e-8) -> Float64
+    expected_utility(m::InfluenceDiagramModel, strategy = strategy(m); max_states = 1_000_000, atol = DEFAULT_ATOL, stable=false) -> Float64
     expected_utility(m, :D => :a; kwargs...)
     expected_utility(m, [:D => :a, :E => :b]; kwargs...)
 
@@ -102,12 +151,14 @@ analysis 1). Throws [`IncompleteStrategyError`](@ref) when a decision has no pol
 `atol` is forwarded through [`instantiate`](@ref)'s validation and the brute-force
 joint or conditional evaluation, so rounded models use the same normalization
 tolerance throughout both oracle and optimized paths.
+`stable=true` selects per-utility log-domain marginals and compensated accumulation;
+the default retains the original reference arithmetic for reproducibility.
 """
 function expected_utility(m::InfluenceDiagramModel, σ::Strategy=m.strategy;
                           max_states::Integer=1_000_000,
-                          atol::Real=BayesianNetworks.DEFAULT_ATOL)
+                          atol::Real=BayesianNetworks.DEFAULT_ATOL, stable::Bool=false)
     _check_evidence_variables(syntax(m), evidence(m))
-    return expected_utility(instantiate(m, σ; atol=atol); max_states=max_states, atol=atol)
+    return expected_utility(instantiate(m, σ; atol=atol); max_states=max_states, atol=atol, stable)
 end
 
 function expected_utility(m::InfluenceDiagramModel, f::Pair{Symbol,Symbol}; kw...)
