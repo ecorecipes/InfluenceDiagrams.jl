@@ -73,6 +73,43 @@ rounding remain outside that theorem. The general open-network syntax category i
 proved separately in `CategoricalBayesianNetworks.jl/proofs/`; neither result is a
 semantic-equality quotient that silently erases hidden mechanisms.
 
+## Perfect recall is not full observation
+
+No-forgetting means retaining information already available, not observing every
+chance variable. A hidden state stays hidden unless an information arc makes it
+available to the relevant decision.
+
+For example, let a fair hidden binary state determine whether a final guess is
+rewarded. An earlier decision has no information, and the final decision
+remembers only that earlier action:
+
+```julia
+id = influence_diagram(:Hidden => [:zero, :one], :First => [:left, :right],
+                       :Guess => [:zero, :one];
+                       decisions=[:First => (), :Guess => :First],
+                       utilities=[:Reward => (:Hidden, :Guess)])
+m = bind_cpt(InfluenceDiagramModel(id), :Hidden => [.5, .5])
+m = bind_utility(m, :Reward => [1.0 0.0; 0.0 1.0])
+is_no_forgetting(m)                         # true
+optimize(m).expected_utility                # 0.5
+informed = with_information(m, :Guess, :Hidden)
+optimize(informed).expected_utility         # 1.0
+```
+
+The original diagram already has perfect recall. Its optimal success
+probability is one half because neither decision can read the hidden state.
+The larger value belongs to a different information structure. Maximizing the
+guess separately for each hidden state before averaging would incorrectly give
+the original decision maker that extra information. DVE instead sums out this
+unobserved chance coordinate before maximizing the guess.
+
+External evidence is another distinct operation. `observe(m, :Hidden => :zero)`
+defines a conditional problem whose evidence mass is one half; it does not add
+an information arc or a policy argument. In general, normalized chance kernels
+give total unconditional mass one, not evidence mass one. Conditional expected
+utility requires the actual evidence mass to be positive; impossible evidence
+must reject rather than become an ordinary zero-utility answer.
+
 ## Quick start
 
 ```julia

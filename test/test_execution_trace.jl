@@ -82,3 +82,43 @@ end
     @test row["effective"]["table"]["values"] ==
           ["0000000000000000", "3ff0000000000000", "3ff0000000000000", "0000000000000000"]
 end
+
+@testset "Perfect recall does not reveal hidden chance variables" begin
+    diagram = influence_diagram(:Hidden => [:zero, :one], :First => [:left, :right],
+                                :Guess => [:zero, :one];
+                                decisions=[:First => (), :Guess => :First],
+                                utilities=[:Reward => (:Hidden, :Guess)])
+    model = bind_cpt(InfluenceDiagramModel(diagram), :Hidden => [.5, .5])
+    model = bind_utility(model, :Reward => [1.0 0.0; 0.0 1.0])
+    @test is_no_forgetting(model)
+    @test information_names(syntax(model), :Guess) == [:First]
+    solution, trace = trace_decision_elimination(model)
+    @test solution.expected_utility == .5
+    @test optimize(model, ExhaustivePolicySearch(stable=true)).expected_utility == .5
+    @test expected_utility(model, solution.strategy; stable=true) == .5
+    @test trace["steps"][1]["kind"] == "chance"
+    @test trace["steps"][1]["variable"] == "Hidden"
+    @test all(!("Hidden" in policy["scope"]) for policy in trace["policies"])
+    @test all(validate_policy(model, name, policy) === nothing for (name, policy) in policies(solution.strategy))
+
+    informed = with_information(model, :Guess, :Hidden)
+    informed_solution, informed_trace = trace_decision_elimination(informed)
+    @test is_no_forgetting(informed)
+    @test informed_solution.expected_utility == 1.0
+    @test optimize(informed, ExhaustivePolicySearch(stable=true)).expected_utility == 1.0
+    @test first(informed_trace["steps"])["decision"] == "Guess"
+    @test expected_value_of_information(model, :Hidden, :Guess;
+                                        backend=DecisionVariableElimination(stable=true)) == .5
+
+    conditioned = observe(model, :Hidden => :zero)
+    conditioned_solution, conditioned_trace = trace_decision_elimination(conditioned)
+    @test conditioned_solution.expected_utility == 1.0
+    @test conditioned_solution.diagnostics.evidence_probability == .5
+    @test conditioned_trace["final"]["probability"]["values"] ==
+          [Dict("numerator" => "1", "denominator" => "2")]
+    @test all(step["variable"] != "Hidden" for step in conditioned_trace["steps"])
+    @test information_names(syntax(conditioned), :Guess) == [:First]
+    @test expected_utility(conditioned, conditioned_solution.strategy; stable=true) == 1.0
+    impossible = observe(bind_cpt(model, :Hidden => [1.0, 0.0]), :Hidden => :one)
+    @test_throws BayesianNetworks.ImpossibleEvidenceError trace_decision_elimination(impossible)
+end
