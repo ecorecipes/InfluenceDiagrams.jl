@@ -164,18 +164,28 @@ g = read_influence_diagram(fixture_path("dne/grazing_reference_id.dne"))
 For underflowed evidence or large cancelling utilities, opt into the stable path:
 
 ```julia
-sol = optimize(m, ExhaustivePolicySearch(stable=true))
+sol = optimize(m, DecisionVariableElimination(stable=true))
 eu = expected_utility(m, sol.strategy; stable=true)
 ```
 
-This evaluates utilities separately using log-domain conditional marginals and
-scaled compensated summation, rather than first adding all utilities in each
-world. Stable exhaustive search scores each strategy independently and is slower
-than the default value-table shortcut; the policy and state-count caps still
-apply. Strategies with impossible evidence are excluded, and an entirely
-unsupported problem raises `ImpossibleEvidenceError`. Default arithmetic and DVE
-are unchanged. This is a numerical option, not a universal floating-point
-guarantee or a log-domain DVE optimizer.
+Stable DVE runs the same bucket schedule with exact rational meanings of the
+bound data and correctly rounds the returned Float64 value using integer
+quotient/remainder arithmetic, independently of ambient BigFloat precision.
+Exact arithmetic was chosen over logging signed utilities or relying on a
+fixed working precision, which can still lose small terms before cancellation.
+It is more expensive per factor cell than Float64, but scales with factor
+width rather than the number of policies; it can solve cases beyond the
+exhaustive-search cap. Diagnostics retain finite log evidence when ordinary
+evidence mass underflows.
+
+`expected_utility(...; stable=true)` instead evaluates utilities separately using
+log-domain marginals and compensated accumulation. The capped
+`ExhaustivePolicySearch(stable=true)` remains available as a slower comparator.
+Stable DVE retains the no-forgetting and action-free evidence requirements.
+It does not renormalize accepted rounded CPTs; `exact_probability_guards`
+distinguishes exact action independence from tolerance acceptance.
+Defaults remain unchanged. These runtime options are not a universal
+Julia/compiler/IEEE correctness theorem.
 
 ## Development
 

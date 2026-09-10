@@ -40,7 +40,7 @@ suite (SPEC §55.6, §56 item 6).
 """
 
 """
-    DecisionVariableElimination(; order = MinFill(), atol = 1e-9)
+    DecisionVariableElimination(; order = MinFill(), atol = 1e-9, stable=false)
 
 Solve an influence diagram by decision variable elimination: chance variables are
 summed out and decisions maximised in the strong elimination order (see the module
@@ -49,15 +49,26 @@ of BayesianNetworkInference.jl) choosing the order inside each chance block and 
 the relative per-row tolerance of the constancy check of the probability potential at each
 maximisation. Returns the maximal expected utility and the recovered strategy of
 deterministic policies, with ties broken in favour of the first action label.
+
+`stable=true` runs the same bucket algorithm with exact rational meanings of
+the bound scalar data, rounding only the returned Float64 value. This avoids
+underflow and signed-utility cancellation without taking logarithms of signed
+utilities, and remains exponential in factor width rather than policy count.
+It costs more time and memory than ordinary Float64 arithmetic. Accepted
+rounded CPTs are not silently normalized; `exact_probability_guards` in the
+diagnostics distinguishes exact constancy from mere tolerance acceptance.
 """
 struct DecisionVariableElimination{O<:EliminationStrategy} <: DecisionBackend
     order::O
     atol::Float64
+    stable::Bool
 end
+DecisionVariableElimination(order::EliminationStrategy, atol::Real) =
+    DecisionVariableElimination(order, Float64(atol), false)
 function DecisionVariableElimination(; order::EliminationStrategy=MinFill(),
-                                     atol::Real=1e-9)
+                                     atol::Real=1e-9, stable::Bool=false)
     _check_probability_tolerance(atol)
-    return DecisionVariableElimination(order, Float64(atol))
+    return DecisionVariableElimination(order, Float64(atol), stable)
 end
 
 # Blocks
@@ -178,7 +189,7 @@ function _check_dve_structure(id::AbstractInfluenceDiagram, ev)
 end
 
 """
-    decision_elimination(m::InfluenceDiagramModel; order = MinFill(), atol = 1e-9, normalization_atol = 1e-8) -> DecisionSolution
+    decision_elimination(m::InfluenceDiagramModel; order = MinFill(), atol = 1e-9, normalization_atol = 1e-8, stable=false) -> DecisionSolution
 
 Run decision variable elimination on `m` (see [`DecisionVariableElimination`](@ref)).
 `atol` is the relative per-row tolerance of the constancy check at each
@@ -189,26 +200,43 @@ The initial valuations are `(κ_X, 0)` for every chance mechanism (the factor
 the model's evidence. The diagnostics are a named tuple with the elimination `order`
 actually used, the `max_factor_size` of any potential and the `policy_scopes` on
 which each recovered policy really depends (a subset of its information set).
+`stable=true` selects exact rational bucket arithmetic and adds log evidence,
+ordinary mass classification and exact-constancy diagnostics.
 """
 function decision_elimination(m::InfluenceDiagramModel;
                               order::EliminationStrategy=MinFill(),
                               atol::Real=1e-9,
-                              normalization_atol::Real=BayesianNetworks.DEFAULT_ATOL)
+                              normalization_atol::Real=BayesianNetworks.DEFAULT_ATOL,
+                              stable::Bool=false)
     _check_solvable(m; atol=normalization_atol)
     _check_probability_tolerance(atol)
+    T = stable ? Rational{BigInt} : Float64
+    return _decision_elimination(m, order, atol, T)
+end
+
+function _decision_elimination(m::InfluenceDiagramModel, order, atol, ::Type{T}) where {T}
+    stable = T == Rational{BigInt}
     id = syntax(m)
     bm = m.model
     ev = evidence(m)
     _check_dve_structure(id, ev)
-    vals = Valuation{Float64}[]
+    vals = Valuation{T}[]
     for mech in mechanisms(id)
         x = variable_name(id, target(id, mech))
         ps = Symbol[variable_name(id, p) for p in inputs(id, mech)]
-        push!(vals, Valuation(condition(Factor(kernel(bm, x), ps, x), ev)))
+        factor = Factor(kernel(bm, x), ps, x)
+        if stable && !all(value -> isfinite(value) && value >= 0, factor.table)
+            throw(BayesianNetworkInference.ScopeError(:decision_elimination,
+                                                      "stable probabilities must be finite and nonnegative",
+                                                      factor.vars))
+        end
+        push!(vals, Valuation(condition(_convert(T, factor), ev)))
     end
     for (name, u) in m.utilities
         f = utility_factor(u, _utility_axes(m, utility_id(id, name)))
-        push!(vals, Valuation(unit_factor(), condition(f, ev)))
+        stable && !all(isfinite, f.table) &&
+            throw(UtilityScopeError(name, :value, "finite utility entries", f.table))
+        push!(vals, Valuation(unit_factor(T), condition(_convert(T, f), ev)))
     end
     ds = decision_order(id)
     blocks = _blocks(id, ds)
@@ -216,12 +244,14 @@ function decision_elimination(m::InfluenceDiagramModel;
     max_size = 0
     policy_scopes = Dict{Symbol,Vector{Symbol}}()
     ps = Dict{Symbol,AbstractPolicy}()
+    exact_guards = true
+    probability_atol = stable ? Rational{BigInt}(atol) : atol
     for (kind, names_) in reverse(blocks)
         if kind == :chance
             fg = FactorGraph(vcat([v.φ for v in vals], [v.ψ for v in vals]))
             for x in _block_order(fg, names_, order)
-                touching = Valuation{Float64}[]
-                rest = Valuation{Float64}[]
+                touching = Valuation{T}[]
+                rest = Valuation{T}[]
                 for v in vals
                     push!(x in scope(v) ? touching : rest, v)
                 end
@@ -237,8 +267,8 @@ function decision_elimination(m::InfluenceDiagramModel;
             dname = decision_name(id, d)
             info = _information_axes(m, d)
             action = _action_axis(m, d)
-            touching = Valuation{Float64}[]
-            rest = Valuation{Float64}[]
+            touching = Valuation{T}[]
+            rest = Valuation{T}[]
             for v in vals
                 push!(a in scope(v) ? touching : rest, v)
             end
@@ -249,7 +279,12 @@ function decision_elimination(m::InfluenceDiagramModel;
             else
                 combined = combine(touching)
                 max_size = max(max_size, length(combined.φ.table), length(combined.ψ.table))
-                reduced, table, pscope = max_out(combined, a; atol=atol)
+                if stable && a in combined.φ.vars
+                    position = findfirst(==(a), combined.φ.vars)
+                    exact_guards &= maximum(combined.φ.table; dims=position) ==
+                                    minimum(combined.φ.table; dims=position)
+                end
+                reduced, table, pscope = max_out(combined, a; atol=probability_atol)
                 info_names = [ax.name for ax in info]
                 extra = setdiff(pscope, info_names)
                 isempty(extra) || throw(IrregularDiagramError(dname, extra, :information))
@@ -271,6 +306,19 @@ function decision_elimination(m::InfluenceDiagramModel;
     (isempty(ev) || pe > 0) ||
         throw(BayesianNetworks.ImpossibleEvidenceError(copy(ev)))
     meu = only(final.ψ.table)
+    if stable
+        value = _nearest_binary64(meu)
+        isfinite(value) || throw(UtilityScopeError(:total, :value, "finite representable expected utility", value))
+        log_mass = _rational_log(pe)
+        ordinary_mass = _nearest_binary64(pe)
+        status = iszero(pe) ? :zero : iszero(ordinary_mass) ? :underflow :
+                 isinf(ordinary_mass) ? :overflow : :finite
+        return DecisionSolution(value, Strategy(ps),
+                                (order=elim, max_factor_size=max_size, policy_scopes=policy_scopes,
+                                 evidence_probability=ordinary_mass, log_evidence_probability=log_mass,
+                                 mass_status=status, arithmetic=:exact_rational,
+                                 exact_probability_guards=exact_guards))
+    end
     return DecisionSolution(meu, Strategy(ps),
                             (order=elim, max_factor_size=max_size,
                              policy_scopes=policy_scopes, evidence_probability=pe))
@@ -278,7 +326,7 @@ end
 
 function optimize(m::InfluenceDiagramModel, b::DecisionVariableElimination;
                   atol::Real=BayesianNetworks.DEFAULT_ATOL)
-    return decision_elimination(m; order=b.order, atol=b.atol, normalization_atol=atol)
+    return decision_elimination(m; order=b.order, atol=b.atol, normalization_atol=atol, stable=b.stable)
 end
 
 # Value of information
