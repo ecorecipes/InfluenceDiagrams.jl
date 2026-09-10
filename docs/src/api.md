@@ -155,6 +155,7 @@ The complete model-data interface is documented under
 
 ```@docs
 export_dve_certificate
+trace_decision_elimination
 ```
 
 ```@docs

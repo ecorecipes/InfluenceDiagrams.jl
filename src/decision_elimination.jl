@@ -214,7 +214,7 @@ function decision_elimination(m::InfluenceDiagramModel;
     return _decision_elimination(m, order, atol, T)
 end
 
-function _decision_elimination(m::InfluenceDiagramModel, order, atol, ::Type{T}) where {T}
+function _decision_elimination(m::InfluenceDiagramModel, order, atol, ::Type{T}, observer=nothing) where {T}
     stable = T == Rational{BigInt}
     id = syntax(m)
     bm = m.model
@@ -230,14 +230,19 @@ function _decision_elimination(m::InfluenceDiagramModel, order, atol, ::Type{T})
                                                       "stable probabilities must be finite and nonnegative",
                                                       factor.vars))
         end
-        push!(vals, Valuation(condition(_convert(T, factor), ev)))
+        probability = _convert(T, factor)
+        observer === nothing || observer(:input, (kind="chance", name=x, parents=ps, value=Valuation(probability)))
+        push!(vals, Valuation(condition(probability, ev)))
     end
     for (name, u) in m.utilities
         f = utility_factor(u, _utility_axes(m, utility_id(id, name)))
         stable && !all(isfinite, f.table) &&
             throw(UtilityScopeError(name, :value, "finite utility entries", f.table))
-        push!(vals, Valuation(unit_factor(T), condition(_convert(T, f), ev)))
+        initial = Valuation(unit_factor(T), _convert(T, f))
+        observer === nothing || observer(:input, (kind="utility", name=name, parents=Symbol[], value=initial))
+        push!(vals, Valuation(initial.φ, condition(initial.ψ, ev)))
     end
+    observer === nothing || observer(:conditioned, vals)
     ds = decision_order(id)
     blocks = _blocks(id, ds)
     elim = Symbol[]
@@ -257,7 +262,12 @@ function _decision_elimination(m::InfluenceDiagramModel, order, atol, ::Type{T})
                 end
                 combined = combine(touching)
                 max_size = max(max_size, length(combined.φ.table), length(combined.ψ.table))
-                push!(rest, sum_out(combined, x))
+                reduced = sum_out(combined, x)
+                if observer !== nothing
+                    observer(:chance, (variable=x, inputs=findall(v -> x in scope(v), vals),
+                                       combined=combined, result=reduced))
+                end
+                push!(rest, reduced)
                 vals = rest
                 push!(elim, x)
             end
@@ -276,6 +286,7 @@ function _decision_elimination(m::InfluenceDiagramModel, order, atol, ::Type{T})
                 ps[dname] = DeterministicPolicy(dname, info, action,
                                                 (labels...) -> first(action.labels))
                 policy_scopes[dname] = Symbol[]
+                observer === nothing || observer(:inactive, (variable=a, decision=dname, action=first(action.labels)))
             else
                 combined = combine(touching)
                 max_size = max(max_size, length(combined.φ.table), length(combined.ψ.table))
@@ -294,6 +305,10 @@ function _decision_elimination(m::InfluenceDiagramModel, order, atol, ::Type{T})
                                                                                              labels[pos[j]]),
                                                                             length(pos))...])
                 policy_scopes[dname] = pscope
+                if observer !== nothing
+                    observer(:decision, (variable=a, decision=dname, inputs=findall(v -> a in scope(v), vals),
+                                         combined=combined, result=reduced, policy=table, policy_scope=pscope))
+                end
                 push!(rest, reduced)
                 vals = rest
             end
@@ -301,6 +316,7 @@ function _decision_elimination(m::InfluenceDiagramModel, order, atol, ::Type{T})
         end
     end
     final = combine(vals)
+    observer === nothing || observer(:final, final)
     isempty(scope(final)) || throw(UneliminatedVariablesError(collect(scope(final))))
     pe = only(final.φ.table)
     (isempty(ev) || pe > 0) ||

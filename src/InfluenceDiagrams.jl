@@ -140,6 +140,7 @@ export DecisionVariableElimination, strong_elimination_order, decision_eliminati
 export read_influence_diagram, write_influence_diagram
 # certificates.jl
 export export_dve_certificate
+export trace_decision_elimination
 # graphics.jl
 export to_graphviz
 # examples.jl
@@ -162,6 +163,7 @@ include("valuation.jl")
 include("exact_arithmetic.jl")
 include("decision_elimination.jl")
 include("certificates.jl")
+include("execution_trace.jl")
 include("formats_bridge.jl")
 include("graphics.jl")
 include("examples.jl")

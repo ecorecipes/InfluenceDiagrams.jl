@@ -115,6 +115,15 @@ An explicit rational-companion mode checks exact nearest-even agreement without
 renormalizing. See [the model certificate guide](docs/src/certificates.md).
 This data export is not a proof of a production optimization trace.
 
+`trace_decision_elimination(model)` now captures an actual exact-arithmetic
+stable-DVE run, including initial/conditioned valuations, every combined and
+reduced bucket, local policy choices and the returned strategy/value.
+The independent workspace checker requires exact effective CPT normalization,
+legal schedules and probability guards, and verifies policy reconstruction.
+The default trace guard is exact; not every tolerance-accepted rounded model
+is certifiable. This is a separate execution-data profile, not a claim of
+verified Julia, JSON parsing or source-CPT compilation.
+
 ## Installation
 
 The ecosystem packages are not registered. Install by URL, in dependency order:
