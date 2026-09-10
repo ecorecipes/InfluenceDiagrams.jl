@@ -107,6 +107,11 @@ Float64 arrays, reference lookup, explicit array conditioning or first-label tie
 In particular, literal floating-point DVE/oracle equality is not a theorem. See
 [`proofs/README.md`](proofs/README.md) for exact statements and implementation boundaries.
 
+The [algorithm contract](docs/src/algorithm_contract.md) collects solver
+preconditions, the distinction between perfect recall and full observation,
+ties and unreachable policy rows, evidence-support rules, and the separate
+exact and floating-point guarantees.
+
 ## Model certificates
 
 `export_dve_certificate(model)` captures the complete ordered model, including

@@ -33,6 +33,7 @@ bib = CitationBibliography(joinpath(@__DIR__, "src", "references.bib");
                            style=:authoryear)
 
 pages = Any["Home" => "index.md", "API Reference" => "api.md",
+            "Algorithm guarantees" => "algorithm_contract.md",
             "Model certificates" => "certificates.md",
             "References" => "references.md"]
 tutorials = tutorial_pages()

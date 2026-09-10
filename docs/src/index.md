@@ -75,6 +75,9 @@ semantic-equality quotient that silently erases hidden mechanisms.
 
 ## Perfect recall is not full observation
 
+The [algorithm contract](algorithm_contract.md) collects solver preconditions,
+policy-equivalence rules, evidence boundaries and numerical qualifications.
+
 No-forgetting means retaining information already available, not observing every
 chance variable. A hidden state stays hidden unless an information arc makes it
 available to the relevant decision.
