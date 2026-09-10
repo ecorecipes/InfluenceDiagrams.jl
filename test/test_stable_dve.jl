@@ -76,3 +76,41 @@
     @test InfluenceDiagrams._nearest_binary64(boundary) == Inf
     @test InfluenceDiagrams._nearest_binary64(boundary - 1) == floatmax(Float64)
 end
+
+@testset "Integer binary64 word construction" begin
+    rounded_word = value -> reinterpret(UInt64, InfluenceDiagrams._nearest_binary64(value))
+    lower_words = UInt64[0x0000000000000000, 0x0000000000000001, 0x000ffffffffffffe,
+                         0x000fffffffffffff, 0x0010000000000000, 0x0010000000000001,
+                         0x3fefffffffffffff, 0x3ff0000000000000, 0x3ff0000000000001,
+                         0x7feffffffffffffe]
+    for word in lower_words
+        upper_word = word + UInt64(1)
+        lower = Rational{BigInt}(reinterpret(Float64, word))
+        upper = Rational{BigInt}(reinterpret(Float64, upper_word))
+        midpoint = (lower + upper) / 2
+        delta = (upper - lower) / big(2)^30
+        even_word = iseven(word) ? word : upper_word
+        @test rounded_word(midpoint) == even_word
+        @test rounded_word(midpoint - delta) == word
+        @test rounded_word(midpoint + delta) == upper_word
+        @test rounded_word(-midpoint) == (even_word | 0x8000000000000000)
+        @test rounded_word(-(midpoint - delta)) == (word | 0x8000000000000000)
+        @test rounded_word(-(midpoint + delta)) == (upper_word | 0x8000000000000000)
+    end
+    threshold = Rational{BigInt}(floatmax(Float64)) + big(2)^970
+    @test rounded_word(threshold) == 0x7ff0000000000000
+    @test rounded_word(-threshold) == 0xfff0000000000000
+    @test rounded_word(threshold - 1) == 0x7fefffffffffffff
+    @test rounded_word(-(threshold - 1)) == 0xffefffffffffffff
+    @test rounded_word(big(1)//big(2)^2000) == 0x0000000000000000
+    @test rounded_word(-big(1)//big(2)^2000) == 0x8000000000000000
+    rng = MersenneTwister(20260911)
+    for _ in 1:200
+        word = rand(rng, UInt64)
+        exponent = (word >> 52) & 0x7ff
+        exponent == 0x7ff && continue
+        value = reinterpret(Float64, word)
+        expected = iszero(value) ? UInt64(0) : word
+        @test rounded_word(Rational{BigInt}(value)) == expected
+    end
+end

@@ -90,3 +90,42 @@ valid zero-mass rejection data, and data outside exact semantics. Such outcomes
 are computed outputs, never trusted `valid` or `optimal` input flags. Automatic
 theorem application still needs a proved decoder-to-model correspondence;
 schema conformance alone does not supply it.
+
+## Actual execution and compilation observations
+
+[`trace_decision_elimination`](@ref) is a separate solver-trace API. Its default
+version-1 trace captures the actual exact-rational DVE run. The opt-in version 2
+also records the compilation boundary:
+
+```julia
+solution, trace = trace_decision_elimination(umbrella_model();
+                                            include_compilation=true)
+trace["version"]                 # 2
+trace["compilation"]["inputs"]   # bound sources and actual effective factors
+```
+
+The observer records the bound Float64 kernel storage, its sanctioned `cpt`
+conversion, tabular utility sources, and the actual factors consumed before
+rational conversion. These are not factors generated afterward by a substitute
+compiler. Repeated parent occurrences remain in the source CPT; their compiled
+factor has distinct variable axes and selects the source diagonal.
+
+Captured arrays are first-axis-fastest. Kernel axes are outputs before inputs;
+CPT axes are `(parents..., child)`. State labels and occurrence positions are
+recorded explicitly. Source and effective-table copies share the `max_entries`
+budget with the ordinary trace. Unsupported source scalar types and callable
+utilities raise `DVEExportError` in this initial compilation profile.
+
+This begins at the **bound model**. The workspace's separate
+`ecorecipes.id-execution-refinement` wrapper retains original JSON bytes and
+native JSON3 read-back so a consumer can compare the request, binding,
+compilation and execution as distinct stages. Its source arrays use
+last-axis-fastest order; the consumer explicitly checks the coordinate
+conversion rather than comparing flattened vectors without their axes.
+
+Neither a captured trace nor successful host comparisons prove JSON3, Julia's
+JIT, LLVM or physical hardware correct. Exact normalization and positive-mass
+conditions still need checking; capturing a tolerance-accepted model does not
+make it an exactly normalized model. The stable solver's final conversion now
+constructs binary64 words with integer rounding rather than floating-point
+scaling, but implementation and hardware refinement remain separate claims.

@@ -124,6 +124,13 @@ The default trace guard is exact; not every tolerance-accepted rounded model
 is certifiable. This is a separate execution-data profile, not a claim of
 verified Julia, JSON parsing or source-CPT compilation.
 
+`trace_decision_elimination(model; include_compilation=true)` selects version 2,
+adding bound Float64 kernel/CPT tables, tabular utilities and the actual factors
+consumed before rational conversion. The source copies share the trace cell
+budget. This provides data for checking the compilation boundary without
+rerunning a substitute compiler; linking the bound model to an original JSON
+request remains a separate comparison. Version 1 stays the default.
+
 ## Installation
 
 The ecosystem packages are not registered. Install by URL, in dependency order:

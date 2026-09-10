@@ -224,14 +224,17 @@ function _decision_elimination(m::InfluenceDiagramModel, order, atol, ::Type{T},
     for mech in mechanisms(id)
         x = variable_name(id, target(id, mech))
         ps = Symbol[variable_name(id, p) for p in inputs(id, mech)]
-        factor = Factor(kernel(bm, x), ps, x)
+        bound_kernel = kernel(bm, x)
+        factor = Factor(bound_kernel, ps, x)
         if stable && !all(value -> isfinite(value) && value >= 0, factor.table)
             throw(BayesianNetworkInference.ScopeError(:decision_elimination,
                                                       "stable probabilities must be finite and nonnegative",
                                                       factor.vars))
         end
         probability = _convert(T, factor)
-        observer === nothing || observer(:input, (kind="chance", name=x, parents=ps, value=Valuation(probability)))
+        observer === nothing || observer(:input, (kind="chance", name=x, parents=ps,
+                                                  source=bound_kernel, compiled=factor,
+                                                  value=Valuation(probability)))
         push!(vals, Valuation(condition(probability, ev)))
     end
     for (name, u) in m.utilities
@@ -239,7 +242,8 @@ function _decision_elimination(m::InfluenceDiagramModel, order, atol, ::Type{T},
         stable && !all(isfinite, f.table) &&
             throw(UtilityScopeError(name, :value, "finite utility entries", f.table))
         initial = Valuation(unit_factor(T), _convert(T, f))
-        observer === nothing || observer(:input, (kind="utility", name=name, parents=Symbol[], value=initial))
+        observer === nothing || observer(:input, (kind="utility", name=name, parents=Symbol[],
+                                                  source=u, compiled=f, value=initial))
         push!(vals, Valuation(initial.φ, condition(initial.ψ, ev)))
     end
     observer === nothing || observer(:conditioned, vals)

@@ -4,15 +4,15 @@ function _rational_exponent(n::BigInt, d::BigInt)
     return below ? exponent - 1 : exponent
 end
 
-# Integer quotient/remainder rounding avoids the ambient BigFloat precision and
-# double rounding at binary64 midpoint, subnormal and overflow boundaries.
+# Integer rounding and word construction avoid ambient BigFloat precision,
+# floating-point scaling and double rounding at representation boundaries.
 function _nearest_binary64(value::Rational{BigInt})
     iszero(value) && return 0.0
-    negative = value < 0
+    sign_bits = value < 0 ? 0x8000000000000000 : UInt64(0)
     n, d = abs(numerator(value)), denominator(value)
     exponent = _rational_exponent(n, d)
-    exponent > 1023 && return negative ? -Inf : Inf
-    exponent < -1075 && return negative ? -0.0 : 0.0
+    exponent > 1023 && return reinterpret(Float64, sign_bits | 0x7ff0000000000000)
+    exponent < -1075 && return reinterpret(Float64, sign_bits)
     shift = max(exponent - 52, -1074)
     numerator_ = shift < 0 ? n << -shift : n
     denominator_ = shift > 0 ? d << shift : d
@@ -21,8 +21,18 @@ function _nearest_binary64(value::Rational{BigInt})
     if twice > denominator_ || (twice == denominator_ && isodd(mantissa))
         mantissa += 1
     end
-    rounded = ldexp(Float64(mantissa), shift)
-    return negative ? -rounded : rounded
+    hidden_bit = big(1) << 52
+    if mantissa < hidden_bit
+        word = UInt64(mantissa)
+    else
+        field = max(exponent, -1022) + 1023
+        if mantissa == 2hidden_bit
+            mantissa = hidden_bit
+            field += 1
+        end
+        word = (UInt64(field) << 52) | UInt64(mantissa - hidden_bit)
+    end
+    return reinterpret(Float64, sign_bits | word)
 end
 
 function _rational_log(value::Rational{BigInt})
