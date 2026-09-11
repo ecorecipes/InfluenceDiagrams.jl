@@ -9,6 +9,10 @@ observed at `D_k` (in the information set of `D_k` but of no earlier decision) a
 `Iₙ` holds the chance variables never observed. Elimination proceeds from the last
 block backwards: `Iₙ` is summed out, `Dₙ` maximised, `I_{n-1}` summed out, and so on,
 with a min-fill (or other `EliminationStrategy`) order inside each chance block.
+Every returned block order is checked before execution: it must contain each
+currently present variable in that chance block exactly once, and no other
+variable. A custom strategy cannot move an action into a chance block or discard
+information by crossing a block boundary.
 
 The algorithm is exact when, at the moment each decision is maximised, the utility
 potential depends only on variables in that decision's information set. This is the
@@ -154,7 +158,19 @@ function _block_order(fg::FactorGraph, block::Vector{Symbol}, strategy::Eliminat
     inblock = Set(block)
     keep = Symbol[v for v in present if !(v in inblock)]
     length(keep) == length(present) && return Symbol[]
-    return elimination_order(fg, strategy; keep=keep)
+    selected = elimination_order(fg, strategy; keep=keep)
+    selected isa AbstractVector{Symbol} ||
+        throw(BayesianNetworkInference.ScopeError(:decision_elimination,
+                                                  "ordering strategy must return a vector of variable names",
+                                                  copy(block)))
+    ordered = collect(selected)
+    expected = Symbol[v for v in present if v in inblock]
+    allunique(ordered) && length(ordered) == length(expected) &&
+        Set(ordered) == Set(expected) ||
+        throw(BayesianNetworkInference.ScopeError(:decision_elimination,
+                                                  "ordering strategy must list each current chance-block variable once and no other variables; expected $(repr(expected)), got $(repr(ordered))",
+                                                  union(expected, ordered)))
+    return ordered
 end
 
 # The run

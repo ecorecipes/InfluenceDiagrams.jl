@@ -84,6 +84,32 @@ additional boundaries. The [certificate guide](certificates.md) explains which
 original tables and actual solver observations are retained; a trace is not
 automatically a theorem about the implementation.
 
+## Calculation order is a constrained choice
+
+The ordering strategy may reorder chance variables **within** a source-derived
+block. It may not change the reverse decision order or eliminate information
+before the decision that uses it. Each block is ordered from the current
+factors, so `strong_elimination_order` is a useful preview, not necessarily the
+actual run order; use `solution.diagnostics.order` or an execution trace for that.
+
+The driver checks every returned block order before using it. Duplicate,
+omitted, unknown or out-of-block variables cause
+`BayesianNetworkInference.ScopeError`, including for custom
+`EliminationStrategy` implementations. In particular, a strategy cannot ask a
+chance-elimination step to average over a decision variable.
+
+The built-in graph strategies also validate their returned vertex permutations.
+`UserOrder` is rechecked when used, including if its stored vector was mutated
+after construction. Its graph-level contract remains strict: it lists exactly
+the current non-kept variables. A single global `UserOrder` vector is not
+automatically a separate valid order for every DVE chance block.
+
+These checks protect the ordering boundary; they do not establish that a
+heuristic finds the smallest possible intermediate factors. The formal
+schedule question is whether **every permitted order** preserves the exact
+optimal value and yields a legal optimal strategy. Equality of complete policy
+tables at ties or unreachable rows is a different, stronger question.
+
 ## Ties and unreachable information rows
 
 Equal optimal values do not require identical policy tables. The native DVE
