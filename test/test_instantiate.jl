@@ -63,8 +63,7 @@
         m = umbrella_model()
         @test_throws IncompleteStrategyError instantiate(m, Strategy())
         @test_throws PolicySignatureError instantiate(m,
-                                                      Strategy(:Umbrella =>
-                                                                   ConstantPolicy(:fly)))
+                                                      Strategy(:Umbrella => ConstantPolicy(:fly)))
         bad = DeterministicPolicy(:Umbrella, FiniteAxis[],
                                   FiniteAxis(:Umbrella, [:take, :leave]),
                                   :take)
@@ -73,8 +72,7 @@
         id = umbrella_diagram()
         add_information!(id, :Umbrella, :Umbrella)
         @test_throws InvalidInformationSetError instantiate(InfluenceDiagramModel(id),
-                                                            Strategy(:Umbrella =>
-                                                                         ConstantPolicy(:take)))
+                                                            Strategy(:Umbrella => ConstantPolicy(:take)))
     end
 
     @testset "random diagrams (SPEC section 56 item 5)" begin
@@ -82,9 +80,8 @@
         for _ in 1:20
             m = random_influence_model(rng)
             id = syntax(m)
-            σ = Strategy(Dict{Symbol,AbstractPolicy}(decision_name(id, d) =>
-                                                         first(all_deterministic_policies(m,
-                                                                                          d))
+            σ = Strategy(Dict{Symbol,AbstractPolicy}(decision_name(id, d) => first(all_deterministic_policies(m,
+                                                                                                              d))
                                                      for d in decisions(id)))
             bn = instantiate(m, σ)
             @test validate(bn; closed=true, unique_names=true, semantics=true) === nothing

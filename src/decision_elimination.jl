@@ -67,8 +67,9 @@ struct DecisionVariableElimination{O<:EliminationStrategy} <: DecisionBackend
     atol::Float64
     stable::Bool
 end
-DecisionVariableElimination(order::EliminationStrategy, atol::Real) =
-    DecisionVariableElimination(order, Float64(atol), false)
+function DecisionVariableElimination(order::EliminationStrategy, atol::Real)
+    return DecisionVariableElimination(order, Float64(atol), false)
+end
 function DecisionVariableElimination(; order::EliminationStrategy=MinFill(),
                                      atol::Real=1e-9, stable::Bool=false)
     _check_probability_tolerance(atol)
@@ -230,7 +231,8 @@ function decision_elimination(m::InfluenceDiagramModel;
     return _decision_elimination(m, order, atol, T)
 end
 
-function _decision_elimination(m::InfluenceDiagramModel, order, atol, ::Type{T}, observer=nothing) where {T}
+function _decision_elimination(m::InfluenceDiagramModel, order, atol, ::Type{T},
+                               observer=nothing) where {T}
     stable = T == Rational{BigInt}
     id = syntax(m)
     bm = m.model
@@ -248,9 +250,10 @@ function _decision_elimination(m::InfluenceDiagramModel, order, atol, ::Type{T},
                                                       factor.vars))
         end
         probability = _convert(T, factor)
-        observer === nothing || observer(:input, (kind="chance", name=x, parents=ps,
-                                                  source=bound_kernel, compiled=factor,
-                                                  value=Valuation(probability)))
+        observer === nothing || observer(:input,
+                                         (kind="chance", name=x, parents=ps,
+                                          source=bound_kernel, compiled=factor,
+                                          value=Valuation(probability)))
         push!(vals, Valuation(condition(probability, ev)))
     end
     for (name, u) in m.utilities
@@ -258,8 +261,9 @@ function _decision_elimination(m::InfluenceDiagramModel, order, atol, ::Type{T},
         stable && !all(isfinite, f.table) &&
             throw(UtilityScopeError(name, :value, "finite utility entries", f.table))
         initial = Valuation(unit_factor(T), _convert(T, f))
-        observer === nothing || observer(:input, (kind="utility", name=name, parents=Symbol[],
-                                                  source=u, compiled=f, value=initial))
+        observer === nothing || observer(:input,
+                                         (kind="utility", name=name, parents=Symbol[],
+                                          source=u, compiled=f, value=initial))
         push!(vals, Valuation(initial.φ, condition(initial.ψ, ev)))
     end
     observer === nothing || observer(:conditioned, vals)
@@ -284,8 +288,9 @@ function _decision_elimination(m::InfluenceDiagramModel, order, atol, ::Type{T},
                 max_size = max(max_size, length(combined.φ.table), length(combined.ψ.table))
                 reduced = sum_out(combined, x)
                 if observer !== nothing
-                    observer(:chance, (variable=x, inputs=findall(v -> x in scope(v), vals),
-                                       combined=combined, result=reduced))
+                    observer(:chance,
+                             (variable=x, inputs=findall(v -> x in scope(v), vals),
+                              combined=combined, result=reduced))
                 end
                 push!(rest, reduced)
                 vals = rest
@@ -306,7 +311,8 @@ function _decision_elimination(m::InfluenceDiagramModel, order, atol, ::Type{T},
                 ps[dname] = DeterministicPolicy(dname, info, action,
                                                 (labels...) -> first(action.labels))
                 policy_scopes[dname] = Symbol[]
-                observer === nothing || observer(:inactive, (variable=a, decision=dname, action=first(action.labels)))
+                observer === nothing || observer(:inactive,
+                                                 (variable=a, decision=dname, action=first(action.labels)))
             else
                 combined = combine(touching)
                 max_size = max(max_size, length(combined.φ.table), length(combined.ψ.table))
@@ -326,8 +332,11 @@ function _decision_elimination(m::InfluenceDiagramModel, order, atol, ::Type{T},
                                                                             length(pos))...])
                 policy_scopes[dname] = pscope
                 if observer !== nothing
-                    observer(:decision, (variable=a, decision=dname, inputs=findall(v -> a in scope(v), vals),
-                                         combined=combined, result=reduced, policy=table, policy_scope=pscope))
+                    observer(:decision,
+                             (variable=a, decision=dname,
+                              inputs=findall(v -> a in scope(v), vals),
+                              combined=combined, result=reduced, policy=table,
+                              policy_scope=pscope))
                 end
                 push!(rest, reduced)
                 vals = rest
@@ -344,14 +353,19 @@ function _decision_elimination(m::InfluenceDiagramModel, order, atol, ::Type{T},
     meu = only(final.ψ.table)
     if stable
         value = _nearest_binary64(meu)
-        isfinite(value) || throw(UtilityScopeError(:total, :value, "finite representable expected utility", value))
+        isfinite(value) ||
+            throw(UtilityScopeError(:total, :value, "finite representable expected utility",
+                                    value))
         log_mass = _rational_log(pe)
         ordinary_mass = _nearest_binary64(pe)
-        status = iszero(pe) ? :zero : iszero(ordinary_mass) ? :underflow :
+        status = iszero(pe) ? :zero :
+                 iszero(ordinary_mass) ? :underflow :
                  isinf(ordinary_mass) ? :overflow : :finite
         return DecisionSolution(value, Strategy(ps),
-                                (order=elim, max_factor_size=max_size, policy_scopes=policy_scopes,
-                                 evidence_probability=ordinary_mass, log_evidence_probability=log_mass,
+                                (order=elim, max_factor_size=max_size,
+                                 policy_scopes=policy_scopes,
+                                 evidence_probability=ordinary_mass,
+                                 log_evidence_probability=log_mass,
                                  mass_status=status, arithmetic=:exact_rational,
                                  exact_probability_guards=exact_guards))
     end
@@ -362,7 +376,8 @@ end
 
 function optimize(m::InfluenceDiagramModel, b::DecisionVariableElimination;
                   atol::Real=BayesianNetworks.DEFAULT_ATOL)
-    return decision_elimination(m; order=b.order, atol=b.atol, normalization_atol=atol, stable=b.stable)
+    return decision_elimination(m; order=b.order, atol=b.atol, normalization_atol=atol,
+                                stable=b.stable)
 end
 
 # Value of information

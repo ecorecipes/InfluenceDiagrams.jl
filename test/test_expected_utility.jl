@@ -51,8 +51,7 @@
         @test expected_utility(e, :Umbrella => :take) ≈ 0.28 * 20 + 0.72 * 70
         @test expected_utility(e, :Umbrella => :leave) ≈ 0.28 * 100
         @test_throws ImpossibleEvidenceError expected_utility(observe(do_intervention(m,
-                                                                                      :Weather =>
-                                                                                          :rainy),
+                                                                                      :Weather => :rainy),
                                                                       :Weather => :sunny),
                                                               :Umbrella => :take)
     end
@@ -63,13 +62,11 @@
         eu = expected_utility(fixed)
         # the cost of `reduce` is -15; the rest is the expected conservation benefit
         gb = InfluenceDiagramModel(syntax(g); kernels=kernels(g),
-                                   utilities=Dict{Symbol,AbstractUtility}(:ConservationBenefit =>
-                                                                              utility(g,
-                                                                                      :ConservationBenefit),
-                                                                          :ManagementCost =>
-                                                                              TabularUtility(utility(g,
-                                                                                                     :ManagementCost).scope,
-                                                                                             zeros(3))),
+                                   utilities=Dict{Symbol,AbstractUtility}(:ConservationBenefit => utility(g,
+                                                                                                          :ConservationBenefit),
+                                                                          :ManagementCost => TabularUtility(utility(g,
+                                                                                                                    :ManagementCost).scope,
+                                                                                                            zeros(3))),
                                    strategy=strategy(fixed))
         @test expected_utility(gb) ≈ eu + 15
         @test expected_utility(gb) ≈

@@ -4,21 +4,27 @@ mutable struct _DVETraceRecorder
     compilation::Bool
 end
 
-_DVETraceRecorder(data::Dict{String,Any}, remaining::Int) = _DVETraceRecorder(data, remaining, false)
+function _DVETraceRecorder(data::Dict{String,Any}, remaining::Int)
+    return _DVETraceRecorder(data, remaining, false)
+end
 
 function _trace_rational(value::Rational{BigInt}, owner)
     ndigits(abs(numerator(value))) <= 4096 && ndigits(denominator(value)) <= 4096 ||
-        throw(UtilityScopeError(owner, :value, "trace rationals with at most 4096 decimal digits", value))
-    return Dict("numerator" => string(numerator(value)), "denominator" => string(denominator(value)))
+        throw(UtilityScopeError(owner, :value,
+                                "trace rationals with at most 4096 decimal digits", value))
+    return Dict("numerator" => string(numerator(value)),
+                "denominator" => string(denominator(value)))
 end
 
 function _trace_dve_factor!(recorder, factor::Factor{Rational{BigInt}})
     length(factor) <= recorder.remaining ||
         throw(BayesianNetworkInference.ScopeError(:trace_decision_elimination,
-                                                  "the trace cell budget was exceeded", copy(factor.vars)))
+                                                  "the trace cell budget was exceeded",
+                                                  copy(factor.vars)))
     recorder.remaining -= length(factor)
     return Dict{String,Any}("scope" => String.(factor.vars),
-                           "values" => [_trace_rational(value, :trace) for value in vec(factor.table)])
+                            "values" => [_trace_rational(value, :trace)
+                                         for value in vec(factor.table)])
 end
 
 function _trace_valuation!(recorder, value)
@@ -31,14 +37,17 @@ function _trace_binary64_table!(recorder, kind, name, table)
         throw(DVEExportError(:compilation_scalar_type, Symbol(kind), nothing, String(name),
                              Int[], "compilation capture requires Float64 source tables"))
     all(isfinite, table) ||
-        throw(DVEExportError(:nonfinite_compilation_value, Symbol(kind), nothing, String(name),
+        throw(DVEExportError(:nonfinite_compilation_value, Symbol(kind), nothing,
+                             String(name),
                              Int[], "compilation capture requires finite source values"))
     length(table) <= recorder.remaining ||
         throw(BayesianNetworkInference.ScopeError(:trace_decision_elimination,
-                                                  "the trace cell budget was exceeded", Symbol[name]))
+                                                  "the trace cell budget was exceeded",
+                                                  Symbol[name]))
     recorder.remaining -= length(table)
     return Dict("shape" => Int[size(table)...],
-                "values" => [string(reinterpret(UInt64, value); base=16, pad=16) for value in vec(table)])
+                "values" => [string(reinterpret(UInt64, value); base=16, pad=16)
+                             for value in vec(table)])
 end
 
 function _trace_compilation!(recorder, input)
@@ -48,7 +57,8 @@ function _trace_compilation!(recorder, input)
         k = input.source
         2big(length(k.table)) + length(factor.table) <= recorder.remaining ||
             throw(BayesianNetworkInference.ScopeError(:trace_decision_elimination,
-                                                      "the compilation cell budget was exceeded", Symbol[name]))
+                                                      "the compilation cell budget was exceeded",
+                                                      Symbol[name]))
         Dict("parents" => String.(input.parents),
              "parent_states" => [String.(labels(axis)) for axis in k.dom.axes],
              "child_states" => String.(labels(only(k.codom.axes))),
@@ -57,11 +67,13 @@ function _trace_compilation!(recorder, input)
     elseif kind == "utility"
         u = input.source
         u isa TabularUtility ||
-            throw(DVEExportError(:unsupported_compilation_source, :utility, nothing, String(name),
+            throw(DVEExportError(:unsupported_compilation_source, :utility, nothing,
+                                 String(name),
                                  Int[], "compilation capture requires a tabular utility"))
         big(length(u.table)) + length(factor.table) <= recorder.remaining ||
             throw(BayesianNetworkInference.ScopeError(:trace_decision_elimination,
-                                                      "the compilation cell budget was exceeded", Symbol[name]))
+                                                      "the compilation cell budget was exceeded",
+                                                      Symbol[name]))
         Dict("arguments" => String.(scope(u)),
              "argument_states" => [String.(labels(axis)) for axis in u.scope],
              "table" => _trace_binary64_table!(recorder, kind, name, utility_table(u)))
@@ -73,32 +85,38 @@ function _trace_compilation!(recorder, input)
                      "states" => [String.(labels(axis)) for axis in factor.axes],
                      "table" => _trace_binary64_table!(recorder, kind, name, factor.table))
     push!(recorder.data["compilation"]["inputs"],
-          Dict("kind" => kind, "name" => String(name), "source" => source, "effective" => effective))
+          Dict("kind" => kind, "name" => String(name), "source" => source,
+               "effective" => effective))
     return nothing
 end
 
 function (recorder::_DVETraceRecorder)(kind::Symbol, value)
     if kind == :input
         recorder.compilation && _trace_compilation!(recorder, value)
-        push!(recorder.data["inputs"], Dict{String,Any}(
-            "kind" => value.kind, "name" => String(value.name), "parents" => String.(value.parents),
-            "valuation" => _trace_valuation!(recorder, value.value)))
+        push!(recorder.data["inputs"],
+              Dict{String,Any}("kind" => value.kind, "name" => String(value.name),
+                               "parents" => String.(value.parents),
+                               "valuation" => _trace_valuation!(recorder, value.value)))
     elseif kind == :conditioned
         recorder.data["conditioned"] = [_trace_valuation!(recorder, item) for item in value]
     elseif kind == :final
         recorder.data["final"] = _trace_valuation!(recorder, value)
     elseif kind == :inactive
-        push!(recorder.data["steps"], Dict{String,Any}(
-            "kind" => "inactive", "variable" => String(value.variable), "inputs" => Int[],
-            "decision" => String(value.decision), "action" => String(value.action)))
+        push!(recorder.data["steps"],
+              Dict{String,Any}("kind" => "inactive", "variable" => String(value.variable),
+                               "inputs" => Int[],
+                               "decision" => String(value.decision),
+                               "action" => String(value.action)))
     else
-        step = Dict{String,Any}(
-            "kind" => String(kind), "variable" => String(value.variable), "inputs" => value.inputs .- 1,
-            "combined" => _trace_valuation!(recorder, value.combined),
-            "result" => _trace_valuation!(recorder, value.result))
+        step = Dict{String,Any}("kind" => String(kind),
+                                "variable" => String(value.variable),
+                                "inputs" => value.inputs .- 1,
+                                "combined" => _trace_valuation!(recorder, value.combined),
+                                "result" => _trace_valuation!(recorder, value.result))
         if kind == :decision
             step["decision"] = String(value.decision)
-            step["policy"] = Dict("scope" => String.(value.policy_scope), "values" => String.(vec(value.policy)))
+            step["policy"] = Dict("scope" => String.(value.policy_scope),
+                                  "values" => String.(vec(value.policy)))
         end
         push!(recorder.data["steps"], step)
     end
@@ -142,32 +160,44 @@ function trace_decision_elimination(m::InfluenceDiagramModel;
                                     include_compilation::Bool=false)
     _check_solvable(m; atol)
     _check_probability_tolerance(probability_atol)
-    0 < max_entries <= typemax(Int) || throw(ArgumentError("max_entries must be a positive representable integer"))
+    0 < max_entries <= typemax(Int) ||
+        throw(ArgumentError("max_entries must be a positive representable integer"))
     id = syntax(m)
     ordered = decision_order(id)
-    data = Dict{String,Any}(
-        "format" => "ecorecipes.dve-execution-trace", "version" => include_compilation ? 2 : 1,
-        "layout" => "first-axis-fastest", "arithmetic" => "exact-rational-native-v1",
-        "variables" => [Dict("id" => String(name), "states" => String.(states(id, name))) for name in variable_names(id)],
-        "decisions" => [Dict("id" => String(decision_name(id, decision)),
-                             "variable" => String(variable_name(id, decision_variable(id, decision))),
-                             "information" => String.(information_names(id, decision)))
-                        for decision in ordered],
-        "evidence" => Dict(String(name) => String(value) for (name, value) in evidence(m)),
-        "inputs" => Any[], "steps" => Any[],
-        "metadata" => Dict("producer" => "InfluenceDiagrams.trace_decision_elimination",
-                           "runtime_version" => string(VERSION), "package_version" => string(Base.pkgversion(@__MODULE__))))
+    data = Dict{String,Any}("format" => "ecorecipes.dve-execution-trace",
+                            "version" => include_compilation ? 2 : 1,
+                            "layout" => "first-axis-fastest",
+                            "arithmetic" => "exact-rational-native-v1",
+                            "variables" => [Dict("id" => String(name),
+                                                 "states" => String.(states(id, name)))
+                                            for name in variable_names(id)],
+                            "decisions" => [Dict("id" => String(decision_name(id, decision)),
+                                                 "variable" => String(variable_name(id,
+                                                                                    decision_variable(id,
+                                                                                                      decision))),
+                                                 "information" => String.(information_names(id,
+                                                                                            decision)))
+                                            for decision in ordered],
+                            "evidence" => Dict(String(name) => String(value)
+                                               for (name, value) in evidence(m)),
+                            "inputs" => Any[], "steps" => Any[],
+                            "metadata" => Dict("producer" => "InfluenceDiagrams.trace_decision_elimination",
+                                               "runtime_version" => string(VERSION),
+                                               "package_version" => string(Base.pkgversion(@__MODULE__))))
     if include_compilation
-        data["compilation"] = Dict{String,Any}(
-            "format" => "ecorecipes.dve-compilation", "version" => 1,
-            "scalar" => "binary64", "table_layout" => "first-axis-fastest",
-            "kernel_layout" => "outputs-first", "inputs" => Any[])
+        data["compilation"] = Dict{String,Any}("format" => "ecorecipes.dve-compilation",
+                                               "version" => 1,
+                                               "scalar" => "binary64",
+                                               "table_layout" => "first-axis-fastest",
+                                               "kernel_layout" => "outputs-first",
+                                               "inputs" => Any[])
     end
     recorder = _DVETraceRecorder(data, Int(max_entries), include_compilation)
     solution = _decision_elimination(m, order, probability_atol, Rational{BigInt}, recorder)
     data["policies"] = [Dict("decision" => String(decision_name(id, decision)),
                              "scope" => String.(information_names(id, decision)),
-                             "values" => String.(vec(policy_table(solution.strategy[decision_name(id, decision)]))))
+                             "values" => String.(vec(policy_table(solution.strategy[decision_name(id,
+                                                                                                  decision)]))))
                         for decision in ordered]
     data["result"] = string(reinterpret(UInt64, solution.expected_utility); base=16, pad=16)
     return solution, data

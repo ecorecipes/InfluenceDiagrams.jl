@@ -178,8 +178,7 @@ end
                                                     backend=DecisionVariableElimination())
         @test_throws EvidenceOnActionError optimize(bad; backend=ExhaustivePolicySearch())
         @test_throws EvidenceOnActionError expected_utility(bad,
-                                                            Strategy(:Umbrella =>
-                                                                         ConstantPolicy(:leave)))
+                                                            Strategy(:Umbrella => ConstantPolicy(:leave)))
         # before the fix DVE returned 70.0 with the policy [take, take, take] and
         # exhaustive search 91.59, above the perfect-information optimum of 91
         @test optimize(m).expected_utility ≈ 77.0

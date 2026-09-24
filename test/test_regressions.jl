@@ -71,9 +71,10 @@ end
     eu = expected_utility(m, policy; atol=1e-6)
     @test eu ≈ expected_utility(instantiate(m, policy; atol=1e-6); atol=1e-6)
     @test eu ≈
-          optimize(m, ExhaustivePolicySearch(; brute_force=true); atol=1e-6).expected_utility
+          optimize(m, ExhaustivePolicySearch(; brute_force=true);
+                   atol=1e-6).expected_utility
     # Accepted rounded rows need not define an exactly normalized joint.
-    @test eu ≈ optimize(m, ExhaustivePolicySearch(); atol=1e-6).expected_utility atol=1e-6
+    @test eu ≈ optimize(m, ExhaustivePolicySearch(); atol=1e-6).expected_utility atol = 1e-6
     observed = observe(m, :X => :yes)
     @test expected_utility(observed, policy; atol=1e-6) ≈ 3.0
 end

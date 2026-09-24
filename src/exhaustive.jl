@@ -39,9 +39,11 @@ struct ExhaustivePolicySearch <: DecisionBackend
     brute_force::Bool
     stable::Bool
 end
-ExhaustivePolicySearch(max_policies::Int, brute_force::Bool) =
-    ExhaustivePolicySearch(max_policies, brute_force, false)
-function ExhaustivePolicySearch(; max_policies::Integer=1_000_000, brute_force::Bool=false, stable::Bool=false)
+function ExhaustivePolicySearch(max_policies::Int, brute_force::Bool)
+    return ExhaustivePolicySearch(max_policies, brute_force, false)
+end
+function ExhaustivePolicySearch(; max_policies::Integer=1_000_000, brute_force::Bool=false,
+                                stable::Bool=false)
     return ExhaustivePolicySearch(Int(max_policies), brute_force, stable)
 end
 
@@ -172,7 +174,8 @@ function optimize(m::InfluenceDiagramModel, b::ExhaustivePolicySearch;
         end
         best == -Inf && throw(BayesianNetworks.ImpossibleEvidenceError(copy(evidence(m))))
         return DecisionSolution(best, best_strategy,
-                                (nstrategies=Int(total), method=b.stable ? :stable_brute_force : :brute_force))
+                                (nstrategies=Int(total),
+                                 method=b.stable ? :stable_brute_force : :brute_force))
     end
     keep = Symbol[]
     for d in ds
@@ -199,7 +202,7 @@ function optimize(m::InfluenceDiagramModel, b::ExhaustivePolicySearch;
             for i in eachindex(ds)
                 ip = info_pos[i]
                 tabs[i][ntuple(j -> ci[ip[j]], length(ip))...] == ci[act_pos[i]] ||
-                    (ok=false;
+                    (ok = false;
                      break)
             end
             ok || continue
@@ -210,8 +213,7 @@ function optimize(m::InfluenceDiagramModel, b::ExhaustivePolicySearch;
         eu = num / den
         if eu > best
             best = eu
-            best_strategy = Strategy(Dict{Symbol,AbstractPolicy}(names_[i] =>
-                                                                     per_decision[i][choice[i]]
+            best_strategy = Strategy(Dict{Symbol,AbstractPolicy}(names_[i] => per_decision[i][choice[i]]
                                                                  for i in eachindex(ds)))
         end
     end

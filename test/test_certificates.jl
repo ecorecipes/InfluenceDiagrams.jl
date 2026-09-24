@@ -6,12 +6,12 @@ function dve_certificate_model()
                            utilities=[:U => (:X, :D), :Constant => ()])
     Q = Rational{BigInt}
     raw = Array{Q}(undef, 2, 2, 3)
-    raw[1, 1, :] = Q[1//2, 1//4, 1//4]
+    raw[1, 1, :] = Q[1 // 2, 1 // 4, 1 // 4]
     raw[1, 2, :] = Q[0, 0, 1]
-    raw[2, 1, :] = Q[1//8, 3//8, 1//2]
-    raw[2, 2, :] = Q[1//4, 1//2, 1//4]
-    tables = Dict(:X => Q[1//4, 3//4], :Y => raw, :W => Q[1//2, 1//2])
-    utilities_ = Dict(:U => Q[1 -1; -2 3], :Constant => fill(Q(1//8)))
+    raw[2, 1, :] = Q[1 // 8, 3 // 8, 1 // 2]
+    raw[2, 2, :] = Q[1 // 4, 1 // 2, 1 // 4]
+    tables = Dict(:X => Q[1 // 4, 3 // 4], :Y => raw, :W => Q[1 // 2, 1 // 2])
+    utilities_ = Dict(:U => Q[1 -1; -2 3], :Constant => fill(Q(1 // 8)))
     m = InfluenceDiagramModel(id)
     for name in (:X, :Y, :W)
         m = bind_cpt(m, name => Float64.(tables[name]))
@@ -123,8 +123,8 @@ end
     for kwargs in ((trace=true,), (numeric_mode=:approximate,),
                    (capture_runtime_bits=false,), (numeric_mode=:rational_exact,),
                    (exact_tables=companion,), (max_entries=-1,), (atol=Inf,),
-                   (probability_atol=1.0,), (atol=(-(big(1)//big(2)^2000)),),
-                   (probability_atol=1 - big(1)//big(2)^2000,))
+                   (probability_atol=1.0,), (atol=(-(big(1) // big(2)^2000)),),
+                   (probability_atol=1 - big(1) // big(2)^2000,))
         @test_throws DVEExportError export_dve_certificate(m; kwargs...)
     end
     missing = copy(companion)
@@ -132,12 +132,12 @@ end
     @test_throws DVEExportError export_dve_certificate(m; numeric_mode=:rational_exact,
                                                        exact_tables=missing)
     extra = copy(companion)
-    extra[(:cpt, 999, ())] = 1//1
+    extra[(:cpt, 999, ())] = 1 // 1
     @test_throws DVEExportError export_dve_certificate(m; numeric_mode=:rational_exact,
                                                        exact_tables=extra)
     wrong = copy(companion)
     key = (:cpt, mechanism_of(syntax(m), :X), (0,))
-    wrong[key] = 1//3
+    wrong[key] = 1 // 3
     e = try
         export_dve_certificate(m; numeric_mode=:rational_exact, exact_tables=wrong)
         nothing
@@ -166,9 +166,9 @@ end
 
 @testset "exact nearest-even companion checks" begin
     rounds = InfluenceDiagrams._dve_rounds_to
-    @test rounds(big(1)//big(3), 1/3)
-    @test !rounds(big(1)//big(3), nextfloat(1/3))
-    @test rounds(big(0)//big(1), 0.0) && rounds(big(0)//big(1), -0.0)
+    @test rounds(big(1) // big(3), 1 / 3)
+    @test !rounds(big(1) // big(3), nextfloat(1 / 3))
+    @test rounds(big(0) // big(1), 0.0) && rounds(big(0) // big(1), -0.0)
     tiny = Rational{BigInt}(nextfloat(0.0))
     @test rounds(tiny / 2, 0.0) && !rounds(tiny / 2, -0.0)
     @test !rounds(tiny / 2, nextfloat(0.0))

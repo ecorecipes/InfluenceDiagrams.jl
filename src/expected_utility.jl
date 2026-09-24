@@ -71,15 +71,18 @@ function _compensated_sum(values)
     total, correction = 0.0, 0.0
     for value in values
         combined = total + value
-        correction += abs(total) >= abs(value) ? (total - combined) + value : (value - combined) + total
+        correction += abs(total) >= abs(value) ? (total - combined) + value :
+                      (value - combined) + total
         total = combined
     end
     return total + correction
 end
 
 function _stable_expected_utility(bm::BayesModel, us; max_states, atol)
-    count = prod((BigInt(nstates(syntax(bm), name)) for name in variable_names(syntax(bm))); init=big(1))
-    count <= max_states || throw(ModelTooLargeError(Int(min(count, typemax(Int))), max_states))
+    count = prod((BigInt(nstates(syntax(bm), name)) for name in variable_names(syntax(bm)));
+                 init=big(1))
+    count <= max_states ||
+        throw(ModelTooLargeError(Int(min(count, typemax(Int))), max_states))
     graph = BayesianNetworkInference.compile(bm; atol)
     observed = evidence(bm)
     BayesianNetworkInference.log_evidence_probability(graph; evidence=observed) == -Inf &&
@@ -99,12 +102,16 @@ function _stable_expected_utility(bm::BayesModel, us; max_states, atol)
                                                       backend=BayesianNetworkInference.LogVariableElimination())
         scale = maximum(abs, factor.table)
         value = iszero(scale) ? 0.0 :
-                scale * _compensated_sum(p * (u / scale) for (p, u) in zip(posterior.table, factor.table))
+                scale * _compensated_sum(p * (u / scale)
+                                         for (p, u) in zip(posterior.table, factor.table))
         push!(terms, value)
     end
     scale = maximum(abs, terms; init=0.0)
-    result = iszero(scale) ? 0.0 : scale * _compensated_sum(value / scale for value in terms)
-    isfinite(result) || throw(UtilityScopeError(:total, :value, "finite representable expected utility", result))
+    result = iszero(scale) ? 0.0 :
+             scale * _compensated_sum(value / scale for value in terms)
+    isfinite(result) ||
+        throw(UtilityScopeError(:total, :value, "finite representable expected utility",
+                                result))
     return result
 end
 
@@ -158,7 +165,8 @@ function expected_utility(m::InfluenceDiagramModel, σ::Strategy=m.strategy;
                           max_states::Integer=1_000_000,
                           atol::Real=BayesianNetworks.DEFAULT_ATOL, stable::Bool=false)
     _check_evidence_variables(syntax(m), evidence(m))
-    return expected_utility(instantiate(m, σ; atol=atol); max_states=max_states, atol=atol, stable)
+    return expected_utility(instantiate(m, σ; atol=atol); max_states=max_states, atol=atol,
+                            stable)
 end
 
 function expected_utility(m::InfluenceDiagramModel, f::Pair{Symbol,Symbol}; kw...)

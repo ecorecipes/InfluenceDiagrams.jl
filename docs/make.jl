@@ -63,5 +63,5 @@ makedocs(;
          pages=pages)
 
 "--no-deploy" in ARGS || deploydocs(;
-           repo="github.com/ecorecipes/InfluenceDiagrams.jl.git",
-           devbranch="main")
+                                    repo="github.com/ecorecipes/InfluenceDiagrams.jl.git",
+                                    devbranch="main")

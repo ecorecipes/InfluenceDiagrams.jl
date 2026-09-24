@@ -254,7 +254,7 @@ function export_dve_certificate(m::InfluenceDiagramModel;
         _dve_export_error(:STRUCTURAL_PRECONDITION,
                           "kernel tolerance must be finite and nonnegative", owner)
     isfinite(probability_atol) && 0 <= probability_atol < 1 &&
-    isfinite(decision_tol) && 0 <= decision_tol < 1 ||
+        isfinite(decision_tol) && 0 <= decision_tol < 1 ||
         _dve_export_error(:STRUCTURAL_PRECONDITION,
                           "decision tolerance must be finite and in [0,1)", owner)
     validate(syntax(m); closed=true, unique_names=true)
@@ -288,8 +288,8 @@ function export_dve_certificate(m::InfluenceDiagramModel;
         ps = inputs(id, mid)
         k = kernel(snapshot.model, variable_name(id, target_id))
         length(k.dom.axes) == length(ps) && length(k.codom.axes) == 1 &&
-        all(labels(k.dom.axes[i]) == states(id, ps[i]) for i in eachindex(ps)) &&
-        labels(only(k.codom.axes)) == states(id, target_id) ||
+            all(labels(k.dom.axes[i]) == states(id, ps[i]) for i in eachindex(ps)) &&
+            labels(only(k.codom.axes)) == states(id, target_id) ||
             _dve_export_error(:STRUCTURAL_PRECONDITION,
                               "kernel axes disagree with ordered source states", context)
         raw = copy(cpt(k))
@@ -355,24 +355,22 @@ function export_dve_certificate(m::InfluenceDiagramModel;
                                      evidence(snapshot)[variable_name(id, v)]) - 1)
             for v in sort([variable_id(id, name) for name in keys(evidence(snapshot))])]
     return Dict{String,Any}("format" => "ecorecipes.dve-certificate", "version" => 1,
-                            "provenance" =>
-                                (implementation_manifest_sha256=_DVE_CERTIFICATE_SOURCE,
-                                 model_name=String(model_name),
-                                 exporter="InfluenceDiagrams.jl/$(pkgversion(@__MODULE__))/export_dve_certificate-v1",
-                                 origin="runtime",
-                                 exact_source=numeric_mode == :binary64_exact ? "none" :
-                                              "caller_companion"),
+                            "provenance" => (implementation_manifest_sha256=_DVE_CERTIFICATE_SOURCE,
+                                             model_name=String(model_name),
+                                             exporter="InfluenceDiagrams.jl/$(pkgversion(@__MODULE__))/export_dve_certificate-v1",
+                                             origin="runtime",
+                                             exact_source=numeric_mode == :binary64_exact ?
+                                                          "none" :
+                                                          "caller_companion"),
                             "numeric" => (mode=String(numeric_mode),
                                           runtime_bits=capture_runtime_bits,
                                           normalization="none"),
-                            "runtime_tolerances" =>
-                                (kernel_normalization_f64=_dve_float_bits(normalization_tol,
-                                                                          owner),
-                                 decision_probability_f64=_dve_float_bits(decision_tol,
-                                                                          owner)),
+                            "runtime_tolerances" => (kernel_normalization_f64=_dve_float_bits(normalization_tol,
+                                                                                              owner),
+                                                     decision_probability_f64=_dve_float_bits(decision_tol,
+                                                                                              owner)),
                             "reference_pool" => pool, "variables" => vars,
-                            "topological_order" =>
-                                [_dve_source_id(v, owner) for v in order],
+                            "topological_order" => [_dve_source_id(v, owner) for v in order],
                             "decision_order" => [_dve_source_id(d, owner) for d in ds],
                             "mechanisms" => mechs, "decisions" => decs,
                             "precedence" => prec,

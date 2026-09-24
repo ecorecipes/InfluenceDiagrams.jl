@@ -74,8 +74,7 @@ function to_graphviz(id::AbstractInfluenceDiagram; states::Bool=true,
                              "u$(subpart(id, i, :utility_node))"]))
     end
     return Graphviz.Digraph(String(name), stmts; prog="dot",
-                            graph_attrs=merge(Dict{Symbol,String}(:rankdir =>
-                                                                      String(rankdir),
+                            graph_attrs=merge(Dict{Symbol,String}(:rankdir => String(rankdir),
                                                                   :fontname => _GV_FONT),
                                               _gv_attrs(graph_attrs)),
                             node_attrs=merge(Dict{Symbol,String}(:fontname => _GV_FONT,
