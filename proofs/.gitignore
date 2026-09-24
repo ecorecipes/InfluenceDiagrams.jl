@@ -10,3 +10,6 @@
 *.log
 *.out
 *.toc
+__pycache__/
+*.pyc
+.sapass_axioms.lean
