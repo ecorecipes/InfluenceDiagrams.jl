@@ -90,6 +90,15 @@ ordered but neither knows the other's action: that is a forgetting diagram, and 
 - Every optimised path is checked against a slower oracle (`joint_distribution`, exhaustive policy search) on small models; DVE ties resolve to the first action label.
 - Models are immutable values: every operation returns a new model.
 
+## Vignettes
+
+01 influence diagrams, 02 policies and expected utility, 03 exhaustive vs DVE, 04 value of
+information, 05 composing ecology and management, 06 exact arithmetic for decisions
+(`stable=true`: agrees with the Float64 path on the policy in 1200 random cases and differs
+only in the last places of the value, but is the only path that solves a diagram whose
+evidence mass underflows, where the default reports `ImpossibleEvidenceError` for evidence
+that is merely rare).
+
 ## Commands
 
 ```sh

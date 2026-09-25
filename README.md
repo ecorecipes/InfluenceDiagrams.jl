@@ -208,6 +208,18 @@ distinguishes exact action independence from tolerance acceptance.
 Defaults remain unchanged. These runtime options are not a universal
 Julia/compiler/IEEE correctness theorem.
 
+## Vignettes
+
+Rendered vignettes live in [`vignettes/`](vignettes/) and are published in the
+[documentation](https://ecorecipes.github.io/InfluenceDiagrams.jl/):
+
+1. Influence diagrams: decisions, information arcs, utilities and validation.
+2. Policies and expected utility, and `instantiate` as a Bayesian network.
+3. Optimisation: exhaustive policy search against decision variable elimination.
+4. Value of information and of perfect information.
+5. Composing an ecological model with a management decision.
+6. Exact arithmetic for decisions: where `stable=true` matters and where it does not.
+
 ## Development
 
 ```sh
