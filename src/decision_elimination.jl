@@ -44,14 +44,16 @@ suite (SPEC §55.6, §56 item 6).
 """
 
 """
-    DecisionVariableElimination(; order = MinFill(), atol = 1e-9, stable=false)
+    DecisionVariableElimination(; order = MinFill(), atol = nothing, stable=false)
 
 Solve an influence diagram by decision variable elimination: chance variables are
 summed out and decisions maximised in the strong elimination order (see the module
 documentation of `decision_elimination.jl`), with `order` (an `EliminationStrategy`
 of BayesianNetworkInference.jl) choosing the order inside each chance block and `atol`
 the relative per-row tolerance of the constancy check of the probability potential at each
-maximisation. Returns the maximal expected utility and the recovered strategy of
+maximisation. `atol = nothing` (the default) follows the normalisation tolerance the model
+is validated with, so a diagram whose rounded CPTs `validate` accepts cannot then be
+rejected by a *tighter* constancy check; pass a number to fix the tolerance independently. Returns the maximal expected utility and the recovered strategy of
 deterministic policies, with ties broken in favour of the first action label.
 
 `stable=true` runs the same bucket algorithm with exact rational meanings of
@@ -64,16 +66,18 @@ diagnostics distinguishes exact constancy from mere tolerance acceptance.
 """
 struct DecisionVariableElimination{O<:EliminationStrategy} <: DecisionBackend
     order::O
-    atol::Float64
+    atol::Union{Nothing,Float64}
     stable::Bool
 end
 function DecisionVariableElimination(order::EliminationStrategy, atol::Real)
     return DecisionVariableElimination(order, Float64(atol), false)
 end
 function DecisionVariableElimination(; order::EliminationStrategy=MinFill(),
-                                     atol::Real=1e-9, stable::Bool=false)
-    _check_probability_tolerance(atol)
-    return DecisionVariableElimination(order, Float64(atol), stable)
+                                     atol::Union{Nothing,Real}=nothing,
+                                     stable::Bool=false)
+    atol === nothing || _check_probability_tolerance(atol)
+    return DecisionVariableElimination(order, atol === nothing ? nothing : Float64(atol),
+                                       stable)
 end
 
 # Blocks
@@ -222,13 +226,18 @@ ordinary mass classification and exact-constancy diagnostics.
 """
 function decision_elimination(m::InfluenceDiagramModel;
                               order::EliminationStrategy=MinFill(),
-                              atol::Real=1e-9,
+                              atol::Union{Nothing,Real}=nothing,
                               normalization_atol::Real=BayesianNetworks.DEFAULT_ATOL,
                               stable::Bool=false)
     _check_solvable(m; atol=normalization_atol)
-    _check_probability_tolerance(atol)
+    # A row the model was *accepted* with may deviate from summing to one by
+    # `normalization_atol`, so it may legitimately vary by about that much across a
+    # decision. A constancy check tighter than the tolerance the model passed would reject
+    # diagrams `validate` accepts, which is what `atol = nothing` avoids.
+    eff = atol === nothing ? Float64(normalization_atol) : Float64(atol)
+    _check_probability_tolerance(eff)
     T = stable ? Rational{BigInt} : Float64
-    return _decision_elimination(m, order, atol, T)
+    return _decision_elimination(m, order, eff, T)
 end
 
 function _decision_elimination(m::InfluenceDiagramModel, order, atol, ::Type{T},

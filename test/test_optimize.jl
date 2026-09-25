@@ -106,9 +106,27 @@
     @testset "random tiny diagrams (SPEC section 56 item 6)" begin
         rng = MersenneTwister(2026)
         matched = 0
-        for _ in 1:15
-            m = random_influence_model(rng)
-            ex = optimize(m, ExhaustivePolicySearch())
+        multi_action = 0
+        oversized = 0
+        for _ in 1:60
+            # Wider than the generator's defaults, so that decisions with more than two
+            # actions are actually compared against the oracle: with every decision binary a
+            # permutation of the action axis is undetectable. Under perfect recall a later
+            # decision observes every earlier action, so the exhaustive policy count grows
+            # faster than `max_info_states` alone bounds it; samples the oracle cannot
+            # afford are skipped rather than the generator being tuned to avoid them.
+            m = random_influence_model(rng; max_actions=4, max_chance_states=5,
+                                       max_info_states=4)
+            id = syntax(m)
+            acts = [length(states(id, variable_id(id, d))) for d in decision_names(id)]
+            ex = try
+                optimize(m, ExhaustivePolicySearch())
+            catch e
+                e isa PolicySearchTooLargeError || rethrow()
+                oversized += 1
+                continue
+            end
+            any(>(2), acts) && (multi_action += 1)
             dve = optimize(m)
             @test isapprox(ex.expected_utility, dve.expected_utility; atol=1e-9)
             # the recovered strategies are both optimal
@@ -122,7 +140,10 @@
             end
             matched += 1
         end
-        @test matched == 15
+        # The widening must actually bite, and enough samples must survive to be meaningful.
+        @test matched >= 25
+        @test multi_action >= 8
+        @test matched + oversized == 60
     end
 
     @testset "elimination strategies" begin
@@ -256,4 +277,32 @@ end
               optimize(repaired, ExhaustivePolicySearch()).expected_utility
         @test optimize(repaired).expected_utility ≈ 21.0
     end
+end
+
+@testset "the DVE constancy tolerance follows the model's normalisation tolerance" begin
+    # The constancy check used to hard-code atol=1e-9 while models are validated at
+    # DEFAULT_ATOL=1e-8, so a diagram whose rounded CPTs `validate` accepted could be
+    # rejected by the tighter check. `nothing` means "follow the normalisation tolerance".
+    @test DecisionVariableElimination().atol === nothing
+    @test DecisionVariableElimination(; atol=1e-12).atol == 1e-12
+    @test DecisionVariableElimination(BayesianNetworkInference.MinFill(), 1e-12).atol ==
+          1e-12
+    @test_throws ArgumentError DecisionVariableElimination(; atol=-1.0)
+
+    # Rows that differ by less than the normalisation tolerance still solve, and agree with
+    # the exhaustive oracle.
+    tab = [0.5 0.5; 0.5 0.5; 0.5+3e-9 0.5-3e-9]
+    m = bind_cpt(reference_grazing_model(), :GrazingPressure => tab)
+    validate(m; closed=true, semantics=true)
+    @test optimize(m).expected_utility ≈
+          optimize(m, ExhaustivePolicySearch()).expected_utility
+
+    # The :probability message no longer reads "(variables )" when the decision is the only
+    # variable, and says what actually failed.
+    msg = sprint(showerror, IrregularDiagramError(:D, Symbol[], :probability))
+    @test occursin("not constant in :D", msg)
+    @test !occursin("variables )", msg)
+    @test occursin("ExhaustivePolicySearch", msg)
+    with_vars = sprint(showerror, IrregularDiagramError(:D, [:X, :Y], :probability))
+    @test occursin("over X, Y", with_vars)
 end

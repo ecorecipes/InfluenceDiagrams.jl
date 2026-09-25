@@ -17,7 +17,8 @@ using BayesianNetworks: BayesNetError, MissingMechanismError, DuplicateGenerator
 # cheap.
 function random_influence_diagram(rng::AbstractRNG; nchance=rand(rng, 2:4),
                                   ndecision=rand(rng, 1:2), nutility=rand(rng, 1:2),
-                                  max_parents=2, max_scope=2, max_info_states=6)
+                                  max_parents=2, max_scope=2, max_info_states=6,
+                                  max_actions=2, max_chance_states=3)
     chance = [Symbol("C", i) for i in 1:nchance]
     dec = [Symbol("D", i) for i in 1:ndecision]
     order = shuffle(rng, vcat(chance, dec))
@@ -26,7 +27,13 @@ function random_influence_diagram(rng::AbstractRNG; nchance=rand(rng, 2:4),
     for (i, d) in enumerate(dec)
         order[dpos[i]] = d
     end
-    nst = Dict(v => (v in dec ? 2 : rand(rng, 2:3)) for v in order)
+    # `max_actions` and `max_chance_states` keep the defaults that every caller of this
+    # generator was written against: the exhaustive oracle costs |A_D|^|info states| per
+    # decision, so raising them without also lowering `max_info_states` makes it
+    # intractable. The DVE oracle comparison widens them deliberately, because with every
+    # decision binary a permutation of the action axis is undetectable.
+    nst = Dict(v => (v in dec ? rand(rng, 2:max_actions) : rand(rng, 2:max_chance_states))
+               for v in order)
     vars = [v => [Symbol(v, "_", j) for j in 1:nst[v]] for v in order]
     mechanisms = Pair{Symbol,Any}[]
     decisions = Pair{Symbol,Any}[]

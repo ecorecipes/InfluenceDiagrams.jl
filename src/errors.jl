@@ -317,9 +317,15 @@ function Base.showerror(io::IO, e::IrregularDiagramError)
               "; its probability may depend on the policy. Use ExhaustivePolicySearch ",
               "for action-descendant evidence")
     else
-        print(io, "IrregularDiagramError: the probability potential depends on decision :",
-              e.decision, " (variables ", join(e.variables, ", "),
-              "); the probability-constancy precondition failed. Use ExhaustivePolicySearch")
+        print(io, "IrregularDiagramError: when decision :", e.decision,
+              " is maximised, the probability potential is not constant in :", e.decision)
+        isempty(e.variables) ||
+            print(io, " over ", join(e.variables, ", "))
+        print(io,
+              "; decision variable elimination is exact only when the chance mechanisms do ",
+              "not depend on the action. If the variation is at the scale of the kernel ",
+              "normalisation tolerance, pass a matching atol; otherwise use ",
+              "ExhaustivePolicySearch")
     end
     return nothing
 end
