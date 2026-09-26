@@ -2,7 +2,8 @@
 Typed exceptions of the influence-diagram layer (SPEC §37, §54). Every error carries the
 offending names so that its message can be read without the diagram at hand. All of
 them are `BayesNetError`s, so code that catches the BayesianNetworks.jl family catches
-these too.
+these too. Evidence of zero computed probability raises BayesianNetworks'
+`ImpossibleEvidenceError`, which this package re-exports and never redefines (ADR 0012).
 """
 
 """

@@ -97,7 +97,8 @@ information, 05 composing ecology and management, 06 exact arithmetic for decisi
 (`stable=true`: agrees with the Float64 path on the policy in 1200 random cases and differs
 only in the last places of the value, but is the only path that solves a diagram whose
 evidence mass underflows, where the default reports `ImpossibleEvidenceError` for evidence
-that is merely rare).
+that is merely rare). `ImpossibleEvidenceError` is BayesianNetworks' type: this package
+raises it and re-exports it, and must never define a second one (ADR 0012).
 
 ## Commands
 

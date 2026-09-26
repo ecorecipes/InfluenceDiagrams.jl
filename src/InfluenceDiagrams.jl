@@ -88,6 +88,10 @@ export KernelRef, NamedRef, PointMassRef, PolicyRef, NoRef, BayesNet, BayesModel
 export FiniteAxis, FiniteSpace, FiniteKernel, cpt, state, point_mass, deterministic,
        uniform, probability, labels, joint_states, is_normalized, random_kernel
 export Factor, scope, NetworkIR
+# Re-exported from BayesianNetworks: the error every solver here raises for evidence of
+# zero computed probability (ADR 0012). The binding is BayesianNetworks' own, never a
+# second definition, so it stays unambiguous and prints unqualified.
+export ImpossibleEvidenceError
 
 # errors.jl
 export InfluenceDiagramError, UnknownDecisionError, UnknownUtilityError,
