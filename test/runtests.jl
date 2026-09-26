@@ -25,4 +25,5 @@ include("helpers.jl")
     include("test_serialization.jl")
     include("test_regressions.jl")
     include("test_certificates.jl")
+    include("test_docstrings.jl")
 end
