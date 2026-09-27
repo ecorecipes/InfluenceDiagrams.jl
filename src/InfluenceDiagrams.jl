@@ -88,10 +88,23 @@ export KernelRef, NamedRef, PointMassRef, PolicyRef, NoRef, BayesNet, BayesModel
 export FiniteAxis, FiniteSpace, FiniteKernel, cpt, state, point_mass, deterministic,
        uniform, probability, labels, joint_states, is_normalized, random_kernel
 export Factor, scope, NetworkIR
-# Re-exported from BayesianNetworks: the error every solver here raises for evidence of
-# zero computed probability (ADR 0012). The binding is BayesianNetworks' own, never a
-# second definition, so it stays unambiguous and prints unqualified.
-export ImpossibleEvidenceError
+# Re-exported exception types (ADR 0013). This package re-exports much of the
+# BayesianNetworks and BayesianNetworkInference APIs, so it re-exports, wholesale, every
+# exception type (and root, and the `AnyBayesNetError` union) those two export: among them
+# `ImpossibleEvidenceError`, which every solver here raises for evidence of zero computed
+# probability (ADR 0012), and Inference's `ScopeError`. A type added to either package later
+# arrives by itself. Every binding is its owner's, never a second definition, so the names
+# stay unambiguous and the frozen ones print unqualified. Neither package exports
+# BayesianNetworkFormats' concrete error types, so none is re-exported here: the conformance
+# adapters load this package with `using` and record those types under qualified names.
+for M in (BayesianNetworks, BayesianNetworkInference), name in names(M)
+    T = getglobal(M, name)
+    T isa Type && T <: Exception || continue
+    if M === BayesianNetworkInference && name ∉ names(BayesianNetworks)
+        @eval using BayesianNetworkInference: $name
+    end
+    @eval export $name
+end
 
 # errors.jl
 export InfluenceDiagramError, UnknownDecisionError, UnknownUtilityError,

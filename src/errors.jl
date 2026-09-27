@@ -1,9 +1,19 @@
 """
-Typed exceptions of the influence-diagram layer (SPEC §37, §54). Every error carries the
-offending names so that its message can be read without the diagram at hand. All of
-them are `BayesNetError`s, so code that catches the BayesianNetworks.jl family catches
-these too. Evidence of zero computed probability raises BayesianNetworks'
-`ImpossibleEvidenceError`, which this package re-exports and never redefines (ADR 0012).
+Typed exceptions of the influence-diagram layer (SPEC §37, §54; ADR 0013). The contract:
+
+- Every exception this package introduces subtypes `InfluenceDiagramError`, which subtypes
+  BayesianNetworks' `BayesNetError`, so code that catches the BayesianNetworks.jl family
+  catches these too, and `AnyBayesNetError` catches every typed error of the ecosystem.
+- Errors of lower packages pass through unchanged where this package adds nothing:
+  BayesianNetworks' own (`ImpossibleEvidenceError` for evidence of zero computed probability,
+  ADR 0012; validation and binding errors) and BayesianNetworkInference's (`ScopeError` from
+  the elimination ordering and the valuation algebra, among others).
+- Every exception type BayesianNetworks and BayesianNetworkInference export is re-exported
+  here as its owner's binding and is never redefined; `IrregularDiagramError`,
+  `ImpossibleEvidenceError` and `ScopeError` keep their names, modules and unqualified
+  printing, which frozen checkers compare.
+- Every error carries the offending names, so that its message can be read without the
+  diagram at hand.
 """
 
 """
