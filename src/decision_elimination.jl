@@ -286,7 +286,12 @@ function _decision_elimination(m::InfluenceDiagramModel, order, atol, ::Type{T},
     probability_atol = stable ? Rational{BigInt}(atol) : atol
     for (kind, names_) in reverse(blocks)
         if kind == :chance
-            fg = FactorGraph(vcat([v.φ for v in vals], [v.ψ for v in vals]))
+            # Only the scopes matter here: the graph orders the block. It holds signed
+            # utilities (the psi potentials), so it is not a measure, and it is built with
+            # the unchecked inner constructor, which skips the entry check a
+            # FactorGraph of probabilities gets.
+            pots = vcat([v.φ for v in vals], [v.ψ for v in vals])
+            fg = FactorGraph{T}(pots, fill(nothing, length(pots)))
             for x in _block_order(fg, names_, order)
                 touching = Valuation{T}[]
                 rest = Valuation{T}[]
