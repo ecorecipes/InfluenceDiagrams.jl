@@ -18,6 +18,11 @@
         @test read_json_influence_diagram(path) == id
         @test_throws BayesianNetworks.FormatError parse_json_influence_diagram("[]")
         @test_throws BayesianNetworks.FormatError parse_json_influence_diagram("{\"format\":\"bayesnet-acset\",\"schema_version\":\"0.1\",\"acset\":{}}")
+        # Text that is not JSON is a FormatError too, not JSON3's ArgumentError.
+        @test_throws BayesianNetworks.FormatError parse_json_influence_diagram("not json")
+        bad = joinpath(mktempdir(), "not.json")
+        write(bad, "not json")
+        @test_throws BayesianNetworks.FormatError read_json_influence_diagram(bad)
     end
 
     @testset "canonicalize and is_isomorphic" begin

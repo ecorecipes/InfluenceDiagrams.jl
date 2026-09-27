@@ -24,12 +24,13 @@ end
     parse_json_influence_diagram(str; type = InfluenceDiagram) -> type
 
 Parse a JSON string produced by [`json_influence_diagram`](@ref). Throws
-`BayesianNetworks.FormatError` if the envelope is missing or names another format or
-schema version.
+`BayesianNetworks.FormatError` if `str` is not JSON, or if the envelope is missing or
+names another format or schema version. An error inside the `"acset"` body is not
+converted: it comes unchanged from ACSets' `parse_json_acset`.
 """
 function parse_json_influence_diagram(str::AbstractString;
                                       type::Type{<:AbstractInfluenceDiagram}=InfluenceDiagram)
-    return _parse_envelope(JSON3.read(str), type)
+    return _parse_envelope(BayesianNetworks._read_json(str), type)
 end
 
 function _parse_envelope(obj, type)
@@ -59,11 +60,12 @@ end
 """
     read_json_influence_diagram(path; type = InfluenceDiagram) -> type
 
-Read a diagram written by [`write_json_influence_diagram`](@ref).
+Read a diagram written by [`write_json_influence_diagram`](@ref). Errors as for
+[`parse_json_influence_diagram`](@ref).
 """
 function read_json_influence_diagram(path::AbstractString;
                                      type::Type{<:AbstractInfluenceDiagram}=InfluenceDiagram)
-    return _parse_envelope(JSON3.read(read(path, String)), type)
+    return _parse_envelope(BayesianNetworks._read_json(read(path, String)), type)
 end
 
 """
