@@ -2369,7 +2369,7 @@ window.Quarto = {
   <li><a href="#overview" id="toc-overview" class="nav-link active" data-scroll-target="#overview">Overview</a></li>
   <li><a href="#setup" id="toc-setup" class="nav-link" data-scroll-target="#setup">Setup</a></li>
   <li><a href="#on-ordinary-models-the-decision-is-the-same" id="toc-on-ordinary-models-the-decision-is-the-same" class="nav-link" data-scroll-target="#on-ordinary-models-the-decision-is-the-same">On ordinary models, the decision is the same</a></li>
-  <li><a href="#where-the-default-path-does-not-merely-lose-precision" id="toc-where-the-default-path-does-not-merely-lose-precision" class="nav-link" data-scroll-target="#where-the-default-path-does-not-merely-lose-precision">Where the default path does not merely lose precision</a></li>
+  <li><a href="#where-float64-cannot-decide" id="toc-where-float64-cannot-decide" class="nav-link" data-scroll-target="#where-float64-cannot-decide">Where Float64 cannot decide</a></li>
   <li><a href="#cost-and-what-carries-it" id="toc-cost-and-what-carries-it" class="nav-link" data-scroll-target="#cost-and-what-carries-it">Cost, and what carries it</a></li>
   <li><a href="#what-exact-does-and-does-not-mean" id="toc-what-exact-does-and-does-not-mean" class="nav-link" data-scroll-target="#what-exact-does-and-does-not-mean">What “exact” does and does not mean</a></li>
   <li><a href="#summary" id="toc-summary" class="nav-link" data-scroll-target="#summary">Summary</a></li>
@@ -2408,7 +2408,7 @@ window.Quarto = {
 <h2 class="anchored" data-anchor-id="overview">Overview</h2>
 <p>Decision variable elimination multiplies probabilities and adds utilities, and both can go wrong in Float64 for the same reason: the quantities that matter can be much smaller than the quantities being carried. A run of observations can drive the evidence mass below <code>floatmin</code>, and utilities of opposite sign can cancel, leaving a difference the significand no longer holds.</p>
 <p><code>DecisionVariableElimination(stable=true)</code> runs the <em>same</em> bucket schedule as the default backend — the same elimination order, the same valuation algebra as the “exhaustive versus DVE” vignette — but interprets the bound data as exact rationals and rounds only the returned value. Exact arithmetic was chosen in preference to taking logarithms, because utilities are signed and have no logarithm, and in preference to a fixed working precision, which can still lose small terms before they cancel.</p>
-<p>This vignette is as interested in where the default path is <em>fine</em> as in where it is not. The short answer, developed below: on ordinary models the two agree on the decision and differ in the last digit or two of the value; the exact path earns its keep when the evidence underflows, where the default path does not merely lose precision but reports a false conclusion.</p>
+<p>This vignette is as interested in where the default path is <em>fine</em> as in where it is not. The short answer, developed below: on ordinary models the two agree on the decision and differ in the last digit or two of the value. When the evidence underflows, Float64 cannot tell rare evidence from impossible evidence, so the default backend does not try: it detects the untrustworthy mass and reruns the same schedule in exact arithmetic by itself.</p>
 </section>
 <section id="setup" class="level2">
 <h2 class="anchored" data-anchor-id="setup">Setup</h2>
@@ -2461,8 +2461,8 @@ window.Quarto = {
 </div>
 <p>Roughly half the cases differ in the returned value, and the largest relative difference is a few units in the last place. Not one differs in the <em>policy</em>. On this evidence a user who wants the recommended action, and not the sixteenth digit of its value, has no reason to leave the default path.</p>
 </section>
-<section id="where-the-default-path-does-not-merely-lose-precision" class="level2">
-<h2 class="anchored" data-anchor-id="where-the-default-path-does-not-merely-lose-precision">Where the default path does not merely lose precision</h2>
+<section id="where-float64-cannot-decide" class="level2">
+<h2 class="anchored" data-anchor-id="where-float64-cannot-decide">Where Float64 cannot decide</h2>
 <p>The interesting failure is not inaccuracy, it is a false conclusion. Consider a decision taken after a long survey in which a rare species is detected at every site:</p>
 <div id="6" class="cell" data-execution_count="1">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb4"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="kw">function</span> <span class="fu">survey_model</span>(n)</span>
@@ -2486,26 +2486,23 @@ window.Quarto = {
 <pre><code>InfluenceDiagramModel(341 variables, 1 decision, 1 utility, 340 kernels, 1 bound, evidence on D1, D10, D100, D101, D102, D103, D104, D105, D106, D107, D108, D109, D11, D110, D111, D112, D113, D114, D115, D116, D117, D118, D119, D12, D120, D121, D122, D123, D124, D125, D126, D127, D128, D129, D13, D130, D131, D132, D133, D134, D135, D136, D137, D138, D139, D14, D140, D141, D142, D143, D144, D145, D146, D147, D148, D149, D15, D150, D151, D152, D153, D154, D155, D156, D157, D158, D159, D16, D160, D161, D162, D163, D164, D165, D166, D167, D168, D169, D17, D170, D171, D172, D173, D174, D175, D176, D177, D178, D179, D18, D180, D181, D182, D183, D184, D185, D186, D187, D188, D189, D19, D190, D191, D192, D193, D194, D195, D196, D197, D198, D199, D2, D20, D200, D201, D202, D203, D204, D205, D206, D207, D208, D209, D21, D210, D211, D212, D213, D214, D215, D216, D217, D218, D219, D22, D220, D221, D222, D223, D224, D225, D226, D227, D228, D229, D23, D230, D231, D232, D233, D234, D235, D236, D237, D238, D239, D24, D240, D241, D242, D243, D244, D245, D246, D247, D248, D249, D25, D250, D251, D252, D253, D254, D255, D256, D257, D258, D259, D26, D260, D261, D262, D263, D264, D265, D266, D267, D268, D269, D27, D270, D271, D272, D273, D274, D275, D276, D277, D278, D279, D28, D280, D281, D282, D283, D284, D285, D286, D287, D288, D289, D29, D290, D291, D292, D293, D294, D295, D296, D297, D298, D299, D3, D30, D300, D301, D302, D303, D304, D305, D306, D307, D308, D309, D31, D310, D311, D312, D313, D314, D315, D316, D317, D318, D319, D32, D320, D321, D322, D323, D324, D325, D326, D327, D328, D329, D33, D330, D331, D332, D333, D334, D335, D336, D337, D338, D339, D34, D35, D36, D37, D38, D39, D4, D40, D41, D42, D43, D44, D45, D46, D47, D48, D49, D5, D50, D51, D52, D53, D54, D55, D56, D57, D58, D59, D6, D60, D61, D62, D63, D64, D65, D66, D67, D68, D69, D7, D70, D71, D72, D73, D74, D75, D76, D77, D78, D79, D8, D80, D81, D82, D83, D84, D85, D86, D87, D88, D89, D9, D90, D91, D92, D93, D94, D95, D96, D97, D98, D99)</code></pre>
 </div>
 </div>
-<p>That evidence is unlikely but entirely possible. The default backend:</p>
+<p>That evidence is unlikely but entirely possible. Its probability is about <span class="math inline">\(10^{-340}\)</span>, below the smallest positive Float64, so the Float64 run of the bucket algorithm ends with an evidence mass of zero. Zero mass is also what a contradiction produces. Rather than draw a conclusion Float64 cannot support, the default backend treats any mass that is not a normal positive number as undecided, and reruns the schedule in exact rational arithmetic (ADR 0014):</p>
 <div id="8" class="cell" data-execution_count="1">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb6"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="cf">try</span></span>
-<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>    <span class="fu">optimize</span>(observed)</span>
-<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a><span class="cf">catch</span> <span class="cn">e</span></span>
-<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>    <span class="fu">typeof</span>(<span class="cn">e</span>)</span>
-<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb6"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>sol <span class="op">=</span> <span class="fu">optimize</span>(observed)</span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>sol.expected_utility, <span class="fu">policy_table</span>(sol.strategy[<span class="op">:</span>Act]), sol.diagnostics.exact_fallback</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display" data-execution_count="1">
-<pre><code>ImpossibleEvidenceError</code></pre>
-</div>
-</div>
-<p><code>ImpossibleEvidenceError</code> — and it is not impossible. The evidence mass underflowed to zero, and zero mass is indistinguishable from a contradiction in Float64, so the backend draws the only conclusion available to it, which happens to be the wrong one. The exact path:</p>
-<div id="10" class="cell" data-execution_count="1">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb8"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>sol <span class="op">=</span> <span class="fu">optimize</span>(observed, <span class="fu">DecisionVariableElimination</span>(stable <span class="op">=</span> <span class="cn">true</span>))</span>
-<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>sol.expected_utility, <span class="fu">policy_table</span>(sol.strategy[<span class="op">:</span>Act])</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
-<div class="cell-output cell-output-display" data-execution_count="1">
-<pre><code>(10.0, fill(:protect))</code></pre>
+<pre><code>(10.0, fill(:protect), true)</code></pre>
 </div>
 </div>
 <p>The chain is Markov, so this is checkable by hand: conditioning on the previous site leaves the last one with posterior <code>[0.9, 0.1]</code>, and the utility table gives <span class="math inline">\(0.9 \times 0 + 0.1 \times 100 = 10\)</span> for <code>:protect</code> against <span class="math inline">\(0.9 \times 10 + 0.1 \times 0 = 9\)</span> for <code>:ignore</code>.</p>
+<p><code>exact_fallback</code> records that the rerun happened, and the answer is the one the explicit exact path gives:</p>
+<div id="10" class="cell" data-execution_count="1">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb8"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>exact <span class="op">=</span> <span class="fu">optimize</span>(observed, <span class="fu">DecisionVariableElimination</span>(stable <span class="op">=</span> <span class="cn">true</span>))</span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>exact.expected_utility <span class="op">==</span> sol.expected_utility</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-display" data-execution_count="1">
+<pre><code>true</code></pre>
+</div>
+</div>
 <p>The diagnostics say what happened rather than leaving it to be inferred:</p>
 <div id="12" class="cell" data-execution_count="1">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb10"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>d <span class="op">=</span> sol.diagnostics</span>
@@ -2516,34 +2513,46 @@ window.Quarto = {
 <pre><code>(mass_status = :underflow, evidence_probability = 0.0, log_evidence_probability = -785.2, arithmetic = :exact_rational, exact_probability_guards = true)</code></pre>
 </div>
 </div>
-<p><code>evidence_probability</code> is <code>0.0</code> because that is the nearest Float64, while <code>log_evidence_probability</code> is finite and <code>mass_status</code> is <code>:underflow</code> rather than <code>:zero</code>. This is the decision-side counterpart of the log-domain layer in <code>BayesianNetworkInference.jl</code>: the same distinction between “too small to represent” and “cannot happen”, reached through exact rationals rather than logarithms, because utilities are signed.</p>
+<p><code>evidence_probability</code> is <code>0.0</code> because that is the nearest Float64, while <code>log_evidence_probability</code> is finite and <code>mass_status</code> is <code>:underflow</code> rather than <code>:zero</code>. <code>ImpossibleEvidenceError</code> is kept for evidence whose probability is exactly zero, which only the exact rerun can establish:</p>
+<div id="14" class="cell" data-execution_count="1">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb12"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a>contradiction <span class="op">=</span> <span class="fu">bind_cpt</span>(observed, sites[<span class="fl">1</span>] <span class="op">=&gt;</span> [<span class="fl">1.0</span>, <span class="fl">0.0</span>])</span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a><span class="cf">try</span></span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>    <span class="fu">optimize</span>(contradiction)</span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a><span class="cf">catch</span> <span class="cn">e</span></span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a>    <span class="fu">typeof</span>(<span class="cn">e</span>)</span>
+<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-display" data-execution_count="1">
+<pre><code>ImpossibleEvidenceError</code></pre>
+</div>
+</div>
+<p>This is the decision-side counterpart of the log-domain layer in <code>BayesianNetworkInference.jl</code>: the same distinction between “too small to represent” and “cannot happen”, reached through exact rationals rather than logarithms, because utilities are signed.</p>
 </section>
 <section id="cost-and-what-carries-it" class="level2">
 <h2 class="anchored" data-anchor-id="cost-and-what-carries-it">Cost, and what carries it</h2>
 <p>Exact rational arithmetic is more expensive per factor cell than Float64. What it does not do is change the <em>shape</em> of the computation: the bucket algorithm still scales with factor width rather than with the number of policies. A decision observing twelve binary signals has <span class="math inline">\(2^{2^{12}}\)</span> deterministic policies:</p>
-<div id="14" class="cell" data-execution_count="1">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb12"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="kw">function</span> <span class="fu">wide_information</span>(k)</span>
-<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>    signals <span class="op">=</span> [<span class="fu">Symbol</span>(<span class="st">&quot;S&quot;</span>, i) for i <span class="kw">in</span> <span class="fl">1</span><span class="op">:</span>k]</span>
-<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>    id <span class="op">=</span> <span class="fu">influence_diagram</span>([s <span class="op">=&gt;</span> [<span class="op">:</span>lo, <span class="op">:</span>hi] for s <span class="kw">in</span> signals]<span class="op">...</span>, <span class="op">:</span>Act <span class="op">=&gt;</span> [<span class="op">:</span>go, <span class="op">:</span>stop];</span>
-<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a>                           mechanisms <span class="op">=</span> [s <span class="op">=&gt;</span> () for s <span class="kw">in</span> signals],</span>
-<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a>                           decisions <span class="op">=</span> [<span class="op">:</span>Act <span class="op">=&gt;</span> <span class="fu">Tuple</span>(signals)],</span>
-<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a>                           utilities <span class="op">=</span> [<span class="op">:</span>U <span class="op">=&gt;</span> (signals[<span class="fl">1</span>], <span class="op">:</span>Act)])</span>
-<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a>    m <span class="op">=</span> <span class="fu">InfluenceDiagramModel</span>(id)</span>
-<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> s <span class="kw">in</span> signals</span>
-<span id="cb12-9"><a href="#cb12-9" aria-hidden="true" tabindex="-1"></a>        m <span class="op">=</span> <span class="fu">bind_cpt</span>(m, s <span class="op">=&gt;</span> [<span class="fl">0.5</span>, <span class="fl">0.5</span>])</span>
-<span id="cb12-10"><a href="#cb12-10" aria-hidden="true" tabindex="-1"></a>    <span class="cf">end</span></span>
-<span id="cb12-11"><a href="#cb12-11" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="fu">bind_utility</span>(m, <span class="op">:</span>U <span class="op">=&gt;</span> [<span class="fl">0.0</span> <span class="fl">5.0</span>; <span class="fl">8.0</span> <span class="fl">0.0</span>])</span>
-<span id="cb12-12"><a href="#cb12-12" aria-hidden="true" tabindex="-1"></a><span class="kw">end</span></span>
-<span id="cb12-13"><a href="#cb12-13" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb12-14"><a href="#cb12-14" aria-hidden="true" tabindex="-1"></a>wide <span class="op">=</span> <span class="fu">wide_information</span>(<span class="fl">12</span>)</span>
-<span id="cb12-15"><a href="#cb12-15" aria-hidden="true" tabindex="-1"></a>wide_sol <span class="op">=</span> <span class="fu">optimize</span>(wide, <span class="fu">DecisionVariableElimination</span>(stable <span class="op">=</span> <span class="cn">true</span>))</span>
-<span id="cb12-16"><a href="#cb12-16" aria-hidden="true" tabindex="-1"></a>(exhaustive <span class="op">=</span> <span class="cf">try</span></span>
-<span id="cb12-17"><a href="#cb12-17" aria-hidden="true" tabindex="-1"></a>     <span class="fu">optimize</span>(wide, <span class="fu">ExhaustivePolicySearch</span>()).expected_utility</span>
-<span id="cb12-18"><a href="#cb12-18" aria-hidden="true" tabindex="-1"></a> <span class="cf">catch</span> <span class="cn">e</span></span>
-<span id="cb12-19"><a href="#cb12-19" aria-hidden="true" tabindex="-1"></a>     <span class="fu">typeof</span>(<span class="cn">e</span>)</span>
-<span id="cb12-20"><a href="#cb12-20" aria-hidden="true" tabindex="-1"></a> <span class="cf">end</span>,</span>
-<span id="cb12-21"><a href="#cb12-21" aria-hidden="true" tabindex="-1"></a> exact_dve <span class="op">=</span> wide_sol.expected_utility,</span>
-<span id="cb12-22"><a href="#cb12-22" aria-hidden="true" tabindex="-1"></a> max_factor_size <span class="op">=</span> wide_sol.diagnostics.max_factor_size)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div id="16" class="cell" data-execution_count="1">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb14"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="kw">function</span> <span class="fu">wide_information</span>(k)</span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a>    signals <span class="op">=</span> [<span class="fu">Symbol</span>(<span class="st">&quot;S&quot;</span>, i) for i <span class="kw">in</span> <span class="fl">1</span><span class="op">:</span>k]</span>
+<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a>    id <span class="op">=</span> <span class="fu">influence_diagram</span>([s <span class="op">=&gt;</span> [<span class="op">:</span>lo, <span class="op">:</span>hi] for s <span class="kw">in</span> signals]<span class="op">...</span>, <span class="op">:</span>Act <span class="op">=&gt;</span> [<span class="op">:</span>go, <span class="op">:</span>stop];</span>
+<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a>                           mechanisms <span class="op">=</span> [s <span class="op">=&gt;</span> () for s <span class="kw">in</span> signals],</span>
+<span id="cb14-5"><a href="#cb14-5" aria-hidden="true" tabindex="-1"></a>                           decisions <span class="op">=</span> [<span class="op">:</span>Act <span class="op">=&gt;</span> <span class="fu">Tuple</span>(signals)],</span>
+<span id="cb14-6"><a href="#cb14-6" aria-hidden="true" tabindex="-1"></a>                           utilities <span class="op">=</span> [<span class="op">:</span>U <span class="op">=&gt;</span> (signals[<span class="fl">1</span>], <span class="op">:</span>Act)])</span>
+<span id="cb14-7"><a href="#cb14-7" aria-hidden="true" tabindex="-1"></a>    m <span class="op">=</span> <span class="fu">InfluenceDiagramModel</span>(id)</span>
+<span id="cb14-8"><a href="#cb14-8" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> s <span class="kw">in</span> signals</span>
+<span id="cb14-9"><a href="#cb14-9" aria-hidden="true" tabindex="-1"></a>        m <span class="op">=</span> <span class="fu">bind_cpt</span>(m, s <span class="op">=&gt;</span> [<span class="fl">0.5</span>, <span class="fl">0.5</span>])</span>
+<span id="cb14-10"><a href="#cb14-10" aria-hidden="true" tabindex="-1"></a>    <span class="cf">end</span></span>
+<span id="cb14-11"><a href="#cb14-11" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="fu">bind_utility</span>(m, <span class="op">:</span>U <span class="op">=&gt;</span> [<span class="fl">0.0</span> <span class="fl">5.0</span>; <span class="fl">8.0</span> <span class="fl">0.0</span>])</span>
+<span id="cb14-12"><a href="#cb14-12" aria-hidden="true" tabindex="-1"></a><span class="kw">end</span></span>
+<span id="cb14-13"><a href="#cb14-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-14"><a href="#cb14-14" aria-hidden="true" tabindex="-1"></a>wide <span class="op">=</span> <span class="fu">wide_information</span>(<span class="fl">12</span>)</span>
+<span id="cb14-15"><a href="#cb14-15" aria-hidden="true" tabindex="-1"></a>wide_sol <span class="op">=</span> <span class="fu">optimize</span>(wide, <span class="fu">DecisionVariableElimination</span>(stable <span class="op">=</span> <span class="cn">true</span>))</span>
+<span id="cb14-16"><a href="#cb14-16" aria-hidden="true" tabindex="-1"></a>(exhaustive <span class="op">=</span> <span class="cf">try</span></span>
+<span id="cb14-17"><a href="#cb14-17" aria-hidden="true" tabindex="-1"></a>     <span class="fu">optimize</span>(wide, <span class="fu">ExhaustivePolicySearch</span>()).expected_utility</span>
+<span id="cb14-18"><a href="#cb14-18" aria-hidden="true" tabindex="-1"></a> <span class="cf">catch</span> <span class="cn">e</span></span>
+<span id="cb14-19"><a href="#cb14-19" aria-hidden="true" tabindex="-1"></a>     <span class="fu">typeof</span>(<span class="cn">e</span>)</span>
+<span id="cb14-20"><a href="#cb14-20" aria-hidden="true" tabindex="-1"></a> <span class="cf">end</span>,</span>
+<span id="cb14-21"><a href="#cb14-21" aria-hidden="true" tabindex="-1"></a> exact_dve <span class="op">=</span> wide_sol.expected_utility,</span>
+<span id="cb14-22"><a href="#cb14-22" aria-hidden="true" tabindex="-1"></a> max_factor_size <span class="op">=</span> wide_sol.diagnostics.max_factor_size)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display" data-execution_count="1">
 <pre><code>(exhaustive = PolicySearchTooLargeError, exact_dve = 6.5, max_factor_size = 4)</code></pre>
 </div>
@@ -2553,32 +2562,51 @@ window.Quarto = {
 <section id="what-exact-does-and-does-not-mean" class="level2">
 <h2 class="anchored" data-anchor-id="what-exact-does-and-does-not-mean">What “exact” does and does not mean</h2>
 <p>It means the arithmetic on the bound data is exact. It does not mean the model is exact, and the difference shows up immediately:</p>
-<div id="16" class="cell" data-execution_count="1">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb14"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a>two_stage <span class="op">=</span> <span class="fu">two_stage_model</span>()</span>
-<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a>(float_path <span class="op">=</span> <span class="fu">optimize</span>(two_stage).expected_utility,</span>
-<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a> exact_path <span class="op">=</span> <span class="fu">optimize</span>(two_stage,</span>
-<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a>                       <span class="fu">DecisionVariableElimination</span>(stable <span class="op">=</span> <span class="cn">true</span>)).expected_utility)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div id="18" class="cell" data-execution_count="1">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb16"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a>two_stage <span class="op">=</span> <span class="fu">two_stage_model</span>()</span>
+<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a>(float_path <span class="op">=</span> <span class="fu">optimize</span>(two_stage).expected_utility,</span>
+<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a> exact_path <span class="op">=</span> <span class="fu">optimize</span>(two_stage,</span>
+<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a>                       <span class="fu">DecisionVariableElimination</span>(stable <span class="op">=</span> <span class="cn">true</span>)).expected_utility)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display" data-execution_count="1">
 <pre><code>(float_path = 21.0, exact_path = 21.000000000000004)</code></pre>
 </div>
 </div>
 <p>The exact path returns the <em>uglier</em> number, and that is not a defect. A CPT entry written <code>0.1</code> is bound as the Float64 nearest to a tenth, which is not a tenth; the exact rational value of the model as actually bound is the longer number, and the default path’s clean <code>21.0</code> is a rounding that happens to land on the round figure. Exact arithmetic answers “what does this bound model imply?”, not “what did you mean to type?”.</p>
 <p>Two further limits, both deliberate. Rounded CPTs are not silently renormalised: a model whose rows sum to one only within the tolerance is accepted, and <code>exact_probability_guards</code> then distinguishes exact constancy from mere tolerance acceptance, so a run reports which it had. And <code>expected_utility(m, strategy; stable=true)</code> evaluates a <em>given</em> strategy in the same arithmetic, so a strategy found on one path can be scored on the other:</p>
-<div id="18" class="cell" data-execution_count="1">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb16"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a>two_stage_strategy <span class="op">=</span> <span class="fu">optimize</span>(two_stage,</span>
-<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a>                              <span class="fu">DecisionVariableElimination</span>(stable <span class="op">=</span> <span class="cn">true</span>)).strategy</span>
-<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a>(exact <span class="op">=</span> <span class="fu">expected_utility</span>(two_stage, two_stage_strategy; stable <span class="op">=</span> <span class="cn">true</span>),</span>
-<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a> float <span class="op">=</span> <span class="fu">expected_utility</span>(two_stage, two_stage_strategy))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div id="20" class="cell" data-execution_count="1">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb18"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a>two_stage_strategy <span class="op">=</span> <span class="fu">optimize</span>(two_stage,</span>
+<span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a>                              <span class="fu">DecisionVariableElimination</span>(stable <span class="op">=</span> <span class="cn">true</span>)).strategy</span>
+<span id="cb18-3"><a href="#cb18-3" aria-hidden="true" tabindex="-1"></a>(exact <span class="op">=</span> <span class="fu">expected_utility</span>(two_stage, two_stage_strategy; stable <span class="op">=</span> <span class="cn">true</span>),</span>
+<span id="cb18-4"><a href="#cb18-4" aria-hidden="true" tabindex="-1"></a> float <span class="op">=</span> <span class="fu">expected_utility</span>(two_stage, two_stage_strategy))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display" data-execution_count="1">
 <pre><code>(exact = 21.000000000000007, float = 21.0)</code></pre>
 </div>
 </div>
 <p>The exact figure here is not bit-identical to the one <code>optimize</code> returned above. Both are correctly rounded, but the two routes group the rational operations differently – the bucket algorithm eliminates variable by variable, the evaluator sums over the whole joint – and correct rounding of two different exact expressions need not land on the same Float64. “Exact” constrains the arithmetic along a route; it does not make two routes agree in the last bit.</p>
+<p>Tolerated rounding has a limit of its own. A model may hold entries a hair below zero, within the tolerance it is bound at, because rounded tables produce them. When the evidence is so improbable that its mass is no larger than what those entries could shift it by, the sign of the answer is an artefact of the rounding, and no answer is returned:</p>
+<div id="22" class="cell" data-execution_count="1">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb20"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a>tiny <span class="op">=</span> <span class="fu">influence_diagram</span>(<span class="op">:</span>X <span class="op">=&gt;</span> [<span class="op">:</span>a, <span class="op">:</span>b], <span class="op">:</span>Y <span class="op">=&gt;</span> [<span class="op">:</span>a, <span class="op">:</span>b], <span class="op">:</span>Act <span class="op">=&gt;</span> [<span class="op">:</span>leave, <span class="op">:</span>act];</span>
+<span id="cb20-2"><a href="#cb20-2" aria-hidden="true" tabindex="-1"></a>                         mechanisms <span class="op">=</span> [<span class="op">:</span>X <span class="op">=&gt;</span> (), <span class="op">:</span>Y <span class="op">=&gt;</span> (<span class="op">:</span>X,)],</span>
+<span id="cb20-3"><a href="#cb20-3" aria-hidden="true" tabindex="-1"></a>                         decisions <span class="op">=</span> [<span class="op">:</span>Act <span class="op">=&gt;</span> ()], utilities <span class="op">=</span> [<span class="op">:</span>V <span class="op">=&gt;</span> (<span class="op">:</span>Y, <span class="op">:</span>Act)])</span>
+<span id="cb20-4"><a href="#cb20-4" aria-hidden="true" tabindex="-1"></a>rounded <span class="op">=</span> <span class="fu">bind_cpt</span>(<span class="fu">InfluenceDiagramModel</span>(tiny),</span>
+<span id="cb20-5"><a href="#cb20-5" aria-hidden="true" tabindex="-1"></a>                   [<span class="op">:</span>X <span class="op">=&gt;</span> [<span class="fl">1</span> <span class="op">-</span> <span class="fl">1e-6</span>, <span class="fl">1e-6</span>], <span class="op">:</span>Y <span class="op">=&gt;</span> [<span class="fl">1</span> <span class="op">+</span> <span class="fl">1e-7</span> <span class="op">-</span><span class="fl">1e-7</span>; <span class="fl">0.5</span> <span class="fl">0.5</span>]];</span>
+<span id="cb20-6"><a href="#cb20-6" aria-hidden="true" tabindex="-1"></a>                   atol <span class="op">=</span> <span class="fl">1e-6</span>)</span>
+<span id="cb20-7"><a href="#cb20-7" aria-hidden="true" tabindex="-1"></a>rounded <span class="op">=</span> <span class="fu">observe</span>(<span class="fu">bind_utility</span>(rounded, <span class="op">:</span>V <span class="op">=&gt;</span> [<span class="fl">0.0</span> <span class="fl">1.0</span>; <span class="fl">2.0</span> <span class="fl">3.0</span>]), <span class="op">:</span>X <span class="op">=&gt;</span> <span class="op">:</span>b)</span>
+<span id="cb20-8"><a href="#cb20-8" aria-hidden="true" tabindex="-1"></a><span class="cf">try</span></span>
+<span id="cb20-9"><a href="#cb20-9" aria-hidden="true" tabindex="-1"></a>    <span class="fu">optimize</span>(rounded; atol <span class="op">=</span> <span class="fl">1e-6</span>)</span>
+<span id="cb20-10"><a href="#cb20-10" aria-hidden="true" tabindex="-1"></a><span class="cf">catch</span> <span class="cn">e</span></span>
+<span id="cb20-11"><a href="#cb20-11" aria-hidden="true" tabindex="-1"></a>    <span class="fu">typeof</span>(<span class="cn">e</span>)</span>
+<span id="cb20-12"><a href="#cb20-12" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-display" data-execution_count="1">
+<pre><code>IndeterminatePosteriorError</code></pre>
+</div>
+</div>
+<p>The evidence mass here is <span class="math inline">\(10^{-6}\)</span>, inside the tolerance budget of about <span class="math inline">\(2 \times 10^{-6}\)</span> for two mechanisms. Removing the negative entry, or binding at a tolerance that rejects it, resolves the error.</p>
 <p>Note also that scoring a strategy goes through the brute-force joint evaluator rather than the bucket algorithm, so unlike <code>optimize</code> it is bounded by the number of joint states: the 340-site model above has <span class="math inline">\(2^{340}\)</span> of them and cannot be scored this way at any precision.</p>
 </section>
 <section id="summary" class="level2">
 <h2 class="anchored" data-anchor-id="summary">Summary</h2>
-<p><code>stable=true</code> changes the arithmetic, not the algorithm. On ordinary models it agrees with the default path on every decision and differs in the last place or two of the value, which is a good reason to leave the default alone. It becomes necessary when the evidence mass underflows: there the default path does not return an imprecise answer but a wrong diagnosis, reporting possible evidence as impossible, while the exact path returns the right decision together with a finite log mass and a <code>mass_status</code> saying why the ordinary number was zero. Signed utilities are what rule out the logarithmic remedy used for posteriors, and rounded-decimal inputs are why “exact” is a statement about the arithmetic rather than about the model.</p>
+<p><code>stable=true</code> changes the arithmetic, not the algorithm. On ordinary models it agrees with the default path on every decision and differs in the last place or two of the value, which is a good reason to leave the default alone. When the evidence mass underflows, Float64 cannot tell possible evidence from impossible evidence; the default path recognises this and reruns in exact arithmetic by itself, so it returns the right decision with <code>exact_fallback</code> set, together with a finite log mass and a <code>mass_status</code> saying why the ordinary number was zero. <code>ImpossibleEvidenceError</code> means probability exactly zero, and a model whose tolerated negative entries leave the answer’s sign undetermined raises <code>IndeterminatePosteriorError</code> instead of guessing. Signed utilities are what rule out the logarithmic remedy used for posteriors, and rounded-decimal inputs are why “exact” is a statement about the arithmetic rather than about the model.</p>
 </section>
 <section id="references" class="level2">
 <h2 class="anchored" data-anchor-id="references">References</h2>

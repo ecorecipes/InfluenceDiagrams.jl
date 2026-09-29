@@ -28,9 +28,9 @@ which can still lose small terms before they cancel.
 
 This vignette is as interested in where the default path is *fine* as in where it is not.
 The short answer, developed below: on ordinary models the two agree on the decision and
-differ in the last digit or two of the value; the exact path earns its keep when the
-evidence underflows, where the default path does not merely lose precision but reports a
-false conclusion.
+differ in the last digit or two of the value. When the evidence underflows, Float64 cannot
+tell rare evidence from impossible evidence, so the default backend does not try: it
+detects the untrustworthy mass and reruns the same schedule in exact arithmetic by itself.
 
 ## Setup
 
@@ -86,7 +86,7 @@ a few units in the last place. Not one differs in the *policy*. On this evidence
 wants the recommended action, and not the sixteenth digit of its value, has no reason to
 leave the default path.
 
-## Where the default path does not merely lose precision
+## Where Float64 cannot decide
 
 The interesting failure is not inaccuracy, it is a false conclusion. Consider a decision
 taken after a long survey in which a rare species is detected at every site:
@@ -111,30 +111,30 @@ m, sites = survey_model(340)
 observed = observe(m, [s => :yes for s in sites[1:(end - 1)]])
 ```
 
-That evidence is unlikely but entirely possible. The default backend:
+That evidence is unlikely but entirely possible. Its probability is about $10^{-340}$,
+below the smallest positive Float64, so the Float64 run of the bucket algorithm ends with an
+evidence mass of zero. Zero mass is also what a contradiction produces. Rather than draw a
+conclusion Float64 cannot support, the default backend treats any mass that is not a
+normal positive number as undecided, and reruns the schedule in exact rational arithmetic
+(ADR 0014):
 
 ```{julia}
-try
-    optimize(observed)
-catch e
-    typeof(e)
-end
-```
-
-`ImpossibleEvidenceError` — and it is not impossible. The evidence mass underflowed to
-zero, and zero mass is indistinguishable from a contradiction in Float64, so the backend
-draws the only conclusion available to it, which happens to be the wrong one. The exact
-path:
-
-```{julia}
-sol = optimize(observed, DecisionVariableElimination(stable = true))
-sol.expected_utility, policy_table(sol.strategy[:Act])
+sol = optimize(observed)
+sol.expected_utility, policy_table(sol.strategy[:Act]), sol.diagnostics.exact_fallback
 ```
 
 The chain is Markov, so this is checkable by hand: conditioning on the previous site leaves
 the last one with posterior `[0.9, 0.1]`, and the utility table gives
 $0.9 \times 0 + 0.1 \times 100 = 10$ for `:protect` against
 $0.9 \times 10 + 0.1 \times 0 = 9$ for `:ignore`.
+
+`exact_fallback` records that the rerun happened, and the answer is the one the explicit
+exact path gives:
+
+```{julia}
+exact = optimize(observed, DecisionVariableElimination(stable = true))
+exact.expected_utility == sol.expected_utility
+```
 
 The diagnostics say what happened rather than leaving it to be inferred:
 
@@ -147,6 +147,18 @@ d = sol.diagnostics
 
 `evidence_probability` is `0.0` because that is the nearest Float64, while
 `log_evidence_probability` is finite and `mass_status` is `:underflow` rather than `:zero`.
+`ImpossibleEvidenceError` is kept for evidence whose probability is exactly zero, which only
+the exact rerun can establish:
+
+```{julia}
+contradiction = bind_cpt(observed, sites[1] => [1.0, 0.0])
+try
+    optimize(contradiction)
+catch e
+    typeof(e)
+end
+```
+
 This is the decision-side counterpart of the log-domain layer in
 `BayesianNetworkInference.jl`: the same distinction between "too small to represent" and
 "cannot happen", reached through exact rationals rather than logarithms, because utilities
@@ -229,6 +241,30 @@ bucket algorithm eliminates variable by variable, the evaluator sums over the wh
 Float64. "Exact" constrains the arithmetic along a route; it does not make two routes agree
 in the last bit.
 
+Tolerated rounding has a limit of its own. A model may hold entries a hair below zero,
+within the tolerance it is bound at, because rounded tables produce them. When the evidence
+is so improbable that its mass is no larger than what those entries could shift it by, the
+sign of the answer is an artefact of the rounding, and no answer is returned:
+
+```{julia}
+tiny = influence_diagram(:X => [:a, :b], :Y => [:a, :b], :Act => [:leave, :act];
+                         mechanisms = [:X => (), :Y => (:X,)],
+                         decisions = [:Act => ()], utilities = [:V => (:Y, :Act)])
+rounded = bind_cpt(InfluenceDiagramModel(tiny),
+                   [:X => [1 - 1e-6, 1e-6], :Y => [1 + 1e-7 -1e-7; 0.5 0.5]];
+                   atol = 1e-6)
+rounded = observe(bind_utility(rounded, :V => [0.0 1.0; 2.0 3.0]), :X => :b)
+try
+    optimize(rounded; atol = 1e-6)
+catch e
+    typeof(e)
+end
+```
+
+The evidence mass here is $10^{-6}$, inside the tolerance budget of about $2 \times 10^{-6}$
+for two mechanisms. Removing the negative entry, or binding at a tolerance that rejects it,
+resolves the error.
+
 Note also that scoring a strategy goes through the brute-force joint evaluator rather than
 the bucket algorithm, so unlike `optimize` it is bounded by the number of joint states: the
 340-site model above has $2^{340}$ of them and cannot be scored this way at any precision.
@@ -237,11 +273,13 @@ the bucket algorithm, so unlike `optimize` it is bounded by the number of joint 
 
 `stable=true` changes the arithmetic, not the algorithm. On ordinary models it agrees with
 the default path on every decision and differs in the last place or two of the value, which
-is a good reason to leave the default alone. It becomes necessary when the evidence mass
-underflows: there the default path does not return an imprecise answer but a wrong
-diagnosis, reporting possible evidence as impossible, while the exact path returns the
-right decision together with a finite log mass and a `mass_status` saying why the ordinary
-number was zero. Signed utilities are what rule out the logarithmic remedy used for
+is a good reason to leave the default alone. When the evidence mass underflows, Float64
+cannot tell possible evidence from impossible evidence; the default path recognises this
+and reruns in exact arithmetic by itself, so it returns the right decision with
+`exact_fallback` set, together with a finite log mass and a `mass_status` saying why the
+ordinary number was zero. `ImpossibleEvidenceError` means probability exactly zero, and a
+model whose tolerated negative entries leave the answer's sign undetermined raises
+`IndeterminatePosteriorError` instead of guessing. Signed utilities are what rule out the logarithmic remedy used for
 posteriors, and rounded-decimal inputs are why "exact" is a statement about the arithmetic
 rather than about the model.
 
