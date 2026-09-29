@@ -91,8 +91,9 @@ export Factor, scope, NetworkIR
 # Re-exported exception types (ADR 0013). This package re-exports much of the
 # BayesianNetworks and BayesianNetworkInference APIs, so it re-exports, wholesale, every
 # exception type (and root, and the `AnyBayesNetError` union) those two export: among them
-# `ImpossibleEvidenceError`, which every solver here raises for evidence of zero computed
-# probability (ADR 0012), and Inference's `ScopeError`. A type added to either package later
+# `ImpossibleEvidenceError`, which every solver here raises for evidence of probability
+# exactly zero (ADRs 0012 and 0014), `IndeterminatePosteriorError`, and Inference's
+# `ScopeError`. A type added to either package later
 # arrives by itself. Every binding is its owner's, never a second definition, so the names
 # stay unambiguous and the frozen ones print unqualified. Neither package exports
 # BayesianNetworkFormats' concrete error types, so none is re-exported here: the conformance

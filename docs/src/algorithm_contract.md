@@ -159,6 +159,16 @@ bound data for its bucket arithmetic and rounds the final value. It can
 therefore avoid those failures while retaining the same information
 restrictions.
 
+The default backends do not report an underflow as impossibility (ADR 0014).
+When the ordinary run ends with an evidence mass that is not a normal positive
+Float64, `DecisionVariableElimination` reruns the same schedule in exact
+rational arithmetic and `ExhaustivePolicySearch` scores strategies one at a
+time through the log-domain marginal; both record `exact_fallback = true` in
+the diagnostics. `ImpossibleEvidenceError` therefore means probability exactly
+zero. A model with tolerated negative entries (in `[-atol, 0)`) whose evidence
+mass is not larger than the tolerance budget has no determined answer and
+raises `IndeterminatePosteriorError` instead of returning one.
+
 Exact arithmetic on stored values is not the same as exact normalization of
 those values. A rounded CPT accepted within the model's `atol` need not sum
 exactly to one. Stable DVE does not silently renormalize it. Its

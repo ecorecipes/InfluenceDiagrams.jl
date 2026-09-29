@@ -5,8 +5,8 @@ Typed exceptions of the influence-diagram layer (SPEC §37, §54; ADR 0013). The
   BayesianNetworks' `BayesNetError`, so code that catches the BayesianNetworks.jl family
   catches these too, and `AnyBayesNetError` catches every typed error of the ecosystem.
 - Errors of lower packages pass through unchanged where this package adds nothing:
-  BayesianNetworks' own (`ImpossibleEvidenceError` for evidence of zero computed probability,
-  ADR 0012; validation and binding errors) and BayesianNetworkInference's (`ScopeError` from
+  BayesianNetworks' own (`ImpossibleEvidenceError` for evidence of probability exactly zero,
+  ADRs 0012 and 0014; `IndeterminatePosteriorError`; validation and binding errors) and BayesianNetworkInference's (`ScopeError` from
   the elimination ordering and the valuation algebra, among others).
 - Every exception type BayesianNetworks and BayesianNetworkInference export is re-exported
   here as its owner's binding and is never redefined; `IrregularDiagramError`,
@@ -340,3 +340,9 @@ function Base.showerror(io::IO, e::IrregularDiagramError)
     end
     return nothing
 end
+
+# Internal control-flow signal, never raised to a caller (ADR 0014): the binary64 run of
+# decision variable elimination ended with an evidence mass that is not a normal positive
+# number, which does not decide whether the evidence is impossible. `decision_elimination`
+# catches it and reruns the same schedule in exact rational arithmetic.
+struct _UnresolvedDecisionMass <: InfluenceDiagramError end

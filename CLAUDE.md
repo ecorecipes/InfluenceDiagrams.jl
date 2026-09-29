@@ -89,15 +89,19 @@ ordered but neither knows the other's action: that is a forgetting diagram, and 
 - The valuation layer reuses BayesianNetworkInference's `_union_axes` and `_broadcastable` helpers for scope/axis agreement and alignment. Keep those internal cross-package contracts in step.
 - Every optimised path is checked against a slower oracle (`joint_distribution`, exhaustive policy search) on small models; DVE ties resolve to the first action label.
 - Models are immutable values: every operation returns a new model.
+- Evidence mass (ADR 0014): `ImpossibleEvidenceError` means probability exactly zero. The Float64
+  DVE run throws the internal `_UnresolvedDecisionMass` when its mass is not a normal positive number,
+  and `decision_elimination` reruns in `Rational{BigInt}` (`exact_fallback = true`); the value-table
+  exhaustive search falls back to per-strategy scoring when a product is unreliable. Tolerated
+  negative entries with a mass within `_joint_atol` raise `IndeterminatePosteriorError`.
 
 ## Vignettes
 
 01 influence diagrams, 02 policies and expected utility, 03 exhaustive vs DVE, 04 value of
 information, 05 composing ecology and management, 06 exact arithmetic for decisions
 (`stable=true`: agrees with the Float64 path on the policy in 1200 random cases and differs
-only in the last places of the value, but is the only path that solves a diagram whose
-evidence mass underflows, where the default reports `ImpossibleEvidenceError` for evidence
-that is merely rare). `ImpossibleEvidenceError` is BayesianNetworks' type: this package
+only in the last places of the value; the default falls back to it automatically when the
+evidence mass underflows, ADR 0014). `ImpossibleEvidenceError` is BayesianNetworks' type: this package
 raises it and re-exports it, and must never define a second one (ADR 0012).
 
 ## Commands

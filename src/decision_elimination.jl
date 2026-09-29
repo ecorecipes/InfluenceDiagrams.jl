@@ -63,6 +63,12 @@ utilities, and remains exponential in factor width rather than policy count.
 It costs more time and memory than ordinary Float64 arithmetic. Accepted
 rounded CPTs are not silently normalized; `exact_probability_guards` in the
 diagnostics distinguishes exact constancy from mere tolerance acceptance.
+
+With `stable=false` an evidence mass that is not a normal positive Float64 is not
+taken as impossibility: the same schedule is rerun in exact arithmetic and the
+diagnostics record `exact_fallback = true`. `ImpossibleEvidenceError` means
+probability exactly zero. A model with tolerated negative entries whose evidence mass
+is within the tolerance budget raises `IndeterminatePosteriorError` (ADR 0014).
 """
 struct DecisionVariableElimination{O<:EliminationStrategy} <: DecisionBackend
     order::O
@@ -236,8 +242,27 @@ function decision_elimination(m::InfluenceDiagramModel;
     # diagrams `validate` accepts, which is what `atol = nothing` avoids.
     eff = atol === nothing ? Float64(normalization_atol) : Float64(atol)
     _check_probability_tolerance(eff)
-    T = stable ? Rational{BigInt} : Float64
-    return _decision_elimination(m, order, eff, T)
+    stable && return _decision_elimination(m, order, eff, Rational{BigInt})
+    # Evidence mass (ADR 0014): the binary64 run decides nothing when its mass is not a
+    # normal positive number, since a positive probability can underflow. Rerun the same
+    # bucket schedule in exact rational arithmetic, where only an exact zero raises
+    # `ImpossibleEvidenceError`, and record the fallback in the diagnostics.
+    try
+        return _decision_elimination(m, order, eff, Float64)
+    catch e
+        e isa _UnresolvedDecisionMass || rethrow()
+    end
+    _has_negative_entry(m) &&
+        throw(BayesianNetworks.IndeterminatePosteriorError(copy(evidence(m)),
+                                                           "the binary64 evidence mass is below the normal range and the model has a tolerated negative entry, which exact arithmetic does not accept"))
+    sol = _decision_elimination(m, order, eff, Rational{BigInt})
+    return DecisionSolution(sol.expected_utility, sol.strategy,
+                            merge(sol.diagnostics, (exact_fallback=true,)))
+end
+
+# Whether a bound chance kernel has a tolerated entry in [-atol, 0) (ADR 0007).
+function _has_negative_entry(m::InfluenceDiagramModel)
+    return any(k -> k isa FiniteKernel && any(<(0), k.table), values(kernels(m.model)))
 end
 
 function _decision_elimination(m::InfluenceDiagramModel, order, atol, ::Type{T},
@@ -362,6 +387,16 @@ function _decision_elimination(m::InfluenceDiagramModel, order, atol, ::Type{T},
     observer === nothing || observer(:final, final)
     isempty(scope(final)) || throw(UneliminatedVariablesError(collect(scope(final))))
     pe = only(final.φ.table)
+    if !stable && !isempty(ev)
+        (isfinite(pe) && pe >= floatmin(Float64)) || throw(_UnresolvedDecisionMass())
+        if _has_negative_entry(m)
+            budget = BayesianNetworks._joint_atol(atol, length(mechanisms(id)))
+            pe > budget ||
+                throw(BayesianNetworks.IndeterminatePosteriorError(copy(ev),
+                                                                   "the evidence mass $(pe) is within the tolerance budget $(budget) of zero"))
+        end
+    end
+    # Exact arithmetic: only an exact zero reaches this.
     (isempty(ev) || pe > 0) ||
         throw(BayesianNetworks.ImpossibleEvidenceError(copy(ev)))
     meu = only(final.ψ.table)

@@ -32,7 +32,10 @@ strategy is instead evaluated through [`instantiate`](@ref) and
 expected-utility path instead of the value-table shortcut. It is deliberately
 slower and avoids merging small utility terms before cancellation.
 Strategies under which the evidence is impossible are excluded. If no strategy
-supports the evidence, throw `BayesianNetworks.ImpossibleEvidenceError`.
+supports the evidence, throw `BayesianNetworks.ImpossibleEvidenceError`: probability
+exactly zero. When a value-table product falls outside the normal Float64 range, the
+table cannot tell an underflow from a zero, so the search falls back to scoring each
+strategy individually and records `exact_fallback = true` in the diagnostics (ADR 0014).
 """
 struct ExhaustivePolicySearch <: DecisionBackend
     max_policies::Int
@@ -105,7 +108,7 @@ function _value_tables(m::InfluenceDiagramModel, keep::Vector{Symbol};
     id = syntax(m)
     bm = m.model
     vars = variable_names(id)
-    n = prod(Int128[nstates(id, x) for x in vars]; init=Int128(1))
+    n = prod(BigInt[nstates(id, x) for x in vars]; init=big(1))
     n <= max_states || throw(ModelTooLargeError(Int(min(n, typemax(Int))), max_states))
     pos = Dict{Symbol,Int}(x => i for (i, x) in enumerate(vars))
     dims = Tuple(nstates(id, x) for x in vars)
@@ -127,13 +130,24 @@ function _value_tables(m::InfluenceDiagramModel, keep::Vector{Symbol};
     kdims = Tuple(dims[i] for i in kpos)
     N = zeros(Float64, kdims)
     Z = zeros(Float64, kdims)
+    # Whether a product of nonzero entries fell below binary64's normal range: then a
+    # strategy's zero mass may be an underflow rather than an exact zero (ADR 0014). A
+    # negative product comes from a tolerated negative entry.
+    unreliable = false
     for ci in CartesianIndices(dims)
         all(e -> ci[e[1]] == e[2], ev) || continue
         p = 1.0
+        exact_zero = false
         for (tab, ax) in factors_
-            p *= tab[ntuple(j -> ci[ax[j]], length(ax))...]
-            p == 0 && break
+            x = tab[ntuple(j -> ci[ax[j]], length(ax))...]
+            if x == 0
+                exact_zero = true
+                break
+            end
+            p *= x
         end
+        exact_zero && continue
+        (p >= floatmin(Float64) && isfinite(p)) || (unreliable = true)
         p == 0 && continue
         u = 0.0
         for (tab, ax) in utils
@@ -143,7 +157,7 @@ function _value_tables(m::InfluenceDiagramModel, keep::Vector{Symbol};
         N[k] += p * u
         Z[k] += p
     end
-    return N, Z
+    return N, Z, unreliable
 end
 
 function optimize(m::InfluenceDiagramModel, b::ExhaustivePolicySearch;
@@ -185,7 +199,17 @@ function optimize(m::InfluenceDiagramModel, b::ExhaustivePolicySearch;
         a = variable_name(id, decision_variable(id, d))
         a in keep || push!(keep, a)
     end
-    N, Z = _value_tables(m, keep; max_states=max_states)
+    N, Z, unreliable = _value_tables(m, keep; max_states=max_states)
+    # An underflowed or negative product makes a zero or small binary64 mass undecided, so
+    # search strategy by strategy instead: `expected_utility` evaluates each one through
+    # `BayesianNetworks.marginal`, which recomputes underflowed evidence in the log domain
+    # and skips only strategies that make the evidence exactly impossible (ADR 0014).
+    if unreliable
+        sol = optimize(m, ExhaustivePolicySearch(b.max_policies, true, false);
+                       max_states, atol)
+        return DecisionSolution(sol.expected_utility, sol.strategy,
+                                merge(sol.diagnostics, (exact_fallback=true,)))
+    end
     kpos = Dict{Symbol,Int}(x => i for (i, x) in enumerate(keep))
     info_pos = [Int[kpos[x] for x in information_names(id, d)] for d in ds]
     act_pos = [kpos[variable_name(id, decision_variable(id, d))] for d in ds]

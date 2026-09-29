@@ -182,7 +182,13 @@ bn = instantiate(m, sol.strategy)              # an ordinary closed BayesModel
 g = read_influence_diagram(fixture_path("dne/grazing_reference_id.dne"))
 ```
 
-For underflowed evidence or large cancelling utilities, opt into the stable path:
+Evidence whose Float64 mass underflows needs no option: when the ordinary run's
+evidence mass is not a normal positive number, `optimize` reruns the same schedule
+in exact arithmetic and records `exact_fallback = true` in the diagnostics.
+`ImpossibleEvidenceError` means the evidence has probability exactly zero, and a
+model whose tolerated negative entries leave the mass undetermined raises
+`IndeterminatePosteriorError` (ADR 0014). For large cancelling utilities, opt
+into the stable path:
 
 ```julia
 sol = optimize(m, DecisionVariableElimination(stable=true))
@@ -205,7 +211,7 @@ log-domain marginals and compensated accumulation. The capped
 Stable DVE retains the no-forgetting and action-free evidence requirements.
 It does not renormalize accepted rounded CPTs; `exact_probability_guards`
 distinguishes exact action independence from tolerance acceptance.
-Defaults remain unchanged. These runtime options are not a universal
+These runtime options are not a universal
 Julia/compiler/IEEE correctness theorem.
 
 ## Vignettes
