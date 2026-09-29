@@ -24,6 +24,7 @@ end
         exported = names(InfluenceDiagrams)
         for M in (BayesianNetworks, BayesianNetworkInference),
             n in exported_exception_names(M)
+
             @test n in exported
             @test getglobal(InfluenceDiagrams, n) === getglobal(M, n)
         end
