@@ -202,7 +202,7 @@ function optimize(m::InfluenceDiagramModel, b::ExhaustivePolicySearch;
     N, Z, unreliable = _value_tables(m, keep; max_states=max_states)
     # An underflowed or negative product makes a zero or small binary64 mass undecided, so
     # search strategy by strategy instead: `expected_utility` evaluates each one through
-    # `BayesianNetworks.marginal`, which recomputes underflowed evidence in the log domain
+    # `BayesianNetworks.marginal`, which recomputes underflowed evidence exactly (ADR 0016)
     # and skips only strategies that make the evidence exactly impossible (ADR 0014).
     if unreliable
         sol = optimize(m, ExhaustivePolicySearch(b.max_policies, true, false);

@@ -163,7 +163,8 @@ The default backends do not report an underflow as impossibility (ADR 0014).
 When the ordinary run ends with an evidence mass that is not a normal positive
 Float64, `DecisionVariableElimination` reruns the same schedule in exact
 rational arithmetic and `ExhaustivePolicySearch` scores strategies one at a
-time through the log-domain marginal; both record `exact_fallback = true` in
+time through `BayesianNetworks.marginal`, whose own fallback is exact and
+correctly rounded (ADR 0016); both record `exact_fallback = true` in
 the diagnostics. `ImpossibleEvidenceError` therefore means probability exactly
 zero. A model with tolerated negative entries (in `[-atol, 0)`) whose evidence
 mass is not larger than the tolerance budget has no determined answer and
