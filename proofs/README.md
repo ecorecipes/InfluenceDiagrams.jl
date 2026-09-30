@@ -114,7 +114,7 @@ dependency. The CI workflow runs that fail-closed command.
 | §34–§35, §55.7 | `withInfo`, `Strategy.enlarge`, `exists_strategy_enlarged_eq` | `expected_value_of_information` is non-negative |
 | §24 schema | `schInfluenceDiagram` (defined in the BayesianNetworks project), re-emitted by `lake exe emit_schema` | `SchInfluenceDiagram` (`generate_json_acset_schema` compared with `schemas/influence_diagram.schema.json` modulo `version`) |
 
-### Deterministic optimality and the remaining Proposition 7 gap
+### Deterministic optimality and Proposition 7
 
 The original `exists_deterministic_optimal` Roadmap statement is now proved. More strongly,
 `exists_deterministic_optimal_all` produces a deterministic, nonnegative strategy dominating

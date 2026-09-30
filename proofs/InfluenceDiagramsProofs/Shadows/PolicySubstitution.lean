@@ -35,4 +35,9 @@ theorem forward2 : Candidate → Shadow2 := fun h id hc => (h id hc).2
 
 theorem backward : Shadow1 → Shadow2 → Candidate := fun h1 h2 id hc => ⟨h1 id hc, h2 id hc⟩
 
+/-- SA-Pass anchor: the cited theorem proves `Candidate` as stated, so a restatement that
+drifts from the proved theorem stops compiling. -/
+theorem anchor : Candidate := fun _ h =>
+  ⟨InfluenceDiagramsProofs.FinInfluenceDiagram.closed_instantiate h, fun ord => ⟨ord.toTopoOrder⟩⟩
+
 end InfluenceDiagramsProofs.Shadows.PolicySubstitution

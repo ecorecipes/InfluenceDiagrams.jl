@@ -54,4 +54,9 @@ theorem backward : Shadow1 → Shadow2 → Candidate := by
     rfl
   · rw [h2 id R κ σ d a m hm, intervene_of_ne _ hm]
 
+/-- SA-Pass anchor: the cited theorem proves `Candidate` as stated, so a restatement that
+drifts from the proved theorem stops compiling. -/
+theorem anchor : Candidate := fun _ _ _ κ σ d a =>
+  InfluenceDiagramsProofs.FinInfluenceDiagram.strategyKernel_fix_eq_intervene κ σ d a
+
 end InfluenceDiagramsProofs.Shadows.FixDecision

@@ -44,4 +44,10 @@ theorem backward : Shadow1 → Shadow2 → Candidate := by
   intro h1 h2 id κ u
   exact ⟨h1 id κ u, fun info' hsub => sub_nonneg.mp (h2 id κ u info' hsub)⟩
 
+/-- SA-Pass anchor: the cited theorem proves `Candidate` as stated, so a restatement that
+drifts from the proved theorem stops compiling. -/
+theorem anchor : Candidate := fun _ κ u =>
+  ⟨InfluenceDiagramsProofs.FinInfluenceDiagram.optimalValue_attained κ u,
+   fun _ h => InfluenceDiagramsProofs.FinInfluenceDiagram.optimalValue_info_mono h κ u⟩
+
 end InfluenceDiagramsProofs.Shadows.OptimalInformation
