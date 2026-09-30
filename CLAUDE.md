@@ -69,12 +69,20 @@ ordered but neither knows the other's action: that is a forgetting diagram, and 
   set; its mass is strategy independent and the checked solver rejects exactly zero
   mass. All default and Roadmap targets remain `sorry`-free. Do not conflate this
   exact-model Proposition 7 with verification of the literal Float64 arrays, reference
-  resolution, explicit array conditioning, min-fill implementation or first-label ties.
-  `Finite/OrderedPolicies.lean` separately defines least-state local argmax,
+  resolution or the min-fill implementation.
+  `Finite/OrderedPolicies.lean` defines least-state local argmax,
   reconstructs its admissible information table and proves strict `2*epsilon`
   gap stability under uniform score error. Its supplied order is state-position
-  order for `Fin n`. It does not establish whole-driver first-label array identity
-  or automatically bound Float64 DVE score errors.
+  order for `Fin n`; it does not bound Float64 DVE score errors.
+  `Finite/DVE/Selector.lean` parameterises the driver by its selector (`run` is the
+  classical instance); for the least-state selector it proves realized optimality,
+  the exact table on every row (`solveOrdered_table`) and a semantic characterization
+  on rows of positive probability. `Finite/DVE/Conditioning.lean` models this package's
+  sliced evidence conditioning (factors and utilities, absent variables skipped) and
+  proves equal evidence mass, value and positive-probability first-label tables versus
+  the likelihood factor. Zero-probability rows, the link from the supplied order to
+  Julia's labels, and Float64 comparison (near-ties, `-0.0` versus `0.0`, `NaN`) stay
+  outside the proofs.
   Follow the proof README's build, audit and rendering rules when extending this layer.
 
 ## Invariants that must not be broken
@@ -87,7 +95,7 @@ ordered but neither knows the other's action: that is a forgetting diagram, and 
 - No-forgetting is a solver precondition, not a validity condition (see above). Do not add it to `validate`.
 - `validate`, `instantiate`, `expected_utility` and `optimize` thread the kernel-normalisation `atol` through the joint/conditional oracle as well as validation. DVE checks no-forgetting and action-free causal ancestry of external evidence structurally; its separate probability diagnostic uses a relative tolerance per row, including arbitrarily small rows. Accepted rounded CPTs are not silently renormalized, so tolerance acceptance is not exact arithmetic.
 - The valuation layer reuses BayesianNetworkInference's `_union_axes` and `_broadcastable` helpers for scope/axis agreement and alignment. Keep those internal cross-package contracts in step.
-- Every optimised path is checked against a slower oracle (`joint_distribution`, exhaustive policy search) on small models; DVE ties resolve to the first action label.
+- Every optimised path is checked against a slower oracle (`joint_distribution`, exhaustive policy search) on small models; DVE ties resolve to the first action label (on the Float64 path under Julia's `argmax` order, which puts `0.0` above `-0.0` and `NaN` above everything).
 - Models are immutable values: every operation returns a new model.
 - Evidence mass (ADR 0014): `ImpossibleEvidenceError` means probability exactly zero. The Float64
   DVE run throws the internal `_UnresolvedDecisionMass` when its mass is not a normal positive number,

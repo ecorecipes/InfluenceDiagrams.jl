@@ -18,6 +18,80 @@ assert_no_sorry InfluenceDiagramsProofs.FinInfluenceDiagram.orderedTable_reconst
 #print axioms InfluenceDiagramsProofs.FinInfluenceDiagram.orderedPolicy_is_local
 #print axioms InfluenceDiagramsProofs.FinInfluenceDiagram.orderedPolicy_maximizes
 
+-- The driver parameterised by its selector; the first-label (least-state) selector's tables.
+assert_no_sorry InfluenceDiagramsProofs.DVE.solveWith_spec
+assert_no_sorry InfluenceDiagramsProofs.DVE.solveGuardedWith_spec
+assert_no_sorry InfluenceDiagramsProofs.DVE.solveEvidenceWith_spec
+assert_no_sorry InfluenceDiagramsProofs.DVE.solveOrdered_table
+assert_no_sorry InfluenceDiagramsProofs.DVE.solveOrdered_semantic
+#print axioms InfluenceDiagramsProofs.DVE.runWith_state
+#print axioms InfluenceDiagramsProofs.DVE.run_state
+#print axioms InfluenceDiagramsProofs.DVE.runWith_classical
+#print axioms InfluenceDiagramsProofs.DVE.runWith_snd_of_notMem
+#print axioms InfluenceDiagramsProofs.DVE.runWith_deterministic
+#print axioms InfluenceDiagramsProofs.DVE.Inv.chance
+#print axioms InfluenceDiagramsProofs.DVE.Inv.decisionOf
+#print axioms InfluenceDiagramsProofs.DVE.Inv.decisionWith
+#print axioms InfluenceDiagramsProofs.DVE.runWith_inv
+#print axioms InfluenceDiagramsProofs.DVE.independent_one
+#print axioms InfluenceDiagramsProofs.DVE.independent_evidence
+#print axioms InfluenceDiagramsProofs.DVE.solveWith_classical
+#print axioms InfluenceDiagramsProofs.DVE.solveWith_value
+#print axioms InfluenceDiagramsProofs.DVE.solveWith_spec
+#print axioms InfluenceDiagramsProofs.DVE.solveEvidenceWith_value
+#print axioms InfluenceDiagramsProofs.DVE.solveEvidenceWith_spec
+#print axioms InfluenceDiagramsProofs.DVE.checkedRunWith_eq_runWith
+#print axioms InfluenceDiagramsProofs.DVE.solveGuardedWith_eq
+#print axioms InfluenceDiagramsProofs.DVE.solveGuardedWith_spec
+#print axioms InfluenceDiagramsProofs.DVE.solveEvidenceGuardedWith_eq
+#print axioms InfluenceDiagramsProofs.DVE.score_le_iff_weight_le
+#print axioms InfluenceDiagramsProofs.DVE.firstArgmax_congr
+#print axioms InfluenceDiagramsProofs.DVE.firstArgmax_score_eq_weight
+#print axioms InfluenceDiagramsProofs.DVE.decisionScore_local
+#print axioms InfluenceDiagramsProofs.DVE.runWith_kernel
+#print axioms InfluenceDiagramsProofs.DVE.solveScore_local
+#print axioms InfluenceDiagramsProofs.DVE.solveOrdered_table
+#print axioms InfluenceDiagramsProofs.DVE.freeJoint_nonneg
+#print axioms InfluenceDiagramsProofs.DVE.reach_nonneg
+#print axioms InfluenceDiagramsProofs.DVE.reach_continuation_at_step
+#print axioms InfluenceDiagramsProofs.DVE.runWith_ordered_semantic
+#print axioms InfluenceDiagramsProofs.DVE.solveOrdered_semantic
+#print axioms InfluenceDiagramsProofs.DVE.solveEvidenceOrdered_semantic
+
+-- Explicit (sliced) evidence conditioning versus the likelihood representation.
+assert_no_sorry InfluenceDiagramsProofs.DVE.conditionedMass_eq
+assert_no_sorry InfluenceDiagramsProofs.DVE.solveConditioned_spec
+assert_no_sorry InfluenceDiagramsProofs.DVE.solveConditioned_policy_eq
+assert_no_sorry InfluenceDiagramsProofs.DVE.solveConditioned_semantic
+#print axioms InfluenceDiagramsProofs.DVE.Valuation.condition
+#print axioms InfluenceDiagramsProofs.DVE.collect_condition_prob
+#print axioms InfluenceDiagramsProofs.DVE.collect_condition_util
+#print axioms InfluenceDiagramsProofs.DVE.collect_condition_scope
+#print axioms InfluenceDiagramsProofs.DVE.State.chanceSkip
+#print axioms InfluenceDiagramsProofs.DVE.runSkipWith
+#print axioms InfluenceDiagramsProofs.DVE.runSkipWith_deterministic
+#print axioms InfluenceDiagramsProofs.DVE.HardEvidence.toEvidence
+#print axioms InfluenceDiagramsProofs.DVE.Inv.vanish
+#print axioms InfluenceDiagramsProofs.DVE.Inv.clamp_eq
+#print axioms InfluenceDiagramsProofs.DVE.Coupled.util_eq
+#print axioms InfluenceDiagramsProofs.DVE.Coupled.chance_unobserved
+#print axioms InfluenceDiagramsProofs.DVE.Coupled.chance_observed
+#print axioms InfluenceDiagramsProofs.DVE.Coupled.decision
+#print axioms InfluenceDiagramsProofs.DVE.Coupled.score_le_iff
+#print axioms InfluenceDiagramsProofs.DVE.Coupled.maximizes
+#print axioms InfluenceDiagramsProofs.DVE.initial_coupled
+#print axioms InfluenceDiagramsProofs.DVE.conditioned_run
+#print axioms InfluenceDiagramsProofs.DVE.conditioned_policy
+#print axioms InfluenceDiagramsProofs.DVE.conditioned_final
+#print axioms InfluenceDiagramsProofs.DVE.conditionedMass_eq
+#print axioms InfluenceDiagramsProofs.DVE.solveConditioned_spec
+#print axioms InfluenceDiagramsProofs.DVE.solveConditionedChecked_eq
+#print axioms InfluenceDiagramsProofs.DVE.solveConditionedChecked_none_iff
+#print axioms InfluenceDiagramsProofs.DVE.solveConditioned_policy_eq
+#print axioms InfluenceDiagramsProofs.DVE.solveConditioned_semantic
+#print axioms InfluenceDiagramsProofs.DVE.runSkipWith_kernel_clamp
+#print axioms InfluenceDiagramsProofs.DVE.solveConditioned_kernel_clamp
+
 -- Exact multi-decision bucket DVE; the schedule is generated from no-forgetting.
 assert_no_sorry InfluenceDiagramsProofs.DVE.solve_spec
 assert_no_sorry InfluenceDiagramsProofs.DVE.solveEvidence_spec

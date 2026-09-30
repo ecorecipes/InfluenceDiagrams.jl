@@ -95,17 +95,43 @@ is proved independent of strategy. The guarded solver returns a conditional opti
 positive mass and rejects exactly zero mass. This does not cover arbitrary
 action-descendant evidence.
 
-`Finite/OrderedPolicies.lean` separately proves least-state local argmax,
+`Finite/OrderedPolicies.lean` proves least-state local argmax,
 admissible information-table reconstruction, and label stability under a strict
 `2*epsilon` action gap when every row score has error at most `epsilon`.
 The order is state-position order when states are `Fin n`, not alphabetical
-label order. This does not identify the entire existing DVE driver with that
-separate tie selector or certify its floating-point score errors.
+label order.
+
+`Finite/DVE/Selector.lean` parameterises the bucket driver by its local maximizer; the
+original driver is the classical instance, and the computed valuations do not depend on the
+selector. `solveGuardedWith_spec` proves that the checked exact driver with any maximizing
+selector, in particular the least-state (first-label) selector, returns a policy realizing the
+reported value and attaining the existing global optimum. With the least-state selector,
+`solveOrdered_table` proves that every policy row, reachable or not, is the least action
+maximizing that row's bucket utility, so the returned table is uniquely determined, and
+`solveOrdered_semantic` proves that on every row of positive probability it is the least action
+maximizing the (unnormalized) expected utility of acting there and then following the returned
+later policies.
+
+`Finite/DVE/Conditioning.lean` models Julia's explicit evidence conditioning: every chance and
+utility factor is sliced at the observed states, and variables that no factor mentions are
+skipped. For hard evidence on an action-free chance-ancestral set, `solveConditioned_spec`
+proves that at positive evidence mass this conditioned driver, with any maximizing selector,
+returns a policy realizing the reported conditional value, and that this value equals the
+likelihood driver's value and the conditional optimum. `conditionedMass_eq` proves that its
+final probability is exactly the evidence mass. With the least-state selector,
+`solveConditioned_policy_eq` proves that its policy at a row equals the likelihood driver's
+policy at the evidence-clamped row whenever that row has positive probability. On
+zero-probability rows only probabilities and weighted utilities are proved to agree. In
+particular, on a row that contradicts an observed information variable the conditioned table
+repeats the entry of the evidence-clamped row (`solveConditioned_kernel_clamp`), while the
+likelihood driver's entry there is fixed only by its utility representatives.
 
 These are exact finite-function results, not a complete refinement of the Julia
-Float64 arrays, reference lookup, explicit array conditioning or first-label tie rule.
-In particular, literal floating-point DVE/oracle equality is not a theorem. See
-[`proofs/README.md`](proofs/README.md) for exact statements and implementation boundaries.
+Float64 arrays, reference lookup or label order: the least-state order is supplied to the
+proof rather than read from Julia's axes, and Float64 comparison (rounding near-ties, signed
+zeros, `NaN`) is not covered. In particular, literal floating-point DVE/oracle equality is not
+a theorem. See [`proofs/README.md`](proofs/README.md) for exact statements and implementation
+boundaries.
 
 The [algorithm contract](docs/src/algorithm_contract.md) collects solver
 preconditions, the distinction between perfect recall and full observation,

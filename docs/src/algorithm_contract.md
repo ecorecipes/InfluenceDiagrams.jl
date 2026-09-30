@@ -114,8 +114,11 @@ tables at ties or unreachable rows is a different, stronger question.
 
 Equal optimal values do not require identical policy tables. The native DVE
 selector breaks exact local ties by the first action label; exhaustive search
-returns the first best strategy in its own enumeration. An information row
-with zero probability can also have several globally equivalent choices.
+returns the first best strategy in its own enumeration. On the Float64 path a
+tie is decided by Julia's `argmax`, which ranks `0.0` above `-0.0` and `NaN`
+above every number, so a tie between `-0.0` and `0.0` goes to the later label;
+`stable=true` compares exact rationals. An information row with zero
+probability can also have several globally equivalent choices.
 
 ```@example policy_equivalence
 using InfluenceDiagrams
@@ -143,6 +146,22 @@ Near-ties are different from exact ties. A small score perturbation can change
 the selected action. A strict gap greater than twice a uniform action-score
 error protects the maximizer, but the gap theorem does not itself provide that
 error bound for a floating-point solver.
+
+In the exact finite model, the Lean theorem `solveOrdered_table` proves that the
+least-state (first-label) selector returns, on every row, the least maximizer of
+that row's bucket utility, and `solveOrdered_semantic` that on every row of
+positive probability this is the least maximizer of the expected utility of
+acting there and then following the returned later policies. A zero-probability
+row has no such semantic score; its entry depends on how the utility potential
+is represented there, and is not claimed to match between representations.
+
+With evidence, DVE slices every chance factor and every utility at the observed
+states. The returned policy therefore ignores observed information variables: on
+a row that contradicts the evidence it repeats the action of the observed row,
+not the action that would be optimal had that row been possible. The Lean model
+of this conditioning agrees with the likelihood representation on every row of
+positive probability (`solveConditioned_policy_eq`) and repeats the observed
+row's entry elsewhere (`solveConditioned_kernel_clamp`).
 
 ## Zero mass, rare evidence and numerical interpretation
 

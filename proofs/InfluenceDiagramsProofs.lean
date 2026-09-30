@@ -8,3 +8,5 @@ import InfluenceDiagramsProofs.Finite.OptimalInformation
 import InfluenceDiagramsProofs.Finite.DVE.Example
 import InfluenceDiagramsProofs.Finite.DVE.Guard.Boundary
 import InfluenceDiagramsProofs.Finite.OrderedPolicies
+import InfluenceDiagramsProofs.Finite.DVE.Selector
+import InfluenceDiagramsProofs.Finite.DVE.Conditioning

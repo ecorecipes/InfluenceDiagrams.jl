@@ -58,7 +58,9 @@ Module order (`MD_FILES` in the `Makefile`, the import order of `InfluenceDiagra
 9. `Finite/DVE/Schedule.lean`, `Evidence.lean`, `Example.lean`
 10. `Finite/DVE/Guard/Positive.lean`, `Provenance.lean`, `Complete.lean`, `Boundary.lean`
 11. `Finite/OrderedPolicies.lean` — supplied state-order ties, finite information tables and gap stability
-12. `Roadmap.lean` — remaining literal-implementation refinements; no unproved declarations
+12. `Finite/DVE/Selector.lean` — the driver parameterised by its selector; first-label table identity
+13. `Finite/DVE/Conditioning.lean` — explicit (sliced) evidence conditioning versus the likelihood factor
+14. `Roadmap.lean` — remaining literal-implementation refinements; no unproved declarations
 
 ## What is formalised
 
@@ -78,6 +80,8 @@ inherited `FinBayesNet.nonemptyS` fields ensure that every action space is nonem
 | `Finite/OptimalInformation.lean` | `optimalValue_attained`, `optimalValue_info_mono`, `optimal_information_value_nonneg`: genuine attained maxima and cost-free information-value nonnegativity, not only same-value strategy inclusion. |
 | `Finite/DVE/` | Actual `(φ,ψ)` bucket algorithm, generated no-forgetting schedule, structural probability independence, local deterministic reconstruction, realization and equality to the global optimum; action-free ancestral evidence with a proved strategy-independent normalizer and an explicit positive-mass boundary. |
 | `Finite/DVE/Guard/` | The exact all-row probability diagnostic is complete, including zero-outside contexts. Probability-expression provenance and continuous normalized smoothing remove the temporary strict-positivity assumption. Checked drivers return the previously proved result; zero evidence mass remains a separate rejection. |
+| `Finite/DVE/Selector.lean` | `runWith sel` is the bucket driver with an arbitrary maximizing `Selector`; `runWith_classical` shows `run` is its classical instance and `runWith_state` that valuations do not depend on the selector. `Inv.decisionOf` needs a maximizer only on rows of positive probability. `solveWith_spec`, `solveGuardedWith_spec`, `solveEvidenceWith_spec`, `solveEvidenceGuardedWith_eq`: the guarantees of `solve_spec`, `solveGuarded_spec` and the evidence theorems for every selector. For `Selector.ordered` (least state in a supplied order): `solveOrdered_table` (every row is `orderedTable` of the bucket-utility score `solveScore`) and `solveOrdered_semantic` / `solveEvidenceOrdered_semantic` (on rows with `reach ≠ 0`, the least maximizer of `continuation`). |
+| `Finite/DVE/Conditioning.lean` | `Valuation.condition` slices both potentials at `clamp O o`; `runSkipWith` skips absent chance variables. For `HardEvidence` the invariant `Coupled` (equal probability and weighted utility at `x` and `clamp O o x` on every row) holds initially and after every step. `conditionedMass_eq`, `solveConditioned_spec`, `solveConditionedChecked_eq`, `solveConditioned_policy_eq`, `solveConditioned_semantic`, `solveConditioned_kernel_clamp`. |
 | `Roadmap.lean` | Remaining literal-Julia refinements; no unproved declarations. |
 
 `Audit.lean` prints the axioms of every main theorem (and of the definitions `Policy.ofFun`,
@@ -96,10 +100,57 @@ linear order and proves the exact first-state tie property. On raw compiled stat
 variables reconstructs the same admissible local policy. A strict `2ε` score gap proves that
 uniform score errors bounded by `ε` cannot change the selected action.
 
-This is a local policy/table and stability bridge. It does not silently replace the previously
-proved DVE driver's arbitrary classical tie selector or prove its output array identical to
-Julia's first-label arrays. The BN numerical module supplies separate CPT/product and
-positive-mass-dependent posterior error contracts; no universal Float64 equality is claimed. `make audit` also rejects missing/ambiguous results, any other axiom and
+This local selector is now plugged into the driver without editing `run`; see the next
+section. The BN numerical module supplies separate CPT/product and positive-mass-dependent
+posterior error contracts; no universal Float64 equality is claimed.
+
+### First-label tables in the driver
+
+`Finite/DVE/Selector.lean` parameterises the bucket driver by a `Selector`, any rule returning
+a maximizer of a finite action score. `runWith_classical` proves that the existing `run` is the
+classical instance, and `runWith_state` that the valuations, hence the reported value
+(`solveWith_value`), do not depend on the selector. A decision step needs a maximizer only on
+rows of positive probability (`Inv.decisionOf`); choices on zero-probability rows never affect
+mass, realization or dominance. Consequently `solveWith_spec`, `solveGuardedWith_spec`,
+`solveEvidenceWith_spec` and `solveEvidenceGuardedWith_eq` give every selector the same
+guarantees as the classical driver.
+
+`Selector.ordered` takes a supplied linear order on every action space and picks
+`firstArgmax`, the least maximizing state. Julia's first-label rule, read with exact real
+comparisons, is this selector for the axis-position order; Float64 `argmax` differs on `-0.0`
+versus `0.0` and on `NaN`. `solveOrdered_table` proves that the returned policy is exactly
+`orderedTable (solveScore …)` on **every** information row, reachable or not, where
+`solveScore` is the bucket-utility row recorded when the decision is eliminated. The table is
+therefore unique. `solveOrdered_semantic` (and `solveEvidenceOrdered_semantic` with evidence)
+identifies the entry on every row with `reach ≠ 0` (`reach_nonneg`: equivalently positive) as
+the least maximizer of `continuation`, the unnormalized expected utility of acting there and
+then following the returned later policies. That score mentions no bucket or representative.
+On zero-probability rows no semantic score exists, and the entry depends on the utility
+representatives of the model.
+
+### Explicit evidence conditioning
+
+`Finite/DVE/Conditioning.lean` models Julia's `condition`: every chance and every utility
+valuation is evaluated at `clamp O o x` with the observed variables removed from its scope
+(`Valuation.condition`), and `runSkipWith` skips a chance variable that no valuation mentions,
+as Julia's block order and `sum_out` do. `HardEvidence` bundles the observed set, the observed
+states and an action-free, causally closed ancestral set, the structural condition Julia checks.
+
+The invariant `Coupled` states that at every stage the sliced valuations at `x` and the
+likelihood valuations at `clamp O o x` have equal probability and equal weighted utility, on
+every row including zero-probability rows. It holds initially (`initial_coupled`) and after
+every chance, skipped and decision step. Utility potentials agree where the probability is
+positive (`Coupled.util_eq`); at zero-probability rows they are not claimed equal.
+Consequences: `conditionedMass_eq` (the final probability is exactly the evidence mass, with no
+positivity premise); `solveConditioned_spec` (at positive mass, for every selector, a
+deterministic strategy realizing the reported conditional value, equal to the likelihood
+driver's value and to `conditionalOptimalValue`); `solveConditionedChecked_eq` (the checked
+version rejects exactly zero mass); and, for `Selector.ordered`, `solveConditioned_policy_eq`
+(the table at `x` equals the likelihood driver's table at `clamp O o x` whenever that row has
+positive reach) and `solveConditioned_semantic`. `solveConditioned_kernel_clamp` proves that
+the conditioned table is constant along observed coordinates, so a row contradicting the
+evidence repeats the entry of its clamped row. The likelihood driver's entry on such a row is
+fixed by its own representatives, and the two tables are not claimed equal there. `make audit` also rejects missing/ambiguous results, any other axiom and
 proof escape hatches in this project's sources and its own BayesianNetworks proof
 dependency. The CI workflow runs that fail-closed command.
 
@@ -164,15 +215,19 @@ order, perfect recall, CPT locality/normalization/nonnegativity and utility loca
 checked before instantiating the generic solver theorem.
 
 **Refinement boundaries remain.** The finite-function solver has common sufficient scopes
-rather than separate ordered probability/utility arrays. It allows arbitrary fixed local
-argmax ties rather than proving Julia's first-label table identity. Equivalence means realized
-optimal value, not equal joint distributions or equal actions on tied/unreachable rows.
+rather than separate ordered probability/utility arrays. The original `run` uses a fixed
+classical tie selector; the first-label table identity is proved for `Selector.ordered` with a
+supplied order, and that order is not derived from Julia's labels. Tables on zero-probability
+rows depend on utility representatives: the model stores `0` where a chance step's summed
+probability is zero, while Julia's `sum_out` keeps a utility table that does not mention the
+summed variable.
 The exact all-row probability guard is now proved complete, including unreachable bucket rows:
 see `all_guards_complete`, `all_guards_complete_evidence`, `checkedRun_generated_eq` and
-`checkedRun_generated_evidence_eq`. The source's special
-representatives for zero-weight utilities and explicit array conditioning are not proved
-entrywise equal to the likelihood-factor representation. Float64 tolerance behavior is not
-covered and can admit action-dependent evidence that violates the exact invariant.
+`checkedRun_generated_evidence_eq`. Explicit conditioning is proved
+equivalent to the likelihood factor for values, masses and positive-reach tables (see above);
+zero-probability representatives are not proved entrywise equal. Float64 behaviour is not
+covered: tolerance can admit action-dependent evidence that violates the exact invariant, and
+Float64 comparison (rounding near-ties, `-0.0` versus `0.0`, `NaN`) is not the real order.
 
 ### Exact all-row diagnostic completeness
 

@@ -62,14 +62,21 @@ Supported action-free ancestral evidence has a proved strategy-independent norma
 the checked solver rejects exactly zero evidence mass. The proof does not add
 strict positivity or smooth the input at runtime.
 
-`Finite/OrderedPolicies.lean` adds a separate ordered local argmax and its
+`Finite/OrderedPolicies.lean` adds an ordered local argmax and its
 admissible information-table reconstruction. A strict `2*epsilon` action gap
 protects the selected label against uniformly bounded score errors of
 `epsilon`; ties and unreachable rows have no such stability guarantee.
-This does not silently replace the DVE driver's existing selector.
+`Finite/DVE/Selector.lean` plugs this least-state selector into the exact driver
+without changing the original one: the returned table is proved to be the least
+maximizer of each row's bucket utility on every row and, on rows of positive
+probability, the least maximizer of a semantic continuation value.
+`Finite/DVE/Conditioning.lean` models this package's explicit evidence slicing and
+proves the same evidence mass and value as the likelihood representation, and
+(for the first-label selector) the same tables on rows of positive probability.
 
-The Julia array/reference representation, whole-driver first-label identity and floating-point
-rounding remain outside that theorem. The general open-network syntax category is
+The Julia array/reference representation, the link between the supplied state order
+and Julia's labels, tables on zero-probability rows and floating-point rounding
+remain outside these theorems. The general open-network syntax category is
 proved separately in `CategoricalBayesianNetworks.jl/proofs/`; neither result is a
 semantic-equality quotient that silently erases hidden mechanisms.
 
