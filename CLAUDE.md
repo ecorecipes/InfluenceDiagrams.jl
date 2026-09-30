@@ -126,5 +126,5 @@ JuliaFormatter `yas`; docstrings on every exported name, which `test/test_docstr
 build is strict (no `warnonly`), so a docstring left out of the manual or a broken `@ref` fails it; typed
 exceptions with variable names in the message, following ADR 0013: they live in `src/errors.jl` and subtype
 the nearest root (`FiniteKernelsError`, `BayesianNetworkFormatsError` or `BayesNetError`), invalid arguments
-and keywords raise `ArgumentError`, typed errors from a lower package pass through unchanged and documented,
+and keywords raise `ArgumentError`, typed errors from a lower package pass through unchanged and documented, content read from a file, document or manifest is checked before it is converted and raises the package's typed error (ADR 0015: never catch the `MethodError` or `InexactError` of an unchecked conversion),
 and another package's type is named as a code span, never with `@ref`; no emojis in code or docs.

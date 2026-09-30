@@ -17,13 +17,16 @@
     @test trace["policies"][1]["values"] == ["on", "off"]
     @test trace["result"] == string(reinterpret(UInt64, 3.5); base=16, pad=16)
     @test model == before
-    @test_throws BayesianNetworkInference.ScopeError trace_decision_elimination(model;
-                                                                                max_entries=1)
+    @test_throws TraceLimitError trace_decision_elimination(model; max_entries=1)
 
     @test trace_decision_elimination(model; max_entries=34)[1].expected_utility == 3.5
-    @test_throws BayesianNetworkInference.ScopeError trace_decision_elimination(model;
-                                                                                max_entries=34,
-                                                                                include_compilation=true)
+    compilation = try
+        trace_decision_elimination(model; max_entries=34, include_compilation=true)
+    catch e
+        e
+    end
+    @test compilation isa TraceLimitError
+    @test compilation.trace === :trace_decision_elimination
 end
 
 @testset "Actual compilation boundary capture" begin

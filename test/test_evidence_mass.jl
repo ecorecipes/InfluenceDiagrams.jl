@@ -72,6 +72,14 @@
                                        :Y => [1+1e-7 -1e-7; 0.5 0.5]]; atol=1e-6),
                              util)
         @test optimize(observe(clear, :X => :b); atol=1e-6).expected_utility ≈ 2.0
+        # Exact arithmetic does not accept a tolerated negative entry (ADR 0015).
+        domain = try
+            optimize(clear, DecisionVariableElimination(; stable=true); atol=1e-6)
+        catch e
+            e
+        end
+        @test domain isa FactorDomainError
+        @test domain.backend === :stable_decision_elimination && domain.value == -1e-7
     end
 
     @testset "state counts beyond Int128 are too large" begin

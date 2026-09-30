@@ -278,10 +278,13 @@ function _decision_elimination(m::InfluenceDiagramModel, order, atol, ::Type{T},
         ps = Symbol[variable_name(id, p) for p in inputs(id, mech)]
         bound_kernel = kernel(bm, x)
         factor = Factor(bound_kernel, ps, x)
-        if stable && !all(value -> isfinite(value) && value >= 0, factor.table)
-            throw(BayesianNetworkInference.ScopeError(:decision_elimination,
-                                                      "stable probabilities must be finite and nonnegative",
-                                                      factor.vars))
+        if stable
+            bad = findfirst(value -> !(isfinite(value) && value >= 0), factor.table)
+            bad === nothing ||
+                throw(BayesianNetworkInference.FactorDomainError(:stable_decision_elimination,
+                                                                 copy(factor.vars),
+                                                                 Tuple(bad),
+                                                                 factor.table[bad]))
         end
         probability = _convert(T, factor)
         observer === nothing || observer(:input,

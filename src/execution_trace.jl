@@ -10,17 +10,19 @@ end
 
 function _trace_rational(value::Rational{BigInt}, owner)
     ndigits(abs(numerator(value))) <= 4096 && ndigits(denominator(value)) <= 4096 ||
-        throw(UtilityScopeError(owner, :value,
-                                "trace rationals with at most 4096 decimal digits", value))
+        throw(BayesianNetworkInference.TraceLimitError(:trace_decision_elimination,
+                                                       :rational_digits,
+                                                       "a trace rational has more than 4096 decimal digits",
+                                                       Symbol[owner]))
     return Dict("numerator" => string(numerator(value)),
                 "denominator" => string(denominator(value)))
 end
 
 function _trace_dve_factor!(recorder, factor::Factor{Rational{BigInt}})
     length(factor) <= recorder.remaining ||
-        throw(BayesianNetworkInference.ScopeError(:trace_decision_elimination,
-                                                  "the trace cell budget was exceeded",
-                                                  copy(factor.vars)))
+        throw(BayesianNetworkInference.TraceLimitError(:trace_decision_elimination, :cells,
+                                                       "a table of $(length(factor)) cells exceeds the remaining budget of $(recorder.remaining)",
+                                                       copy(factor.vars)))
     recorder.remaining -= length(factor)
     return Dict{String,Any}("scope" => String.(factor.vars),
                             "values" => [_trace_rational(value, :trace)
@@ -41,9 +43,9 @@ function _trace_binary64_table!(recorder, kind, name, table)
                              String(name),
                              Int[], "compilation capture requires finite source values"))
     length(table) <= recorder.remaining ||
-        throw(BayesianNetworkInference.ScopeError(:trace_decision_elimination,
-                                                  "the trace cell budget was exceeded",
-                                                  Symbol[name]))
+        throw(BayesianNetworkInference.TraceLimitError(:trace_decision_elimination, :cells,
+                                                       "a table of $(length(table)) cells exceeds the remaining budget of $(recorder.remaining)",
+                                                       Symbol[name]))
     recorder.remaining -= length(table)
     return Dict("shape" => Int[size(table)...],
                 "values" => [string(reinterpret(UInt64, value); base=16, pad=16)
@@ -56,9 +58,10 @@ function _trace_compilation!(recorder, input)
     source = if kind == "chance"
         k = input.source
         2big(length(k.table)) + length(factor.table) <= recorder.remaining ||
-            throw(BayesianNetworkInference.ScopeError(:trace_decision_elimination,
-                                                      "the compilation cell budget was exceeded",
-                                                      Symbol[name]))
+            throw(BayesianNetworkInference.TraceLimitError(:trace_decision_elimination,
+                                                           :compilation_cells,
+                                                           "the compilation cell budget was exceeded",
+                                                           Symbol[name]))
         Dict("parents" => String.(input.parents),
              "parent_states" => [String.(labels(axis)) for axis in k.dom.axes],
              "child_states" => String.(labels(only(k.codom.axes))),
@@ -71,9 +74,10 @@ function _trace_compilation!(recorder, input)
                                  String(name),
                                  Int[], "compilation capture requires a tabular utility"))
         big(length(u.table)) + length(factor.table) <= recorder.remaining ||
-            throw(BayesianNetworkInference.ScopeError(:trace_decision_elimination,
-                                                      "the compilation cell budget was exceeded",
-                                                      Symbol[name]))
+            throw(BayesianNetworkInference.TraceLimitError(:trace_decision_elimination,
+                                                           :compilation_cells,
+                                                           "the compilation cell budget was exceeded",
+                                                           Symbol[name]))
         Dict("arguments" => String.(scope(u)),
              "argument_states" => [String.(labels(axis)) for axis in u.scope],
              "table" => _trace_binary64_table!(recorder, kind, name, utility_table(u)))
@@ -139,8 +143,10 @@ factors, not a purported proof of CPT compilation.
 The default probability-constancy guard is exact for this certificate profile;
 accepted rounded diagrams need not satisfy it. A trace is data for an independent
 checker, not proof that Julia, its JSON parser or its arithmetic implementation
-is verified. `max_entries` bounds captured table cells. Ordinary DVE and stable
-DVE defaults are unchanged.
+is verified. `max_entries` bounds captured table cells, and a trace rational is
+limited to 4096 decimal digits; either limit raises BayesianNetworkInference's
+`TraceLimitError` (ADR 0015). A probability that is negative or not finite raises its
+`FactorDomainError`, since exact arithmetic does not accept it.
 
 With `include_compilation=true`, emit trace version 2 and also capture the
 bound kernel storage, its sanctioned `cpt` conversion, tabular utilities and the

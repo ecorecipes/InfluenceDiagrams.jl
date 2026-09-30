@@ -53,13 +53,14 @@ end
         end
     end
 
-    @testset "a trace-budget ScopeError is a BayesNetError" begin
+    @testset "a trace budget is a TraceLimitError, not a ScopeError (ADR 0015)" begin
         e = try
             trace_decision_elimination(umbrella_model(); max_entries=1)
         catch err
             err
         end
-        @test e isa ScopeError
+        @test e isa TraceLimitError && !(e isa ScopeError)
+        @test e.limit === :cells
         @test e isa BayesNetError && e isa AnyBayesNetError
     end
 end
