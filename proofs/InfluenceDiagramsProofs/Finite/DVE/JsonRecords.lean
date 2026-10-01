@@ -27,7 +27,10 @@ rows, `DiagramBodyMatches`), the round trip `decodeDiagram_encodeDiagram`, the s
 `decodeDiagramBody_shape` with its failure corollaries (a missing table or column, a hom out of
 range, a non-integer or non-string value), and the checked decoder
 `decodeDiagramChecked : Json → Option (Σ' r : Diagram, r.FullValid)` with
-`decodeDiagramChecked_isSome_iff` and `decodeDiagramChecked_encode`. `decodeDiagramChecked_policyAxes`
+`decodeDiagramChecked_isSome_iff` and `decodeDiagramChecked_encode` (`FullValid` includes the
+decision-precedence checks of Julia's `validate`), and its variant for `unique_names = true`,
+`decodeDiagramCheckedNames` with `decodeDiagramCheckedNames_isSome_iff` (`FullValid` and
+`NamesUnique`). `decodeDiagramChecked_policyAxes`
 states what a successful decode guarantees for the policy tables of the DVE label-order
 theorems: the information inputs of each decision in `information_position` order, and each
 action's labels in `state_position` order, read off the document.
@@ -576,6 +579,35 @@ theorem decodeDiagramChecked_isSome_iff {j : Json} :
 theorem decodeDiagramChecked_encode {r : Diagram} (h : r.FullValid) :
     decodeDiagramChecked (encodeDiagram r) = some ⟨r, h⟩ :=
   decodeDiagramChecked_eq_some.2 (decodeDiagram_encodeDiagram r)
+
+/-- **The checked decoder for `validate(...; unique_names = true)`**: decode, then run
+`Diagram.fullCheck` and `Diagram.namesCheck`. -/
+def decodeDiagramCheckedNames (j : Json) : Option (Σ' r : Diagram, r.FullValid ∧ r.NamesUnique) :=
+  match decodeDiagram j with
+  | .ok r =>
+    if h : r.fullCheck = true ∧ r.namesCheck = true then
+      some ⟨r, (Diagram.fullCheck_iff r).1 h.1, (Diagram.namesCheck_iff r).1 h.2⟩
+    else none
+  | .error _ => none
+
+/-- **Exactly the fully valid documents with unique names decode.** -/
+theorem decodeDiagramCheckedNames_isSome_iff {j : Json} :
+    (decodeDiagramCheckedNames j).isSome ↔
+      ∃ r, decodeDiagram j = .ok r ∧ r.FullValid ∧ r.NamesUnique := by
+  unfold decodeDiagramCheckedNames
+  constructor
+  · intro hs
+    split at hs
+    · rename_i r hr
+      split_ifs at hs with h
+      · exact ⟨r, hr, (Diagram.fullCheck_iff r).1 h.1, (Diagram.namesCheck_iff r).1 h.2⟩
+      · simp at hs
+    · simp at hs
+  · rintro ⟨r, hr, hv, hn⟩
+    rw [hr]
+    simp only
+    rw [dif_pos ⟨(Diagram.fullCheck_iff r).2 hv, (Diagram.namesCheck_iff r).2 hn⟩]
+    rfl
 
 /-- **The policy-table axes in the document.** After a successful checked decode, for every
 decision `d` and every slot `j` of its policy mechanism in the instantiated chance part, the

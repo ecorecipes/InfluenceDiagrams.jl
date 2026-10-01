@@ -34,10 +34,10 @@ state of least `position` among the maximizers of `optimalContinuation`).
 
 What is not proved here: that Julia's arrays are laid out in that order is the
 `FiniteKernels` `Layout/` result together with the Julia test pinning the action axis to
-`states(id, v)`; that Julia's DVE certificate (`variables[].states`, rows of
-`id`, `position`, `label`) decodes into these records is not formalised (there is no Lean
-consumer of that certificate; the ACSet JSON of `write_json_influence_diagram` is decoded into
-them by `Finite/DVE/JsonRecords.lean`); here the DVE hypotheses (`Closed`, `IDOrder`,
+`states(id, v)`; the ACSet JSON of `write_json_influence_diagram` is decoded into these
+records by `Finite/DVE/JsonRecords.lean`, and Julia's DVE certificate (`variables[].states`,
+rows of `id`, `position`, `label`) is decoded by `Finite/DVE/CertificateJson.lean` and checked
+against them by `Finite/DVE/CertificateCheck.lean`; here the DVE hypotheses (`Closed`, `IDOrder`,
 `NoForgettingOrder`) of the compiled diagram stay hypotheses (`RecordsValid.lean` derives
 `Closed` and an `IDOrder` from `FullValid`; `NoForgettingOrder` stays one); and Julia's
 execution itself is not proved.

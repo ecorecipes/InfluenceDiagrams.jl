@@ -36,6 +36,14 @@ root = "Main"
 name = "check_records"
 root = "CheckRecords"
 
+# `lake exe check_certificate DIAGRAM.json CERTIFICATE.json`: decode a diagram and an
+# `export_dve_certificate` certificate with the proved decoders and decide the proved checker
+# `certificateMatches` (`Finite/DVE/CertificateCheck.lean`); used by
+# BayesianNetworks.jl/proofs/scripts/check_records.jl.
+[[lean_exe]]
+name = "check_certificate"
+root = "CheckCertificate"
+
 [[lean_lib]]
 name = "Shadows"
 srcDir = "."

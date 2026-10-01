@@ -146,15 +146,37 @@ utility positions, one generator per variable, acyclicity) and proves that the d
 part, with every decision instantiated as a policy mechanism, satisfies BayesianNetworks'
 `Raw.Network.Valid`; under it `solveRepRecords_optimal_of_fullValid` and
 `solveRecords_table_of_fullValid` no longer take closedness or an order as hypotheses.
+`FullValid` also checks the `DecisionPrecedence` rows as Julia's `validate` does:
+`FullValid.precedence_acyclic` requires Julia's `information_graph` to be acyclic, which by
+`informationTables_acyclic_iff` means that one injective rank orders every mechanism input before
+its target, every information variable before its action and every precedence row's earlier
+action before its later action, and `FullValid.precedence_rank` proves that the precedence rows
+alone are then acyclic (a self-loop is rejected); `NamesUnique` is the separate check of
+`unique_names = true`.
 `Finite/DVE/JsonRecords.lean` decodes the records from the ACSet JSON:
 `decodeDiagram_eq_ok` proves that decoding a parsed `write_json_influence_diagram` document
 succeeds with records `r` exactly when its twelve tables have `r`'s row counts and every column
 of every row holds `r`'s value, `decodeDiagram_encodeDiagram` that decoding the encoded records
 gives them back, and `decodeDiagramChecked_isSome_iff` that the checked decoder succeeds exactly
 when the decoded records satisfy `FullValid`. Parsing the text (`Lean.Json.parse`) and Julia's
-JSON3/ACSets writer are trusted, not proved; the DVE certificate is still not decoded; and that
+JSON3/ACSets writer are trusted, not proved; and that
 Julia's action axis lists the states in `state_position` order is pinned by a test and
 cross-checked on fixtures (`lake exe check_records`), not proved.
+
+`Finite/DVE/CertificateJson.lean` decodes the certificate of `export_dve_certificate`:
+`decodeCertificate_eq_ok` proves that decoding a parsed certificate succeeds with records `c`
+exactly when every key, row and column holds `c`'s value with every reference in range, with
+values read as the exact rationals of their binary64 words or of their `q` strings.
+`Finite/DVE/CertificateCheck.lean` decides `certificateMatches`, which holds when the certificate
+describes the checked diagram as Julia's exporter does (state rows and slots in position order,
+table axes and lexicographic entries, factor diagonals, a topological order and a no-forgetting
+decision order). `certificate_solve_spec` proves that if the certificate matches and its CPT
+cells are nonnegative and every CPT row sums to exactly one, the DVE solution scheduled by the
+certificate's own `decision_order` is deterministic, realizes its value and attains the optimum
+of the model the certificate's exact numbers define. The certificate carries no policy table or
+value, so this is a theorem about the exported model, not about Julia's computed solution; and the
+binary64 words Julia writes by default rarely sum to exactly one, so exact normalization is
+decided (`lake exe check_certificate`), not assumed.
 
 `Finite/DVE/Conditioning.lean` models Julia's explicit evidence conditioning: every chance and
 utility factor is sliced at the observed states, and variables that no factor mentions are

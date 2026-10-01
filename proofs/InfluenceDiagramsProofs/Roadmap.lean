@@ -80,11 +80,18 @@ This is **not** a byte-for-byte verification of Julia. Remaining refinements are
 
 * the record-to-Julia link. `Records.Diagram` is produced from a parsed ACSet JSON tree by the
   proved decoder of `Finite/DVE/JsonRecords.lean` (faithful, `decodeDiagram_eq_ok`, with round
-  trip and failure lemmas), but `Lean.Json.parse` and Julia's JSON3/ACSets writer are trusted,
-  and the DVE certificate is not decoded (it exports exactly these state rows; no Lean consumer
-  reads it). `Valid` checks only the state rows; `FullValid` (`Finite/DVE/RecordsValid.lean`)
-  checks every table and discharges closedness and the order of the compiled diagram, while
-  no-forgetting stays a hypothesis. That Julia's action axis lists the
+  trip and failure lemmas), but `Lean.Json.parse` and Julia's JSON3/ACSets writer are trusted.
+  `Valid` checks only the state rows; `FullValid` (`Finite/DVE/RecordsValid.lean`) checks every
+  table, including the decision-precedence rows as Julia's `validate` does (Julia's
+  `information_graph` acyclic), and discharges closedness and the order of the compiled diagram,
+  while no-forgetting stays a hypothesis; `NamesUnique` is the separate `unique_names = true`
+  check. The DVE certificate of `export_dve_certificate` is decoded faithfully
+  (`Finite/DVE/CertificateJson.lean`, `decodeCertificate_eq_ok`) and checked against the
+  records (`Finite/DVE/CertificateCheck.lean`, `certificateMatches`); it carries model data and
+  no policy, value or plan, so `certificate_solve_spec` and `certificate_tables_optimal` are
+  about the model its exact numbers define (applicable only when its CPT rows sum to exactly
+  one, which Julia's default binary64 words rarely do), not about Julia's computed solution.
+  That Julia's action axis lists the
   states in `state_position` order is pinned by a Julia test, and the array layout is the
   `FiniteKernels` `Layout/` result; Julia's execution itself is not proved. That Julia's block
   schedule is a `Plan`, and which `keep` its run uses, are read off the source, not derived;

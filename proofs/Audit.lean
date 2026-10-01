@@ -195,6 +195,48 @@ assert_no_sorry InfluenceDiagramsProofs.Records.decodeDiagramChecked_isSome_iff
 #print axioms InfluenceDiagramsProofs.Records.decodeDiagramChecked_encode
 #print axioms InfluenceDiagramsProofs.Records.decodeDiagramChecked_policyAxes
 
+-- Decision precedence and unique names in the records.
+assert_no_sorry InfluenceDiagramsProofs.Records.Diagram.informationTables_acyclic_iff
+assert_no_sorry InfluenceDiagramsProofs.Records.decodeDiagramCheckedNames_isSome_iff
+#print axioms InfluenceDiagramsProofs.Records.Diagram.informationTables_causalRank_iff
+#print axioms InfluenceDiagramsProofs.Records.Diagram.informationTables_acyclic_iff
+#print axioms InfluenceDiagramsProofs.Records.Diagram.chance_acyclic_of_informationTables
+#print axioms InfluenceDiagramsProofs.Records.Diagram.namesUnique_iff
+#print axioms InfluenceDiagramsProofs.Records.Diagram.namesCheck_iff
+#print axioms InfluenceDiagramsProofs.Records.Diagram.fullValid_iff
+#print axioms InfluenceDiagramsProofs.Records.Diagram.FullValid.precedence_rank
+#print axioms InfluenceDiagramsProofs.Records.Diagram.FullValid.precedence_irrefl
+#print axioms InfluenceDiagramsProofs.Records.decodeDiagramCheckedNames_isSome_iff
+
+-- The DVE certificate: decoder, checker and soundness on the certificate's exact data.
+assert_no_sorry InfluenceDiagramsProofs.DVECertificate.decodeCertificate_eq_ok
+assert_no_sorry InfluenceDiagramsProofs.DVECertificate.certificate_solve_spec
+assert_no_sorry InfluenceDiagramsProofs.DVECertificate.certificate_tables_optimal
+#print axioms InfluenceDiagramsProofs.DVECertificate.parseNat?_eq_some
+#print axioms InfluenceDiagramsProofs.DVECertificate.parseInt?_eq_some
+#print axioms InfluenceDiagramsProofs.DVECertificate.parseWord?_eq_some
+#print axioms InfluenceDiagramsProofs.DVECertificate.decodeArray_eq_ok
+#print axioms InfluenceDiagramsProofs.DVECertificate.decodeValue_eq_ok
+#print axioms InfluenceDiagramsProofs.DVECertificate.decodeMechanism_eq_ok
+#print axioms InfluenceDiagramsProofs.DVECertificate.decodeCertificate_eq_ok
+#print axioms InfluenceDiagramsProofs.DVECertificate.decodeCertificate_encode
+#print axioms InfluenceDiagramsProofs.DVECertificate.decodeCertificate_inRange
+#print axioms InfluenceDiagramsProofs.DVECertificate.decodeCertificate_error_of_missing_key
+#print axioms InfluenceDiagramsProofs.DVECertificate.decodeCertificate_error_of_not_object
+#print axioms InfluenceDiagramsProofs.DVECertificate.mem_lexCoords
+#print axioms InfluenceDiagramsProofs.DVECertificate.matches_iff
+#print axioms InfluenceDiagramsProofs.DVECertificate.Matches.stateLabel
+#print axioms InfluenceDiagramsProofs.DVECertificate.Matches.information
+#print axioms InfluenceDiagramsProofs.DVECertificate.certKernel_local
+#print axioms InfluenceDiagramsProofs.DVECertificate.certUtility_local
+#print axioms InfluenceDiagramsProofs.DVECertificate.certKernel_nonneg
+#print axioms InfluenceDiagramsProofs.DVECertificate.certKernel_normalised
+#print axioms InfluenceDiagramsProofs.DVECertificate.certOrder
+#print axioms InfluenceDiagramsProofs.DVECertificate.certNoForgetting
+#print axioms InfluenceDiagramsProofs.DVECertificate.certificate_tables
+#print axioms InfluenceDiagramsProofs.DVECertificate.certificate_solve_spec
+#print axioms InfluenceDiagramsProofs.DVECertificate.certificate_tables_optimal
+
 -- Exact multi-decision bucket DVE; the schedule is generated from no-forgetting.
 assert_no_sorry InfluenceDiagramsProofs.DVE.solve_spec
 assert_no_sorry InfluenceDiagramsProofs.DVE.solveEvidence_spec

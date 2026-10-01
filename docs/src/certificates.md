@@ -87,9 +87,19 @@ or success-shaped fallback is performed.
 
 A reference consumer may distinguish structurally valid positive-mass exact data,
 valid zero-mass rejection data, and data outside exact semantics. Such outcomes
-are computed outputs, never trusted `valid` or `optimal` input flags. Automatic
-theorem application still needs a proved decoder-to-model correspondence;
-schema conformance alone does not supply it.
+are computed outputs, never trusted `valid` or `optimal` input flags. Schema
+conformance alone does not supply a decoder-to-model correspondence; the Lean
+project supplies one from a parsed JSON tree. `Finite/DVE/CertificateJson.lean`
+decodes a version-1 certificate faithfully (`decodeCertificate_eq_ok`), and
+`certificateMatches` in `Finite/DVE/CertificateCheck.lean` decides whether it
+agrees with the decoded diagram. When it does and the cells are nonnegative, the
+exact DVE run on the certificate's data picks the least-position maximizer of its
+own score (`certificate_tables`); when every conditional-probability row also sums
+to exactly one, that solution is optimal (`certificate_solve_spec`,
+`certificate_tables_optimal`). Binary64 rows seldom sum to exactly one, so for a
+default certificate only the first statement applies. The certificate does not
+carry Julia's solution, so nothing here proves that Julia's solver output equals
+it; JSON parsing and this exporter are trusted.
 
 ## Actual execution and compilation observations
 

@@ -88,8 +88,10 @@ inherited `FinBayesNet.nonemptyS` fields ensure that every action space is nonem
 | `Finite/DVE/PlanIndependence.lean` | `MassAll` (the probability potential is the reach marginal under every strategy) is preserved by every step, so `reach_strategy_independent`. `optimalContinuation` is the supremum of `continuation` over nonnegative strategies; `weight_eq_optimalContinuation` identifies it with the weighted valuation at the decision step of any plan, and `runWith_ordered_optimal` makes the first-label entry its least maximizer on rows of positive reach. `solvePlanWith`, `solveEvidencePlanWith`, `solveConditionedPlan` run on an arbitrary `Plan id Finset.univ`; `solvePlanOrdered_table_eq`, `solveEvidencePlanOrdered_table_eq`, `solveConditionedPlan_table_eq` and `solveOrdered_table_plan_independent`. |
 | `Finite/DVE/Representative.lean` | `sumOutKeep keep` is Julia's chance step: on rows of zero summed probability it stores the bucket utility (`keep = true`) or `0` (`keep = false`, the model: `sumOutKeep_false`); `sumOutKeep_util_of_const` makes `keep = true` literally Julia's `ψ′ = ψ` when the utility does not mention the summed variable. `runRepWith sel keep` is the driver with that step. `Agrees` (scope, probability, weighted utility) is preserved by every step under the exact guard (`agrees_chanceStep`, `agrees_decisionStep`, `runRep_agrees`). `solveRepPlan_agrees`, `solveRepPlanWith_spec` (realized optimum), `solveRepPlanWith_value`, `solveRepPlanScore_eq` and `solveRepPlanWith_kernel_eq` (positive reach), `solveRepPlanOrdered_table` (every row) and `solveRepPlanOrdered_optimal`, for every `keep`, selector and plan. |
 | `Finite/DVE/LabelOrder.lean` | `positionOrder`, `firstArgmax_least_position`, `eq_firstArgmax_of_least_position`. `Records.Diagram` (raw rows reusing the BN `Raw.StateRow`), `Valid` / `check_iff`, `compile` (state spaces `Fin (stateCount v)`), `stateRecord` with `stateRecord_position` (from `Raw.positionEquiv`), `actionOrder` with `actionOrder_le_iff`, `selector`; `solveRecords_table`, `solveRepRecords_table`, `solveRepRecords_optimal`: the entry is the maximizer of least checked `state_position`. |
-| `Finite/DVE/RecordsValid.lean` | `FullValid` / `fullCheck_iff` (every table checked), `chance` (decisions instantiated as policy mechanisms), `chance_acyclic_iff`, `FullValid.chance_valid` and `chance_network_valid` (BN `Raw.Network.Valid`), `FullValid.closed`, `FullValid.idOrder`; `solveRepRecords_table_of_fullValid`, `solveRepRecords_optimal_of_fullValid`, `solveRecords_table_of_fullValid`. |
-| `Finite/DVE/JsonRecords.lean` | The ACSets JSON decoder: row decoders and `…RowMatches` for the five influence-diagram tables, `decodeDiagram`, `decodeDiagram_eq_ok`, `decodeDiagram_encodeDiagram`, `DiagramBodyMatches.shape` and the failure lemmas, `decodeDiagramChecked`, `decodeDiagramChecked_isSome_iff`, `decodeDiagramChecked_encode`, `decodeDiagramChecked_policyAxes`. |
+| `Finite/DVE/RecordsValid.lean` | `FullValid` / `fullCheck_iff` (every table checked), `chance` (decisions instantiated as policy mechanisms), `chance_acyclic_iff`, `FullValid.chance_valid` and `chance_network_valid` (BN `Raw.Network.Valid`), `FullValid.closed`, `FullValid.idOrder`; `solveRepRecords_table_of_fullValid`, `solveRepRecords_optimal_of_fullValid`, `solveRecords_table_of_fullValid`. Decision precedence: `informationTables` (Julia's `information_graph` as tables), `informationTables_causalRank_iff`, `informationTables_acyclic_iff`, the field `FullValid.precedence_acyclic`, `FullValid.precedence_rank`, `FullValid.precedence_irrefl`. `NamesUnique` / `namesCheck_iff` (`unique_names = true`). |
+| `Finite/DVE/JsonRecords.lean` | The ACSets JSON decoder: row decoders and `…RowMatches` for the five influence-diagram tables, `decodeDiagram`, `decodeDiagram_eq_ok`, `decodeDiagram_encodeDiagram`, `DiagramBodyMatches.shape` and the failure lemmas, `decodeDiagramChecked`, `decodeDiagramChecked_isSome_iff`, `decodeDiagramChecked_encode`, `decodeDiagramChecked_policyAxes`; `decodeDiagramCheckedNames` with `decodeDiagramCheckedNames_isSome_iff`. |
+| `Finite/DVE/CertificateJson.lean` | The DVE certificate decoder: canonical decimal, integer and hexadecimal strings (`parseNat?_eq_some`, `parseInt?_eq_some`, `parseWord?_eq_some`), records and `…Matches` for every key and row, `decodeCertificate`, `decodeCertificate_eq_ok`, `encodeCertificate`, `decodeCertificate_encode`, `decodeCertificate_inRange`, `decodeCertificate_error_of_missing_key`, `decodeCertificate_error_of_not_object`. |
+| `Finite/DVE/CertificateCheck.lean` | `Matches` / `matches_iff` and `certificateMatches` (decidable), `Matches.stateLabel`, `Matches.information`; `Value.toRat` (exact cell values), `certKernel`, `certUtility`, `certKernel_local`, `certUtility_local`, `certKernel_nonneg`, `certKernel_normalised`, `certOrder` (`IDOrder`), `certNoForgetting` (`NoForgettingOrder`); `certificate_tables`, `certificate_solve_spec`, `certificate_tables_optimal`. |
 | `Roadmap.lean` | Remaining literal-Julia refinements; no unproved declarations. |
 
 `Audit.lean` prints the axioms of every main theorem (and of the definitions `Policy.ofFun`,
@@ -239,9 +241,20 @@ inputs are `d`'s information rows. `FullValid.chance_valid` proves that `chance`
 `Raw.Network.Valid` (`chance_network_valid`). `FullValid.closed` and `FullValid.idOrder` derive
 `Closed` and an `IDOrder` of the compiled diagram, so `solveRepRecords_table_of_fullValid`,
 `solveRepRecords_optimal_of_fullValid` and `solveRecords_table_of_fullValid` drop those
-hypotheses; the original theorems under `Valid` are unchanged. Not checked by `FullValid`:
-decision-precedence rows (stored, not validated), unique variable, decision or utility names,
-and no-forgetting (`NoForgettingOrder` stays a hypothesis).
+hypotheses; the original theorems under `Valid` are unchanged. `FullValid` also mirrors Julia's
+three checks of the `DecisionPrecedence` rows (`src/validation.jl`): both IDs in range (the type
+`Fin nd`, enforced by the decoder; Julia's `DanglingReferenceError`), the precedence rows alone
+acyclic (`_check_precedence!`, `DecisionPrecedenceCycleError`; derived as
+`FullValid.precedence_rank`, with `FullValid.precedence_irrefl` excluding self-loops), and Julia's
+`information_graph` acyclic (`_check_information_order!`): the field `precedence_acyclic` is
+`informationTables.Acyclic`, where `informationTables` adds to `chance` one input per precedence
+row (the later decision's policy mechanism reads the earlier action), and
+`informationTables_acyclic_iff` unpacks it as one injective rank ordering mechanism inputs,
+information variables and earlier actions before targets, actions and later actions. Duplicate
+precedence rows are accepted by both. `NamesUnique` (decidable; `namesCheck_iff`) is Julia's
+`unique_names = true`: variable, mechanism, decision and utility names each unique; it is not
+part of `FullValid`, as Julia leaves the option off by default. Not checked by `FullValid`:
+no-forgetting (`NoForgettingOrder` stays a hypothesis).
 
 `Finite/DVE/JsonRecords.lean` decodes the records from a parsed `Lean.Json` tree in the layout of
 `write_json_influence_diagram` (the `"influence-diagram-acset"` envelope; the four BN tables
@@ -258,11 +271,52 @@ off the document (information inputs in `information_position` order, action lab
 `state_position` order). `lake exe check_records FILE.json` prints that summary, and
 `BayesianNetworks.jl/proofs/scripts/check_records.jl` compares it with Julia's `states`,
 `inputs`, `decision_information` and the axes of the policy tables `optimize` returns.
+`decodeDiagramCheckedNames` adds `namesCheck` (`decodeDiagramCheckedNames_isSome_iff`), and the
+summary's `valid with unique names` line is compared with `validate(...; unique_names = true)`.
+
+`Finite/DVE/CertificateJson.lean` decodes the version-1 certificate of `export_dve_certificate`
+from a parsed `Json` tree: fourteen top-level keys (format, version, provenance, numeric mode,
+runtime tolerances, reference pool, variables with their state rows, topological and decision
+orders, mechanisms with ordered parents, CPT and factor tables, decisions with ordered
+information slots, precedence rows, utilities with ordered inputs and tables, hard evidence);
+part IDs are decimal strings decoded to zero-based indices and must be in range; a value is a
+16-digit lowercase binary64 word, an exact rational `{num, den}`, or both.
+`decodeCertificate_eq_ok` is faithfulness (`CertificateMatches`, key for key and row for row),
+`decodeCertificate_encode` the round trip for in-range records, `decodeCertificate_inRange`
+that every reference of a decoded certificate is in range, and
+`decodeCertificate_error_of_missing_key` / `_not_object` the failures. The layout was confirmed
+on the certificates Julia writes for the umbrella, oil-wildcatter and grazing models.
+`Finite/DVE/CertificateCheck.lean` decides `certificateMatches r h c` (`Matches`): the
+certificate's variables, state rows (in `state_position` order, with their labels:
+`Matches.stateLabel`), mechanisms, decisions (information slots in position order:
+`Matches.information`), precedence rows and utilities are the diagram's; CPT axes are the
+parents then the target, factor axes their first occurrences, utility axes the scope; the entries
+are every coordinate in lexicographic order, rightmost fastest; factor cells are the CPT
+diagonal; `topological_order` is a permutation with every input, information and precedence arc
+forward and evidence before actions, `decision_order` its decisions and no-forgetting; the pool
+is duplicate-free and used; values have the mode's shape, finite words, reduced rationals, and a
+word that is its rational's `nearestBinary64` rounding. The exact value of a cell is its rational,
+else its word's dyadic value (`Binary64.value`); `certKernel` and `certUtility` read the tables at
+an assignment's coordinates and are local (`certKernel_local`, `certUtility_local`); `certOrder`
+and `certNoForgetting` turn the two orders into an `IDOrder` and a `NoForgettingOrder`.
+`certificate_tables` (nonnegative cells): Julia's representative run on the certificate's exact
+data, any plan, returns on every row the least-`state_position` maximizer of its own score.
+`certificate_solve_spec` and `certificate_tables_optimal` (also every CPT row summing to exactly
+one, `ExactNormalised`, decided over `ℚ`): the DVE solution scheduled by the certificate's
+orders is deterministic, realizes its value and attains the optimum of the certificate's model,
+and every table entry at a row of positive reach is the least-position maximizer of the optimal
+continuation. The certificate has no policy table, value or plan, so no theorem says that
+Julia's own solution equals these; the certificate's evidence rows are checked structurally
+only and the theorems concern the unconditioned model; and Julia's default binary64 words
+rarely sum to exactly one (none of the umbrella, oil-wildcatter and grazing certificates
+does), so `ExactNormalised` holds for a rational-mode certificate with decimal companions,
+not for those. `lake exe check_certificate DIAGRAM.json CERTIFICATE.json` prints each check, and
+the cross-check script runs it on every influence diagram it covers and on mutated certificates.
 
 Not proved: `Lean.Json.parse` and Julia's JSON3/ACSets writer (trusted; the theorems start from
-a parsed `Json` tree); that Julia's DVE certificate (whose `variables[].states` rows carry
-exactly `id`, `position` and `label`) decodes into these records (there is no Lean consumer of
-the certificate); the no-forgetting hypothesis, and under `Valid` alone the closedness and order
+a parsed `Json` tree), Julia's `export_dve_certificate` and its `Float64` capture; that Julia's
+solution (policy tables and value, which the certificate does not carry) equals the one the
+certificate theorems describe; the no-forgetting hypothesis of the `_of_fullValid` theorems, and under `Valid` alone the closedness and order
 hypotheses; that Julia's action axis lists `states(id, v)` in `state_position` order (a Julia
 test pins it, and the cross-check agrees on every fixture; the array layout is the
 `FiniteKernels` `Layout/` result); and Julia's execution itself.

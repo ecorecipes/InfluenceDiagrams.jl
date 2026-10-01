@@ -92,13 +92,23 @@ ordered but neither knows the other's action: that is a forgetting diagram, and 
   is the least-position maximizer (`solveRecords_table`, `solveRepRecords_optimal`).
   `Finite/DVE/RecordsValid.lean` adds `FullValid` (every table checked; the instantiated chance
   part satisfies BN `Raw.Network.Valid`, `FullValid.chance_valid`) and the `_of_fullValid`
-  versions of those theorems without the `Closed`/`IDOrder` hypotheses (no-forgetting stays one;
-  decision precedence and name uniqueness are not checked). `Finite/DVE/JsonRecords.lean`
+  versions of those theorems without the `Closed`/`IDOrder` hypotheses (no-forgetting stays one).
+  `FullValid` also mirrors `validate`'s decision-precedence checks (`precedence_acyclic`: Julia's
+  `information_graph` acyclic, `informationTables_acyclic_iff`; the rows alone acyclic,
+  `FullValid.precedence_rank`); `NamesUnique` is the separate `unique_names = true` check.
+  `Finite/DVE/JsonRecords.lean`
   decodes a parsed `write_json_influence_diagram` JSON tree into the records, faithfully
   (`decodeDiagram_eq_ok`), with round trip (`decodeDiagram_encodeDiagram`) and failure lemmas;
   `lake exe check_records` in `proofs/` prints the decoded summary and
-  `BayesianNetworks.jl/proofs/scripts/check_records.jl` compares it with Julia. Not proved:
-  `Lean.Json.parse` and Julia's JSON3/ACSets writer (trusted), decoding the DVE certificate,
+  `BayesianNetworks.jl/proofs/scripts/check_records.jl` compares it with Julia.
+  `Finite/DVE/CertificateJson.lean` decodes the `export_dve_certificate` JSON faithfully
+  (`decodeCertificate_eq_ok`, round trip, in-range references) and
+  `Finite/DVE/CertificateCheck.lean` decides `certificateMatches` against the decoded records;
+  `certificate_solve_spec` / `certificate_tables_optimal` hold for the model the certificate's
+  exact numbers define when its CPT rows sum to exactly one (rarely true of binary64 words), and
+  `certificate_tables` when they are nonnegative. The certificate has no policy or value, so
+  Julia's own solution is not covered; `lake exe check_certificate` runs the checker. Not proved:
+  `Lean.Json.parse`, Julia's JSON3/ACSets writer and `export_dve_certificate` (trusted),
   that Julia's action axis follows `state_position` (a test pins it, the cross-check agrees on
   fixtures), and Float64 rounding (near-ties that rounding
   creates or breaks); signed zeros now tie as reals and non-finite utilities are rejected.

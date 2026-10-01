@@ -7,6 +7,7 @@ Reads a document written by InfluenceDiagrams.jl's `write_json_influence_diagram
 
     format: influence-diagram-acset
     valid: yes
+    valid with unique names: yes|no
     variables: <n>
     states <variable>: <label at position 1>, ...
     parents <target variable>: <slot 1 variable>, ...          (chance mechanisms)
@@ -17,7 +18,10 @@ Reads a document written by InfluenceDiagrams.jl's `write_json_influence_diagram
     topological: <variable>, ...                                (instantiated chance part)
     acyclic: yes
 
-`states` lines list `Raw.Tables.labelAt`, the compiled state labels in position order
+`valid` is `decodeDiagramChecked` (`FullValid`, which includes the decision-precedence checks),
+and `valid with unique names` is `decodeDiagramCheckedNames` (`FullValid` and `NamesUnique`), the
+verdicts of Julia's `validate(...; closed = true)` and `validate(...; closed = true,
+unique_names = true)`. `states` lines list `Raw.Tables.labelAt`, the compiled state labels in position order
 (`Raw.Network.labelAt_eq`); `information` lines list `Raw.Tables.slotAt` of the decision's policy
 mechanism in the instantiated chance part, its slot variables in `information_position` order
 (`Raw.Network.slotAt_eq`, `decodeDiagramChecked_policyAxes`). The `policy` line is the policy-table
@@ -36,13 +40,14 @@ open BayesianNetworksProofs.Raw InfluenceDiagramsProofs.Records
 def joinLabels (xs : List String) : String := ", ".intercalate xs
 
 /-- The summary lines of a checked diagram. -/
-def summary (r : Diagram) (_h : r.FullValid) : List String := Id.run do
+def summary (r : Diagram) (_h : r.FullValid) (names : Bool) : List String := Id.run do
   let t := r.chance
   let name (v : Fin r.nv) : String := (r.vars v).name
   let labels (v : Fin r.nv) : List String :=
     (List.range (r.stateCount v)).map fun a => (t.labelAt v a).getD "?"
   let mut out : List String :=
-    ["format: influence-diagram-acset", "valid: yes", s!"variables: {r.nv}"]
+    ["format: influence-diagram-acset", "valid: yes",
+      s!"valid with unique names: {if names then "yes" else "no"}", s!"variables: {r.nv}"]
   for v in List.finRange r.nv do
     out := out ++ [s!"states {name v}: {joinLabels (labels v)}"]
   for m in List.finRange r.nm do
@@ -95,12 +100,14 @@ def main (args : List String) : IO UInt32 := do
       | .ok r =>
         match decodeDiagramChecked j with
         | some ⟨r', h⟩ =>
-          for line in summary r' h do
+          let names := (decodeDiagramCheckedNames j).isSome
+          for line in summary r' h names do
             IO.println line
           return 0
         | none =>
           IO.println "format: influence-diagram-acset"
           IO.println "valid: no"
+          IO.println "valid with unique names: no"
           IO.println s!"variables: {r.nv}"
           return 1
   | _ =>

@@ -17,7 +17,13 @@ BayesianNetworks' `Raw.Network.Valid` checks for a network:
   variables (every variable has exactly one generator);
 * acyclicity: some injective rank puts every mechanism input below the mechanism's target and
   every information variable below the decision's action (`chance.Acyclic`, decided by the
-  proved placement of `Raw.Tables.computeRank`).
+  proved placement of `Raw.Tables.computeRank`);
+* decision precedence: some injective rank does all that and also puts the action of every
+  `DecisionPrecedence` row's `earlier` decision below the action of its `later` decision
+  (`informationTables.Acyclic`). These ranks are the topological orders of Julia's
+  `information_graph`, which adds one arc per precedence row (earlier action to later action) to
+  the causal and information arcs; `validate` reports a cycle in it, or in the precedence rows
+  alone, as `DecisionPrecedenceCycleError` (or as a `:downstream` information error).
 
 `chance` is the chance part with every decision instantiated as a mechanism, as Julia's
 `instantiate` does: decision `d` becomes the mechanism `nm + d` named `policy[name]` with kernel
@@ -31,8 +37,20 @@ hypotheses: `solveRepRecords_table_of_fullValid` (no `Closed`),
 `solveRepRecords_optimal_of_fullValid` and `solveRecords_table_of_fullValid` (neither `Closed`
 nor `IDOrder`). The original theorems, under `Valid` with the hypotheses, are unchanged.
 
-Not checked: decision precedence rows (stored, not validated), unique variable, decision or
-utility names, and the no-forgetting condition (`NoForgettingOrder` stays a hypothesis).
+Julia's `validate` (`InfluenceDiagrams.jl/src/validation.jl`) checks the `DecisionPrecedence` rows
+in three ways, and `FullValid` mirrors each: both IDs in `1..nDecision` (`DanglingReferenceError`;
+here by the type `Fin nd`, which the decoder enforces), the precedence rows alone acyclic
+(`_check_precedence!`, Kahn's algorithm on the decisions; a self-loop is a cycle), and the
+combined graph acyclic (`_check_information_order!`). Duplicate rows are allowed by both (Graphs'
+`add_edge!` ignores a repeated arc; a repeated rank inequality is harmless), and no other
+precedence check exists. `FullValid.precedence_rank` derives the decision-only acyclicity and
+`FullValid.precedence_irrefl` the absence of self-loops.
+
+`NamesUnique` is the separate, decidable check of `validate(...; unique_names = true)`: variable
+and mechanism names (BayesianNetworks' `_check_unique_names!`) and decision and utility names
+(`_check_id_names!`) unique; Julia leaves it off by default, and so does `FullValid`.
+
+Not checked: the no-forgetting condition (`NoForgettingOrder` stays a hypothesis).
 -/
 
 set_option autoImplicit false
@@ -177,11 +195,127 @@ theorem chance_acyclic_iff (r : Diagram) : r.chance.Acyclic ↔
     · rw [chance_input_right]
       simpa [chance_target_right] using hf f
 
+/-! ## Decision precedence -/
+
+/-- **The information graph as tables**: the instantiated chance part with one more input per
+`DecisionPrecedence` row, by which the policy mechanism of `later` reads the action of `earlier`
+(at position `0`; only the rank conditions read these rows). Its causal ranks are exactly the
+topological orders of Julia's `information_graph` (`informationTables_causalRank_iff`). -/
+def informationTables (r : Diagram) : Raw.Tables where
+  nv := r.nv
+  ns := r.ns
+  nm := r.nm + r.nd
+  ni := (r.ni + r.nf) + r.np
+  vars := r.vars
+  states := r.states
+  mechanisms := Fin.append r.mechanisms fun d => policyMechanism (r.decisions d)
+  inputs := Fin.append
+    (Fin.append
+      (fun i => ⟨Fin.castAdd r.nd (r.inputs i).mechanism, (r.inputs i).var, (r.inputs i).position⟩)
+      (fun f => ⟨Fin.natAdd r.nm (r.information f).decision, (r.information f).var,
+        (r.information f).position⟩))
+    (fun p => ⟨Fin.natAdd r.nm (r.precedence p).later, (r.decisions (r.precedence p).earlier).action,
+      0⟩)
+
+theorem informationTables_input_left (r : Diagram) (k : Fin (r.ni + r.nf)) :
+    r.informationTables.inputs (Fin.castAdd r.np k) = r.chance.inputs k := by
+  simp [informationTables, chance]
+
+theorem informationTables_input_right (r : Diagram) (p : Fin r.np) :
+    r.informationTables.inputs (Fin.natAdd (r.ni + r.nf) p) =
+      ⟨Fin.natAdd r.nm (r.precedence p).later, (r.decisions (r.precedence p).earlier).action, 0⟩ := by
+  simp [informationTables]
+
+theorem informationTables_mechanisms (r : Diagram) :
+    r.informationTables.mechanisms = r.chance.mechanisms := rfl
+
+/-- A causal rank of the information tables is a causal rank of the instantiated chance part that
+also orders every precedence row's earlier action below its later action. -/
+theorem informationTables_causalRank_iff (r : Diagram) (rank : Fin r.nv → Fin r.nv) :
+    r.informationTables.CausalRank rank ↔ r.chance.CausalRank rank ∧
+      ∀ p, rank (r.decisions (r.precedence p).earlier).action <
+        rank (r.decisions (r.precedence p).later).action := by
+  constructor
+  · rintro ⟨hinj, hc⟩
+    refine ⟨⟨hinj, fun k => ?_⟩, fun p => ?_⟩
+    · have := hc (Fin.castAdd r.np k)
+      rw [informationTables_input_left] at this
+      exact this
+    · have := hc (Fin.natAdd (r.ni + r.nf) p)
+      rw [informationTables_input_right] at this
+      rw [informationTables_mechanisms] at this
+      simpa only [chance_target_right] using this
+  · rintro ⟨⟨hinj, hc⟩, hp⟩
+    refine ⟨hinj, fun k => ?_⟩
+    refine Fin.addCases (fun k => ?_) (fun p => ?_) k
+    · rw [informationTables_input_left]
+      exact hc k
+    · rw [informationTables_input_right, informationTables_mechanisms]
+      simpa only [chance_target_right] using hp p
+
+/-- The acyclicity of the information graph, unpacked: one injective rank orders every mechanism
+input before its target, every information variable before its action, and every precedence
+row's earlier action before its later action. -/
+theorem informationTables_acyclic_iff (r : Diagram) : r.informationTables.Acyclic ↔
+    ∃ rank : Fin r.nv → Fin r.nv, Function.Injective rank ∧
+      (∀ i, rank (r.inputs i).var < rank (r.mechanisms (r.inputs i).mechanism).target) ∧
+      (∀ f, rank (r.information f).var < rank (r.decisions (r.information f).decision).action) ∧
+      ∀ p, rank (r.decisions (r.precedence p).earlier).action <
+        rank (r.decisions (r.precedence p).later).action := by
+  constructor
+  · rintro ⟨rank, hr⟩
+    obtain ⟨hc, hp⟩ := (r.informationTables_causalRank_iff rank).1 hr
+    refine ⟨rank, hc.1, fun i => ?_, fun f => ?_, hp⟩
+    · have := hc.2 (Fin.castAdd r.nf i)
+      rw [chance_input_left] at this
+      simpa [chance_target_left] using this
+    · have := hc.2 (Fin.natAdd r.ni f)
+      rw [chance_input_right] at this
+      simpa [chance_target_right] using this
+  · rintro ⟨rank, hinj, hi, hf, hp⟩
+    refine ⟨rank, (r.informationTables_causalRank_iff rank).2 ⟨⟨hinj, fun k => ?_⟩, hp⟩⟩
+    refine Fin.addCases (fun i => ?_) (fun f => ?_) k
+    · rw [chance_input_left]
+      simpa [chance_target_left] using hi i
+    · rw [chance_input_right]
+      simpa [chance_target_right] using hf f
+
+/-- An acyclic information graph has an acyclic instantiated chance part. -/
+theorem chance_acyclic_of_informationTables {r : Diagram} (h : r.informationTables.Acyclic) :
+    r.chance.Acyclic := by
+  obtain ⟨rank, hr⟩ := h
+  exact ⟨rank, ((r.informationTables_causalRank_iff rank).1 hr).1⟩
+
+/-! ## Unique names -/
+
+/-- **`validate(...; unique_names = true)`**: variable, mechanism, decision and utility names are
+each unique (`DuplicateNameError` otherwise). Not part of `FullValid`, as in Julia, where the
+option is off by default. -/
+structure NamesUnique (r : Diagram) : Prop where
+  variable_names : ∀ v w, (r.vars v).name = (r.vars w).name → v = w
+  mechanism_names : ∀ m n, (r.mechanisms m).name = (r.mechanisms n).name → m = n
+  decision_names : ∀ d e, (r.decisions d).name = (r.decisions e).name → d = e
+  utility_names : ∀ j k, (r.utilities j).name = (r.utilities k).name → j = k
+
+theorem namesUnique_iff (r : Diagram) : r.NamesUnique ↔
+    (∀ v w, (r.vars v).name = (r.vars w).name → v = w) ∧
+    (∀ m n, (r.mechanisms m).name = (r.mechanisms n).name → m = n) ∧
+    (∀ d e, (r.decisions d).name = (r.decisions e).name → d = e) ∧
+    ∀ j k, (r.utilities j).name = (r.utilities k).name → j = k :=
+  ⟨fun h => ⟨h.1, h.2, h.3, h.4⟩, fun h => ⟨h.1, h.2.1, h.2.2.1, h.2.2.2⟩⟩
+
+instance (r : Diagram) : Decidable r.NamesUnique := decidable_of_iff _ (namesUnique_iff r).symm
+
+def namesCheck (r : Diagram) : Bool := decide r.NamesUnique
+
+theorem namesCheck_iff (r : Diagram) : r.namesCheck = true ↔ r.NamesUnique := by
+  simp [namesCheck]
+
 /-! ## Full validity -/
 
 /-- **Every table checked**: the state rows (`Valid`), positions of inputs, information inputs
-and utility inputs, the generators (one per variable) and acyclicity of the instantiated chance
-part. All decidable. -/
+and utility inputs, the generators (one per variable), acyclicity of the instantiated chance
+part, and acyclicity of the information graph with the decision-precedence arcs. All decidable. -/
 structure FullValid (r : Diagram) : Prop where
   valid : r.Valid
   input_positions : Positioned (fun i => (r.inputs i).mechanism) (fun i => (r.inputs i).position)
@@ -194,6 +328,8 @@ structure FullValid (r : Diagram) : Prop where
   disjoint : ∀ m d, (r.mechanisms m).target ≠ (r.decisions d).action
   cover : ∀ v, (∃ m, (r.mechanisms m).target = v) ∨ ∃ d, (r.decisions d).action = v
   acyclic : r.chance.Acyclic
+  /-- The decision-precedence rows are consistent: Julia's `information_graph` is acyclic. -/
+  precedence_acyclic : r.informationTables.Acyclic
 
 theorem fullValid_iff (r : Diagram) : r.FullValid ↔
     r.Valid ∧ Positioned (fun i => (r.inputs i).mechanism) (fun i => (r.inputs i).position) ∧
@@ -203,11 +339,12 @@ theorem fullValid_iff (r : Diagram) : r.FullValid ↔
     (∀ d d', (r.decisions d).action = (r.decisions d').action → d = d') ∧
     (∀ m d, (r.mechanisms m).target ≠ (r.decisions d).action) ∧
     (∀ v, (∃ m, (r.mechanisms m).target = v) ∨ ∃ d, (r.decisions d).action = v) ∧
-    r.chance.Acyclic :=
-  ⟨fun h => ⟨h.1, h.2, h.3, h.4, fun _ _ he => h.5 he, fun _ _ he => h.6 he, h.7, h.8, h.9⟩,
+    r.chance.Acyclic ∧ r.informationTables.Acyclic :=
+  ⟨fun h => ⟨h.1, h.2, h.3, h.4, fun _ _ he => h.5 he, fun _ _ he => h.6 he, h.7, h.8, h.9,
+      h.10⟩,
     fun h => ⟨h.1, h.2.1, h.2.2.1, h.2.2.2.1, fun _ _ he => h.2.2.2.2.1 _ _ he,
       fun _ _ he => h.2.2.2.2.2.1 _ _ he, h.2.2.2.2.2.2.1, h.2.2.2.2.2.2.2.1,
-      h.2.2.2.2.2.2.2.2⟩⟩
+      h.2.2.2.2.2.2.2.2.1, h.2.2.2.2.2.2.2.2.2⟩⟩
 
 instance (r : Diagram) : Decidable r.FullValid := decidable_of_iff _ (fullValid_iff r).symm
 
@@ -252,6 +389,24 @@ theorem FullValid.chance_valid {r : Diagram} (h : r.FullValid) : r.chance.Valid 
       rcases h.cover v with ⟨m, hm⟩ | ⟨d, hd⟩
       · exact ⟨Fin.castAdd r.nd m, by simp only [chance_target_left]; exact hm⟩
       · exact ⟨Fin.natAdd r.nm d, by simp only [chance_target_right]; exact hd⟩
+
+/-- **The decision-precedence rows alone are acyclic** (Julia's `_check_precedence!`): some
+injective rank of the decisions puts every row's `earlier` below its `later`. -/
+theorem FullValid.precedence_rank {r : Diagram} (h : r.FullValid) :
+    ∃ rank : Fin r.nd → ℕ, Function.Injective rank ∧
+      ∀ p, rank (r.precedence p).earlier < rank (r.precedence p).later := by
+  obtain ⟨rank, hinj, -, -, hp⟩ := r.informationTables_acyclic_iff.1 h.precedence_acyclic
+  refine ⟨fun d => (rank (r.decisions d).action).val, fun d e he => ?_, fun p => hp p⟩
+  exact h.actions_injective (hinj (Fin.ext he))
+
+/-- **No precedence row is a self-loop.** -/
+theorem FullValid.precedence_irrefl {r : Diagram} (h : r.FullValid) (p : Fin r.np) :
+    (r.precedence p).earlier ≠ (r.precedence p).later := by
+  obtain ⟨rank, -, hp⟩ := h.precedence_rank
+  intro he
+  have := hp p
+  rw [he] at this
+  exact lt_irrefl _ this
 
 /-- **The ID's instantiated chance part is a BN `Raw.Network` satisfying `Raw.Network.Valid`**,
 with the computed causal rank. -/
