@@ -21,6 +21,21 @@
         @test errs == [MissingMechanismError(:X, variable_id(open_id, :X))]
     end
 
+    @testset "a Label or Position attribute without a value" begin
+        # Only an ACSet built part by part can have one; the influence-diagram checks that
+        # read names and positions are skipped, so the result is typed, never a `MethodError`.
+        id = umbrella_diagram()
+        d = add_part!(id, :Decision; decision_variable=variable_id(id, :Forecast))
+        @test validation_errors(id; closed=true, unique_names=true) ==
+              [BayesianNetworks.MissingAttributeError(:Decision, d, :decision_name)]
+        id = umbrella_diagram()
+        i = add_part!(id, :UtilityInput; utility_node=1)
+        @test validation_errors(id) ==
+              [BayesianNetworks.MissingAttributeError(:UtilityInput, i, :utility_position),
+               DanglingReferenceError(:UtilityInput, i, :utility_variable, 0)]
+        @test_throws BayesianNetworks.MissingAttributeError validate(id)
+    end
+
     @testset "item 1: at most one decision per variable" begin
         id = umbrella_diagram()
         add_decision!(id, :Umbrella; name=:Again)

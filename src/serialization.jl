@@ -23,10 +23,28 @@ end
 """
     parse_json_influence_diagram(str; type = InfluenceDiagram) -> type
 
-Parse a JSON string produced by [`json_influence_diagram`](@ref). Throws
-`BayesianNetworks.FormatError` if `str` is not JSON, if the envelope is missing or
-names another format or schema version, or if the `"acset"` body cannot be decoded as a
-`type` (ADR 0015).
+Parse a JSON string produced by [`json_influence_diagram`](@ref).
+
+# Throws
+
+`BayesianNetworks.FormatError` (ADR 0015), whose message names the table, row and column
+at fault:
+
+- if `str` is not JSON, or the envelope is missing or names another format or schema
+  version;
+- if the `"acset"` body does not have exactly one table per object and attribute type of
+  [`SchInfluenceDiagram`](@ref) (a missing `"DecisionPrecedence"` table is an error, not
+  an empty one), or an attribute-type table is not empty;
+- if a row does not have exactly the columns of its table (a missing `utility_ref` is an
+  error, not an unset reference), or a value has the wrong JSON type or range: an `"_id"`
+  other than the row number, a hom that is not the ID of a row of its codomain, a position
+  that is not an integer `>= 1`, a name that is not a string, or a reference that is not a
+  `KernelRef` object with exactly its type's keys.
+
+The body is checked by BayesianNetworks' reader with the rules of the proved Lean decoder
+(`proofs/InfluenceDiagramsProofs/Finite/DVE/JsonRecords.lean`). A document that passes them
+can still describe an invalid diagram, such as an action variable that is also a mechanism
+target: [`validate`](@ref) reports those.
 """
 function parse_json_influence_diagram(str::AbstractString;
                                       type::Type{<:AbstractInfluenceDiagram}=InfluenceDiagram)
@@ -62,8 +80,15 @@ end
 """
     read_json_influence_diagram(path; type = InfluenceDiagram) -> type
 
-Read a diagram written by [`write_json_influence_diagram`](@ref). Errors as for
-[`parse_json_influence_diagram`](@ref).
+Read a diagram written by [`write_json_influence_diagram`](@ref).
+
+# Throws
+
+`BayesianNetworks.FormatError` for a document that
+[`parse_json_influence_diagram`](@ref) rejects: text that is not JSON, a wrong envelope,
+or an `"acset"` body with a missing or unknown table or column or a value of the wrong
+JSON type or range; the message names the table, row and column. A missing file is Base's
+`SystemError`.
 """
 function read_json_influence_diagram(path::AbstractString;
                                      type::Type{<:AbstractInfluenceDiagram}=InfluenceDiagram)

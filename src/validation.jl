@@ -199,7 +199,10 @@ All structural problems of the influence diagram `id`, in a deterministic order,
 without stopping at the first: the checks of `validation_errors(::AbstractBayesNet)`
 on the chance part (with `closed = false`, so that action variables may lack a
 mechanism), then the influence-diagram checks of SPEC §37 listed in the module
-documentation of `validation.jl`. With `closed = true` every variable must have exactly
+documentation of `validation.jl`. A `Label` or `Position` attribute without a value,
+which only an ACSet built part by part can have, is a `MissingAttributeError`; the checks
+that read attributes are then skipped, and only the reference checks run. With
+`closed = true` every variable must have exactly
 one generator, a chance mechanism or a decision (`MissingMechanismError` otherwise).
 With `unique_names = true` decision and utility names must be unique as well as
 variable and mechanism names (`DuplicateNameError`).
@@ -209,6 +212,9 @@ function validation_errors(id::AbstractInfluenceDiagram; closed::Bool=false,
     errs = invoke(validation_errors, Tuple{AbstractBayesNet}, id; closed=false,
                   unique_names=unique_names)
     refs_ok = _check_id_references!(errs, id)
+    # The chance-part checks cover every `Label` and `Position` attribute of the diagram's
+    # schema, `decision_name` to `utility_position` included; the checks below read them.
+    any(e -> e isa MissingAttributeError, errs) && return errs
     _check_decisions!(errs, id, closed)
     _check_id_positions!(errs, id)
     if refs_ok

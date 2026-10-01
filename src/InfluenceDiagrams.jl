@@ -50,7 +50,8 @@ using BayesianNetworks
 using BayesianNetworks: Graphviz
 using BayesianNetworks: AbstractVariableSpace, AbstractBayesNet, BayesNetError,
                         MissingMechanismError, DuplicateGeneratorError,
-                        DanglingReferenceError, PositionError, DuplicateNameError,
+                        DanglingReferenceError, MissingAttributeError, PositionError,
+                        DuplicateNameError,
                         CyclicBayesNetError, UnknownVariableError, UnknownStateError,
                         MissingKernelError, ModelTooLargeError, UnsupportedNodeKindError,
                         KernelBindingError, MechanismRecord, ModelEvent,
