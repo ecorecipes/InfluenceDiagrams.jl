@@ -237,6 +237,30 @@ assert_no_sorry InfluenceDiagramsProofs.DVECertificate.certificate_tables_optima
 #print axioms InfluenceDiagramsProofs.DVECertificate.certificate_solve_spec
 #print axioms InfluenceDiagramsProofs.DVECertificate.certificate_tables_optimal
 
+-- Approximate optimality on approximately normalised kernels and certificates.
+assert_no_sorry InfluenceDiagramsProofs.DVE.solveRepPlanWith_approx_optimal
+assert_no_sorry InfluenceDiagramsProofs.DVECertificate.certificate_approx_optimal
+#print axioms InfluenceDiagramsProofs.DVE.reweight_error
+#print axioms InfluenceDiagramsProofs.DVE.decisionStep_prob_eq
+#print axioms InfluenceDiagramsProofs.DVE.decisionStep_util_eq
+#print axioms InfluenceDiagramsProofs.DVE.ApproxInv.initial
+#print axioms InfluenceDiagramsProofs.DVE.ApproxInv.chanceOf
+#print axioms InfluenceDiagramsProofs.DVE.ApproxInv.decisionWith
+#print axioms InfluenceDiagramsProofs.DVE.Plan.chanceCount_eq
+#print axioms InfluenceDiagramsProofs.DVE.card_chance_eq
+#print axioms InfluenceDiagramsProofs.DVE.runRepWith_approx
+#print axioms InfluenceDiagramsProofs.DVE.solveRepPlanWith_approx
+#print axioms InfluenceDiagramsProofs.DVE.solveRepPlanWith_approx_optimal
+#print axioms InfluenceDiagramsProofs.DVECertificate.certificateEpsilon_eq_zero_iff
+#print axioms InfluenceDiagramsProofs.DVECertificate.certRowSum_dev
+#print axioms InfluenceDiagramsProofs.DVECertificate.certNormKernel_normalised
+#print axioms InfluenceDiagramsProofs.DVECertificate.certNormKernel_eq_of_exact
+#print axioms InfluenceDiagramsProofs.DVECertificate.certKernel_envelope
+#print axioms InfluenceDiagramsProofs.DVECertificate.certUtility_total_le
+#print axioms InfluenceDiagramsProofs.DVECertificate.certificate_approx_optimal
+#print axioms InfluenceDiagramsProofs.DVECertificate.certificate_solve_approx
+#print axioms InfluenceDiagramsProofs.DVECertificate.certificate_approx_exact
+
 -- Exact multi-decision bucket DVE; the schedule is generated from no-forgetting.
 assert_no_sorry InfluenceDiagramsProofs.DVE.solve_spec
 assert_no_sorry InfluenceDiagramsProofs.DVE.solveEvidence_spec

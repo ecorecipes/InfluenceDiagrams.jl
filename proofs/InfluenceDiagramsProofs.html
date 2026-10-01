@@ -341,6 +341,39 @@ id="toc-the-certificates-model">The certificate’s model</a></li>
 id="toc-the-certificates-orders">The certificate’s orders</a></li>
 <li><a href="#soundness" id="toc-soundness">Soundness</a></li>
 </ul></li>
+<li><a
+href="#approximate-optimality-of-the-exact-dve-run-on-approximately-normalised-kernels"
+id="toc-approximate-optimality-of-the-exact-dve-run-on-approximately-normalised-kernels">Approximate
+optimality of the exact DVE run on approximately normalised kernels</a>
+<ul>
+<li><a href="#a-finite-re-weighting-lemma"
+id="toc-a-finite-re-weighting-lemma">A finite re-weighting
+lemma</a></li>
+<li><a href="#decision-steps-without-probability-independence"
+id="toc-decision-steps-without-probability-independence">Decision steps
+without probability independence</a></li>
+<li><a href="#the-reference-marginals"
+id="toc-the-reference-marginals">The reference marginals</a></li>
+<li><a href="#the-approximate-invariant"
+id="toc-the-approximate-invariant">The approximate invariant</a></li>
+<li><a href="#the-run" id="toc-the-run">The run</a></li>
+</ul></li>
+<li><a
+href="#approximate-optimality-on-a-certificate-whose-rows-nearly-sum-to-one"
+id="toc-approximate-optimality-on-a-certificate-whose-rows-nearly-sum-to-one">Approximate
+optimality on a certificate whose rows nearly sum to one</a>
+<ul>
+<li><a href="#computable-quantities"
+id="toc-computable-quantities">Computable quantities</a></li>
+<li><a href="#the-certificates-rows-are-the-models-rows"
+id="toc-the-certificates-rows-are-the-models-rows">The certificate’s
+rows are the model’s rows</a></li>
+<li><a href="#the-normalised-reference-kernel"
+id="toc-the-normalised-reference-kernel">The normalised reference
+kernel</a></li>
+<li><a href="#approximate-optimality"
+id="toc-approximate-optimality">Approximate optimality</a></li>
+</ul></li>
 <li><a href="#roadmap-and-exact-scope-of-the-dve-theorem"
 id="toc-roadmap-and-exact-scope-of-the-dve-theorem">Roadmap and exact
 scope of the DVE theorem</a></li>
@@ -10595,11 +10628,1085 @@ class="sourceCode lean"><code class="sourceCode lean"><span id="cb112-1"><a href
 <span id="cb112-69"><a href="#cb112-69" aria-hidden="true" tabindex="-1"></a><span class="kw">end</span> Soundness</span>
 <span id="cb112-70"><a href="#cb112-70" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb112-71"><a href="#cb112-71" aria-hidden="true" tabindex="-1"></a><span class="kw">end</span> InfluenceDiagramsProofs.DVECertificate</span></code></pre></div>
+<!-- InfluenceDiagramsProofs/Finite/DVE/Approximate.lean -->
+<h1
+id="approximate-optimality-of-the-exact-dve-run-on-approximately-normalised-kernels">Approximate
+optimality of the exact DVE run on approximately normalised kernels</h1>
+<div class="sourceCode" id="cb113"><pre
+class="sourceCode lean"><code class="sourceCode lean"><span id="cb113-1"><a href="#cb113-1" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> InfluenceDiagramsProofs.Finite.DVE.Representative</span></code></pre></div>
+<p><code>solve_spec</code>, <code>solveWith_spec</code> and
+<code>solveRepPlanWith_spec</code> need every chance row to sum to one.
+This module drops that hypothesis. The run is the exact DVE run
+(<code>runRepWith</code>: any maximizing selector, any representative
+choice <code>keep</code>, any plan) on a kernel <code>κ</code> whose
+rows need not sum to one. Its decisions are compared with a
+<strong>reference model</strong> <code>κ̂</code> that is normalised: the
+run’s joint weight is the reference joint times a factor in
+<code>[L, H]</code>,</p>
+<p><code>L * ∏ m, κ̂ m x (x (target m)) ≤ ∏ m, κ m x (x (target m)) ≤ H * ∏ m, κ̂ m x (x (target m))</code>,</p>
+<p>with <code>0 &lt; L ≤ H</code>, and every total utility satisfies
+<code>|U x| ≤ U</code>. Policies are not rows of <code>κ</code>: they
+are the strategy’s, normalised by <code>Policy.normalised</code>, so
+<code>L</code> and <code>H</code> are about the chance mechanisms
+only.</p>
+<p><strong>Why the bound is not <code>2 (H - 1) U</code>.</strong> The
+run does not maximise the unnormalised expected utility
+<code>∑ x, (∏ κ) (∏ δ) U</code>: a chance elimination stores the ratio
+of summed weight to summed mass, so a row-sum factor of a mechanism is
+divided out at the elimination of its target, while the factors carried
+by the eliminated part re-weight later averages; and the mass a decision
+step keeps is read at the action maximizing the probability potential,
+not at the chosen one. With a decision <code>D</code> and a child
+<code>X</code> of <code>D</code> whose rows sum to <code>s_a</code>, the
+run chooses the action maximizing <code>E_{κ̂(·|a)}[U]</code>, the
+unnormalised score of <code>a</code> is <code>s_a E_{κ̂(·|a)}[U]</code>,
+and the two maximizers differ. So the argument “the run maximizes the
+unnormalised score, which is within <code>(H - 1) U</code> of the
+reference expected utility for every policy” does not apply to the
+run.</p>
+<p><strong>What is proved instead (<code>ApproxInv</code>).</strong> For
+the reference marginals of the eliminated part (<code>refMarg</code>),
+the run’s probability potential stays within <code>[L, H]</code> times
+the reference mass, its utility potential stays bounded by
+<code>U</code> on rows of positive mass, and the reference continuation
+value of the run’s partial strategy, and of every competitor, stays
+within <code>e</code> of the run’s utility potential. Decision steps add
+nothing to <code>e</code> (the reference mass does not depend on the
+free action, <code>probability_independent</code>). A chance elimination
+averages the stored utilities with the run’s masses instead of the
+reference masses; since both are within <code>[L, H]</code> of each
+other, it adds at most <code>(H / L - 1) U</code>
+(<code>reweight_error</code>). Hence, with <code>k</code> chance
+eliminations in the plan (<code>Plan.chanceCount</code>, the number of
+chance variables, <code>Plan.chanceCount_eq</code>), and
+<code>e = k (H / L - 1) U</code> (<code>approxGap</code>):</p>
+<ul>
+<li><code>solveRepPlanWith_approx</code>: the returned strategy is
+deterministic, <code>|EU κ̂ σ* - value| ≤ e</code>, and
+<code>EU κ̂ τ ≤ value + e</code> for every nonnegative strategy
+<code>τ</code>;</li>
+<li><code>solveRepPlanWith_approx_optimal</code>:
+<code>EU κ̂ τ ≤ EU κ̂ σ* + 2 e</code> for every nonnegative
+<code>τ</code>,
+<code>optimalValue κ̂ u - 2 e ≤ EU κ̂ σ* ≤ optimalValue κ̂ u</code>, and
+<code>|value - optimalValue κ̂ u| ≤ e</code>.</li>
+</ul>
+<p>With <code>κ = κ̂</code> and <code>L = H = 1</code> the gap is
+<code>0</code> and these are <code>solveRepPlanWith_spec</code>’s
+conclusions. Everything is exact real arithmetic about the stated run:
+not a statement about a Float64 run.</p>
+<div class="sourceCode" id="cb114"><pre
+class="sourceCode lean"><code class="sourceCode lean"><span id="cb114-1"><a href="#cb114-1" aria-hidden="true" tabindex="-1"></a><span class="kw">set_option</span> autoImplicit false</span>
+<span id="cb114-2"><a href="#cb114-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb114-3"><a href="#cb114-3" aria-hidden="true" tabindex="-1"></a><span class="kw">namespace</span> InfluenceDiagramsProofs.DVE</span>
+<span id="cb114-4"><a href="#cb114-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb114-5"><a href="#cb114-5" aria-hidden="true" tabindex="-1"></a><span class="kw">open</span> BayesianNetworksProofs BayesianNetworksProofs.FinBayesNet FinInfluenceDiagram Valuation</span>
+<span id="cb114-6"><a href="#cb114-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb114-7"><a href="#cb114-7" aria-hidden="true" tabindex="-1"></a><span class="kw">noncomputable</span> <span class="kw">section</span></span></code></pre></div>
+<h2 id="a-finite-re-weighting-lemma">A finite re-weighting lemma</h2>
+<div class="sourceCode" id="cb115"><pre
+class="sourceCode lean"><code class="sourceCode lean"><span id="cb115-1"><a href="#cb115-1" aria-hidden="true" tabindex="-1"></a><span class="do">/-- **Averaging with perturbed weights.** If `P b` is within `[L, H]` of `M b ≥ 0`, `w b` is</span></span>
+<span id="cb115-2"><a href="#cb115-2" aria-hidden="true" tabindex="-1"></a><span class="do">bounded by `U` where `P b ≠ 0`, and `w&#39;` is the `P`-weighted average of `w`, then the</span></span>
+<span id="cb115-3"><a href="#cb115-3" aria-hidden="true" tabindex="-1"></a><span class="do">`M`-weighted sum of `w` differs from `w&#39; * ∑ M` by at most `(H / L - 1) U ∑ M`. -/</span></span>
+<span id="cb115-4"><a href="#cb115-4" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> reweight_error {B : <span class="kw">Type</span>} [Fintype B] (P M w : B → ℝ) (w&#39; L H U : ℝ)</span>
+<span id="cb115-5"><a href="#cb115-5" aria-hidden="true" tabindex="-1"></a>    (hL : <span class="dv">0</span> &lt; L) (hM : ∀ b, <span class="dv">0</span> ≤ M b) (hlo : ∀ b, L * M b ≤ P b) (hhi : ∀ b, P b ≤ H * M b)</span>
+<span id="cb115-6"><a href="#cb115-6" aria-hidden="true" tabindex="-1"></a>    (hw : ∀ b, P b ≠ <span class="dv">0</span> → |w b| ≤ U) (hU : <span class="dv">0</span> ≤ U)</span>
+<span id="cb115-7"><a href="#cb115-7" aria-hidden="true" tabindex="-1"></a>    (hw&#39; : (∑ b, P b) * w&#39; = ∑ b, P b * w b) :</span>
+<span id="cb115-8"><a href="#cb115-8" aria-hidden="true" tabindex="-1"></a>    |∑ b, w b * M b - w&#39; * ∑ b, M b| ≤ (H / L - <span class="dv">1</span>) * U * ∑ b, M b := <span class="kw">by</span></span>
+<span id="cb115-9"><a href="#cb115-9" aria-hidden="true" tabindex="-1"></a>  set S := ∑ b, M b <span class="kw">with</span> hSdef</span>
+<span id="cb115-10"><a href="#cb115-10" aria-hidden="true" tabindex="-1"></a>  set T := ∑ b, P b <span class="kw">with</span> hTdef</span>
+<span id="cb115-11"><a href="#cb115-11" aria-hidden="true" tabindex="-1"></a>  <span class="kw">have</span> hS : <span class="dv">0</span> ≤ S := Finset.sum_nonneg <span class="kw">fun</span> b _ =&gt; hM b</span>
+<span id="cb115-12"><a href="#cb115-12" aria-hidden="true" tabindex="-1"></a>  <span class="kw">have</span> hTlo : L * S ≤ T := <span class="kw">by</span></span>
+<span id="cb115-13"><a href="#cb115-13" aria-hidden="true" tabindex="-1"></a>    <span class="cf">rw</span> [hSdef, Finset.mul_sum]</span>
+<span id="cb115-14"><a href="#cb115-14" aria-hidden="true" tabindex="-1"></a>    <span class="cf">exact</span> Finset.sum_le_sum <span class="kw">fun</span> b _ =&gt; hlo b</span>
+<span id="cb115-15"><a href="#cb115-15" aria-hidden="true" tabindex="-1"></a>  <span class="kw">have</span> hThi : T ≤ H * S := <span class="kw">by</span></span>
+<span id="cb115-16"><a href="#cb115-16" aria-hidden="true" tabindex="-1"></a>    <span class="cf">rw</span> [hSdef, Finset.mul_sum]</span>
+<span id="cb115-17"><a href="#cb115-17" aria-hidden="true" tabindex="-1"></a>    <span class="cf">exact</span> Finset.sum_le_sum <span class="kw">fun</span> b _ =&gt; hhi b</span>
+<span id="cb115-18"><a href="#cb115-18" aria-hidden="true" tabindex="-1"></a>  <span class="cf">rcases</span> hS.lt_or_eq <span class="kw">with</span> hSpos | hS0</span>
+<span id="cb115-19"><a href="#cb115-19" aria-hidden="true" tabindex="-1"></a>  · <span class="kw">have</span> hTpos : <span class="dv">0</span> &lt; T := lt_of_lt_of_le (mul_pos hL hSpos) hTlo</span>
+<span id="cb115-20"><a href="#cb115-20" aria-hidden="true" tabindex="-1"></a>    <span class="kw">have</span> hLH : L ≤ H := le_of_mul_le_mul_right (hTlo.trans hThi) hSpos</span>
+<span id="cb115-21"><a href="#cb115-21" aria-hidden="true" tabindex="-1"></a>    <span class="kw">have</span> hkey : T * (∑ b, w b * M b - w&#39; * S) = ∑ b, w b * (T * M b - S * P b) := <span class="kw">by</span></span>
+<span id="cb115-22"><a href="#cb115-22" aria-hidden="true" tabindex="-1"></a>      <span class="kw">have</span> h1 : T * (w&#39; * S) = S * ∑ b, P b * w b := <span class="kw">by</span> <span class="cf">rw</span> [← hw&#39;]; <span class="cf">ring</span></span>
+<span id="cb115-23"><a href="#cb115-23" aria-hidden="true" tabindex="-1"></a>      <span class="cf">rw</span> [mul_sub, h1, Finset.mul_sum, Finset.mul_sum, ← Finset.sum_sub_distrib]</span>
+<span id="cb115-24"><a href="#cb115-24" aria-hidden="true" tabindex="-1"></a>      <span class="cf">exact</span> Finset.sum_congr <span class="cf">rfl</span> <span class="kw">fun</span> b _ =&gt; <span class="kw">by</span> <span class="cf">ring</span></span>
+<span id="cb115-25"><a href="#cb115-25" aria-hidden="true" tabindex="-1"></a>    <span class="kw">have</span> hterm : ∀ b, |w b * (T * M b - S * P b)| ≤ U * ((H - L) * S * M b) := <span class="kw">by</span></span>
+<span id="cb115-26"><a href="#cb115-26" aria-hidden="true" tabindex="-1"></a>      <span class="cf">intro</span> b</span>
+<span id="cb115-27"><a href="#cb115-27" aria-hidden="true" tabindex="-1"></a>      <span class="cf">by_cases</span> hP : P b = <span class="dv">0</span></span>
+<span id="cb115-28"><a href="#cb115-28" aria-hidden="true" tabindex="-1"></a>      · <span class="kw">have</span> hMb : M b = <span class="dv">0</span> := <span class="kw">by</span></span>
+<span id="cb115-29"><a href="#cb115-29" aria-hidden="true" tabindex="-1"></a>          <span class="kw">have</span> h := hlo b</span>
+<span id="cb115-30"><a href="#cb115-30" aria-hidden="true" tabindex="-1"></a>          <span class="cf">rw</span> [hP] <span class="kw">at</span> h</span>
+<span id="cb115-31"><a href="#cb115-31" aria-hidden="true" tabindex="-1"></a>          <span class="cf">exact</span> le_antisymm (<span class="kw">by</span> nlinarith [hM b]) (hM b)</span>
+<span id="cb115-32"><a href="#cb115-32" aria-hidden="true" tabindex="-1"></a>        <span class="cf">rw</span> [hP, hMb]</span>
+<span id="cb115-33"><a href="#cb115-33" aria-hidden="true" tabindex="-1"></a>        <span class="cf">simp</span></span>
+<span id="cb115-34"><a href="#cb115-34" aria-hidden="true" tabindex="-1"></a>      · <span class="cf">rw</span> [abs_mul]</span>
+<span id="cb115-35"><a href="#cb115-35" aria-hidden="true" tabindex="-1"></a>        <span class="cf">refine</span> mul_le_mul (hw b hP) ?_ (abs_nonneg _) hU</span>
+<span id="cb115-36"><a href="#cb115-36" aria-hidden="true" tabindex="-1"></a>        <span class="kw">have</span> h1 := mul_nonneg (sub_nonneg<span class="fl">.2</span> hThi) (hM b)</span>
+<span id="cb115-37"><a href="#cb115-37" aria-hidden="true" tabindex="-1"></a>        <span class="kw">have</span> h2 := mul_nonneg (sub_nonneg<span class="fl">.2</span> (hlo b)) hS</span>
+<span id="cb115-38"><a href="#cb115-38" aria-hidden="true" tabindex="-1"></a>        <span class="kw">have</span> h3 := mul_nonneg (sub_nonneg<span class="fl">.2</span> hTlo) (hM b)</span>
+<span id="cb115-39"><a href="#cb115-39" aria-hidden="true" tabindex="-1"></a>        <span class="kw">have</span> h4 := mul_nonneg (sub_nonneg<span class="fl">.2</span> (hhi b)) hS</span>
+<span id="cb115-40"><a href="#cb115-40" aria-hidden="true" tabindex="-1"></a>        <span class="cf">rw</span> [abs_le]</span>
+<span id="cb115-41"><a href="#cb115-41" aria-hidden="true" tabindex="-1"></a>        <span class="cf">constructor</span> &lt;;&gt; nlinarith</span>
+<span id="cb115-42"><a href="#cb115-42" aria-hidden="true" tabindex="-1"></a>    <span class="kw">have</span> hsum : T * |∑ b, w b * M b - w&#39; * S| ≤ T * ((H / L - <span class="dv">1</span>) * U * S) := <span class="kw">by</span></span>
+<span id="cb115-43"><a href="#cb115-43" aria-hidden="true" tabindex="-1"></a>      <span class="cf">rw</span> [← abs_of_pos hTpos, ← abs_mul, abs_of_pos hTpos, hkey]</span>
+<span id="cb115-44"><a href="#cb115-44" aria-hidden="true" tabindex="-1"></a>      <span class="kw">calc</span> |∑ b, w b * (T * M b - S * P b)|</span>
+<span id="cb115-45"><a href="#cb115-45" aria-hidden="true" tabindex="-1"></a>          ≤ ∑ b, |w b * (T * M b - S * P b)| := Finset.abs_sum_le_sum_abs _ _</span>
+<span id="cb115-46"><a href="#cb115-46" aria-hidden="true" tabindex="-1"></a>        _ ≤ ∑ b, U * ((H - L) * S * M b) := Finset.sum_le_sum <span class="kw">fun</span> b _ =&gt; hterm b</span>
+<span id="cb115-47"><a href="#cb115-47" aria-hidden="true" tabindex="-1"></a>        _ = U * (H - L) * S * S := <span class="kw">by</span></span>
+<span id="cb115-48"><a href="#cb115-48" aria-hidden="true" tabindex="-1"></a>          <span class="cf">rw</span> [← Finset.mul_sum, ← Finset.mul_sum, hSdef]</span>
+<span id="cb115-49"><a href="#cb115-49" aria-hidden="true" tabindex="-1"></a>          <span class="cf">ring</span></span>
+<span id="cb115-50"><a href="#cb115-50" aria-hidden="true" tabindex="-1"></a>        _ ≤ T * ((H / L - <span class="dv">1</span>) * U * S) := <span class="kw">by</span></span>
+<span id="cb115-51"><a href="#cb115-51" aria-hidden="true" tabindex="-1"></a>          <span class="kw">have</span> hHL : (H / L - <span class="dv">1</span>) * L = H - L := <span class="kw">by</span> <span class="cf">field_simp</span></span>
+<span id="cb115-52"><a href="#cb115-52" aria-hidden="true" tabindex="-1"></a>          <span class="kw">have</span> hc : <span class="dv">0</span> ≤ (H / L - <span class="dv">1</span>) * U * S := <span class="kw">by</span></span>
+<span id="cb115-53"><a href="#cb115-53" aria-hidden="true" tabindex="-1"></a>            <span class="cf">refine</span> mul_nonneg (mul_nonneg ?_ hU) hS</span>
+<span id="cb115-54"><a href="#cb115-54" aria-hidden="true" tabindex="-1"></a>            <span class="cf">rw</span> [sub_nonneg, le_div_iff₀ hL, one_mul]</span>
+<span id="cb115-55"><a href="#cb115-55" aria-hidden="true" tabindex="-1"></a>            <span class="cf">exact</span> hLH</span>
+<span id="cb115-56"><a href="#cb115-56" aria-hidden="true" tabindex="-1"></a>          <span class="kw">calc</span> U * (H - L) * S * S = ((H / L - <span class="dv">1</span>) * U * S) * (L * S) := <span class="kw">by</span></span>
+<span id="cb115-57"><a href="#cb115-57" aria-hidden="true" tabindex="-1"></a>                <span class="cf">rw</span> [← hHL]; <span class="cf">ring</span></span>
+<span id="cb115-58"><a href="#cb115-58" aria-hidden="true" tabindex="-1"></a>            _ ≤ ((H / L - <span class="dv">1</span>) * U * S) * T := mul_le_mul_of_nonneg_left hTlo hc</span>
+<span id="cb115-59"><a href="#cb115-59" aria-hidden="true" tabindex="-1"></a>            _ = T * ((H / L - <span class="dv">1</span>) * U * S) := <span class="kw">by</span> <span class="cf">ring</span></span>
+<span id="cb115-60"><a href="#cb115-60" aria-hidden="true" tabindex="-1"></a>    <span class="cf">exact</span> le_of_mul_le_mul_left hsum hTpos</span>
+<span id="cb115-61"><a href="#cb115-61" aria-hidden="true" tabindex="-1"></a>  · <span class="kw">have</span> hMz : ∀ b, M b = <span class="dv">0</span> := <span class="kw">fun</span> b =&gt;</span>
+<span id="cb115-62"><a href="#cb115-62" aria-hidden="true" tabindex="-1"></a>      (Finset.sum_eq_zero_iff_of_nonneg <span class="kw">fun</span> b _ =&gt; hM b).<span class="dv">1</span> hS0.symm b (Finset.mem_univ b)</span>
+<span id="cb115-63"><a href="#cb115-63" aria-hidden="true" tabindex="-1"></a>    <span class="cf">rw</span> [← hS0]</span>
+<span id="cb115-64"><a href="#cb115-64" aria-hidden="true" tabindex="-1"></a>    <span class="cf">simp</span> [hMz]</span></code></pre></div>
+<h2 id="decision-steps-without-probability-independence">Decision steps
+without probability independence</h2>
+<div class="sourceCode" id="cb116"><pre
+class="sourceCode lean"><code class="sourceCode lean"><span id="cb116-1"><a href="#cb116-1" aria-hidden="true" tabindex="-1"></a><span class="kw">section</span> Steps</span>
+<span id="cb116-2"><a href="#cb116-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb116-3"><a href="#cb116-3" aria-hidden="true" tabindex="-1"></a><span class="kw">variable</span> {bn : FinBayesNet}</span>
+<span id="cb116-4"><a href="#cb116-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb116-5"><a href="#cb116-5" aria-hidden="true" tabindex="-1"></a><span class="do">/-- The probability potential after a decision step, read at the probability maximizer. -/</span></span>
+<span id="cb116-6"><a href="#cb116-6" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> decisionStep_prob_eq (a : bn.V) (vs : List (Valuation bn)) (x : bn.Assignment) :</span>
+<span id="cb116-7"><a href="#cb116-7" aria-hidden="true" tabindex="-1"></a>    (collect (decisionStep a vs)).prob x =</span>
+<span id="cb116-8"><a href="#cb116-8" aria-hidden="true" tabindex="-1"></a>      (collect vs).prob (Function.update x a (probabilityChoice a (collect (bucket a vs)) x)) := <span class="kw">by</span></span>
+<span id="cb116-9"><a href="#cb116-9" aria-hidden="true" tabindex="-1"></a>  <span class="cf">rw</span> [(collect_partition a vs _).<span class="dv">1</span>, prob_update_of_notMem _ (outside_notMem a vs)]</span>
+<span id="cb116-10"><a href="#cb116-10" aria-hidden="true" tabindex="-1"></a>  <span class="cf">rfl</span></span>
+<span id="cb116-11"><a href="#cb116-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb116-12"><a href="#cb116-12" aria-hidden="true" tabindex="-1"></a><span class="do">/-- The utility potential after a decision step, read at the utility maximizer. -/</span></span>
+<span id="cb116-13"><a href="#cb116-13" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> decisionStep_util_eq (a : bn.V) (vs : List (Valuation bn)) (x : bn.Assignment) :</span>
+<span id="cb116-14"><a href="#cb116-14" aria-hidden="true" tabindex="-1"></a>    (collect (decisionStep a vs)).util x =</span>
+<span id="cb116-15"><a href="#cb116-15" aria-hidden="true" tabindex="-1"></a>      (collect vs).util (Function.update x a (choice a (collect (bucket a vs)) x)) := <span class="kw">by</span></span>
+<span id="cb116-16"><a href="#cb116-16" aria-hidden="true" tabindex="-1"></a>  <span class="cf">rw</span> [(collect_partition a vs _).<span class="dv">2</span>, util_update_of_notMem _ (outside_notMem a vs)]</span>
+<span id="cb116-17"><a href="#cb116-17" aria-hidden="true" tabindex="-1"></a>  <span class="cf">rfl</span></span>
+<span id="cb116-18"><a href="#cb116-18" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb116-19"><a href="#cb116-19" aria-hidden="true" tabindex="-1"></a><span class="kw">end</span> Steps</span>
+<span id="cb116-20"><a href="#cb116-20" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb116-21"><a href="#cb116-21" aria-hidden="true" tabindex="-1"></a><span class="kw">variable</span> {id : FinInfluenceDiagram}</span></code></pre></div>
+<h2 id="the-reference-marginals">The reference marginals</h2>
+<div class="sourceCode" id="cb117"><pre
+class="sourceCode lean"><code class="sourceCode lean"><span id="cb117-1"><a href="#cb117-1" aria-hidden="true" tabindex="-1"></a><span class="do">/-- The reference marginal of `F` over the eliminated variables `Rᶜ`, with the strategy `σ` on</span></span>
+<span id="cb117-2"><a href="#cb117-2" aria-hidden="true" tabindex="-1"></a><span class="do">the eliminated decisions. -/</span></span>
+<span id="cb117-3"><a href="#cb117-3" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> refMarg (κ : id.Kernel ℝ) (R : Finset id.V) (σ : Strategy id ℝ) (F : id.Assignment → ℝ)</span>
+<span id="cb117-4"><a href="#cb117-4" aria-hidden="true" tabindex="-1"></a>    (x : id.Assignment) : ℝ :=</span>
+<span id="cb117-5"><a href="#cb117-5" aria-hidden="true" tabindex="-1"></a>  marg Rᶜ (<span class="kw">fun</span> y =&gt; freeJoint κ Rᶜ σ y * F y) x</span>
+<span id="cb117-6"><a href="#cb117-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb117-7"><a href="#cb117-7" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> refMarg_mass_nonneg (κ : id.Kernel ℝ) (hκ : ∀ m x a, <span class="dv">0</span> ≤ κ m x a) (R : Finset id.V)</span>
+<span id="cb117-8"><a href="#cb117-8" aria-hidden="true" tabindex="-1"></a>    (σ : Strategy id ℝ) (hσ : σ.Nonneg) (x : id.Assignment) :</span>
+<span id="cb117-9"><a href="#cb117-9" aria-hidden="true" tabindex="-1"></a>    <span class="dv">0</span> ≤ refMarg κ R σ (<span class="kw">fun</span> _ =&gt; <span class="dv">1</span>) x :=</span>
+<span id="cb117-10"><a href="#cb117-10" aria-hidden="true" tabindex="-1"></a>  Finset.sum_nonneg <span class="kw">fun</span> y _ =&gt; <span class="kw">by</span></span>
+<span id="cb117-11"><a href="#cb117-11" aria-hidden="true" tabindex="-1"></a>    <span class="cf">simpa</span> only [mul_one] <span class="kw">using</span> freeJoint_nonneg κ hκ Rᶜ σ hσ y</span>
+<span id="cb117-12"><a href="#cb117-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb117-13"><a href="#cb117-13" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> refMarg_chance (κ : id.Kernel ℝ) {R : Finset id.V} (σ : Strategy id ℝ)</span>
+<span id="cb117-14"><a href="#cb117-14" aria-hidden="true" tabindex="-1"></a>    (F : id.Assignment → ℝ) (v : id.V) (hv : v ∈ R) (hc : ∀ d, id.action d ≠ v)</span>
+<span id="cb117-15"><a href="#cb117-15" aria-hidden="true" tabindex="-1"></a>    (x : id.Assignment) :</span>
+<span id="cb117-16"><a href="#cb117-16" aria-hidden="true" tabindex="-1"></a>    refMarg κ (R.erase v) σ F x = ∑ b, refMarg κ R σ F (Function.update x v b) := <span class="kw">by</span></span>
+<span id="cb117-17"><a href="#cb117-17" aria-hidden="true" tabindex="-1"></a>  <span class="kw">have</span> hn : v ∉ Rᶜ := <span class="kw">by</span> <span class="cf">simpa</span> <span class="kw">using</span> hv</span>
+<span id="cb117-18"><a href="#cb117-18" aria-hidden="true" tabindex="-1"></a>  <span class="cf">unfold</span> refMarg</span>
+<span id="cb117-19"><a href="#cb117-19" aria-hidden="true" tabindex="-1"></a>  <span class="cf">rw</span> [compl_erase, freeJoint_insert_chance κ Rᶜ σ v hc, marg_insert hn]</span>
+<span id="cb117-20"><a href="#cb117-20" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb117-21"><a href="#cb117-21" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> refMarg_univ (κ : id.Kernel ℝ) (σ : Strategy id ℝ) (F : id.Assignment → ℝ)</span>
+<span id="cb117-22"><a href="#cb117-22" aria-hidden="true" tabindex="-1"></a>    (x : id.Assignment) :</span>
+<span id="cb117-23"><a href="#cb117-23" aria-hidden="true" tabindex="-1"></a>    refMarg κ Finset.univ σ F x = (∏ m, κ m x (x (id.target m))) * F x := <span class="kw">by</span></span>
+<span id="cb117-24"><a href="#cb117-24" aria-hidden="true" tabindex="-1"></a>  <span class="cf">unfold</span> refMarg</span>
+<span id="cb117-25"><a href="#cb117-25" aria-hidden="true" tabindex="-1"></a>  <span class="cf">rw</span> [Finset.compl_univ, marg_empty, freeJoint_empty]</span>
+<span id="cb117-26"><a href="#cb117-26" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb117-27"><a href="#cb117-27" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> refMarg_empty (κ : id.Kernel ℝ) (σ : Strategy id ℝ) (F : id.Assignment → ℝ)</span>
+<span id="cb117-28"><a href="#cb117-28" aria-hidden="true" tabindex="-1"></a>    (x : id.Assignment) :</span>
+<span id="cb117-29"><a href="#cb117-29" aria-hidden="true" tabindex="-1"></a>    refMarg κ ∅ σ F x = ∑ y, joint (strategyKernel κ σ) y * F y := <span class="kw">by</span></span>
+<span id="cb117-30"><a href="#cb117-30" aria-hidden="true" tabindex="-1"></a>  <span class="cf">unfold</span> refMarg</span>
+<span id="cb117-31"><a href="#cb117-31" aria-hidden="true" tabindex="-1"></a>  <span class="cf">rw</span> [Finset.compl_empty, freeJoint_univ, marg_univ]</span></code></pre></div>
+<h2 id="the-approximate-invariant">The approximate invariant</h2>
+<div class="sourceCode" id="cb118"><pre
+class="sourceCode lean"><code class="sourceCode lean"><span id="cb118-1"><a href="#cb118-1" aria-hidden="true" tabindex="-1"></a><span class="do">/-- **The approximate invariant** of a run state `s` (any kernel) against the normalised</span></span>
+<span id="cb118-2"><a href="#cb118-2" aria-hidden="true" tabindex="-1"></a><span class="do">reference kernel `κ`: mass within `[L, H]` of the reference mass, utility bounded by `U` on rows</span></span>
+<span id="cb118-3"><a href="#cb118-3" aria-hidden="true" tabindex="-1"></a><span class="do">of positive mass, and reference values of the run&#39;s strategy and of every competitor within `e`</span></span>
+<span id="cb118-4"><a href="#cb118-4" aria-hidden="true" tabindex="-1"></a><span class="do">of the stored utility. -/</span></span>
+<span id="cb118-5"><a href="#cb118-5" aria-hidden="true" tabindex="-1"></a><span class="kw">structure</span> ApproxInv (κ : id.Kernel ℝ) (u : Utility id ℝ) (L H U e : ℝ) {R : Finset id.V}</span>
+<span id="cb118-6"><a href="#cb118-6" aria-hidden="true" tabindex="-1"></a>    (s : State id R) (σ : Strategy id ℝ) : <span class="kw">Prop</span> <span class="kw">where</span></span>
+<span id="cb118-7"><a href="#cb118-7" aria-hidden="true" tabindex="-1"></a>  nonneg : σ.Nonneg</span>
+<span id="cb118-8"><a href="#cb118-8" aria-hidden="true" tabindex="-1"></a>  mass_lower : ∀ x, L * refMarg κ R σ (<span class="kw">fun</span> _ =&gt; <span class="dv">1</span>) x ≤ (collect s.valuations).prob x</span>
+<span id="cb118-9"><a href="#cb118-9" aria-hidden="true" tabindex="-1"></a>  mass_upper : ∀ x, (collect s.valuations).prob x ≤ H * refMarg κ R σ (<span class="kw">fun</span> _ =&gt; <span class="dv">1</span>) x</span>
+<span id="cb118-10"><a href="#cb118-10" aria-hidden="true" tabindex="-1"></a>  bounded : ∀ x, (collect s.valuations).prob x ≠ <span class="dv">0</span> → |(collect s.valuations).util x| ≤ U</span>
+<span id="cb118-11"><a href="#cb118-11" aria-hidden="true" tabindex="-1"></a>  realizes : ∀ x, |refMarg κ R σ (totalUtility u) x -</span>
+<span id="cb118-12"><a href="#cb118-12" aria-hidden="true" tabindex="-1"></a>      (collect s.valuations).util x * refMarg κ R σ (<span class="kw">fun</span> _ =&gt; <span class="dv">1</span>) x| ≤</span>
+<span id="cb118-13"><a href="#cb118-13" aria-hidden="true" tabindex="-1"></a>    e * refMarg κ R σ (<span class="kw">fun</span> _ =&gt; <span class="dv">1</span>) x</span>
+<span id="cb118-14"><a href="#cb118-14" aria-hidden="true" tabindex="-1"></a>  dominates : ∀ τ : Strategy id ℝ, τ.Nonneg → ∀ x,</span>
+<span id="cb118-15"><a href="#cb118-15" aria-hidden="true" tabindex="-1"></a>    refMarg κ R τ (totalUtility u) x ≤</span>
+<span id="cb118-16"><a href="#cb118-16" aria-hidden="true" tabindex="-1"></a>      ((collect s.valuations).util x + e) * refMarg κ R σ (<span class="kw">fun</span> _ =&gt; <span class="dv">1</span>) x</span>
+<span id="cb118-17"><a href="#cb118-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb118-18"><a href="#cb118-18" aria-hidden="true" tabindex="-1"></a><span class="do">/-- The invariant at the start of a run: no error yet. -/</span></span>
+<span id="cb118-19"><a href="#cb118-19" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> ApproxInv.initial (κ κ&#39; : id.Kernel ℝ) (hloc : ∀ m, Local κ&#39; m)</span>
+<span id="cb118-20"><a href="#cb118-20" aria-hidden="true" tabindex="-1"></a>    (hnonneg : ∀ m x a, <span class="dv">0</span> ≤ κ&#39; m x a) (u : Utility id ℝ) (hu : ∀ j, Utility.Local u j)</span>
+<span id="cb118-21"><a href="#cb118-21" aria-hidden="true" tabindex="-1"></a>    (L H U : ℝ)</span>
+<span id="cb118-22"><a href="#cb118-22" aria-hidden="true" tabindex="-1"></a>    (henv : ∀ x, L * (∏ m, κ m x (x (id.target m))) ≤ ∏ m, κ&#39; m x (x (id.target m)) ∧</span>
+<span id="cb118-23"><a href="#cb118-23" aria-hidden="true" tabindex="-1"></a>      ∏ m, κ&#39; m x (x (id.target m)) ≤ H * ∏ m, κ m x (x (id.target m)))</span>
+<span id="cb118-24"><a href="#cb118-24" aria-hidden="true" tabindex="-1"></a>    (hU : ∀ x, |totalUtility u x| ≤ U) :</span>
+<span id="cb118-25"><a href="#cb118-25" aria-hidden="true" tabindex="-1"></a>    ApproxInv κ u L H U <span class="dv">0</span> (initial κ&#39; hloc hnonneg u hu) defaultStrategy <span class="kw">where</span></span>
+<span id="cb118-26"><a href="#cb118-26" aria-hidden="true" tabindex="-1"></a>  nonneg := deterministic_nonneg _ defaultStrategy_deterministic</span>
+<span id="cb118-27"><a href="#cb118-27" aria-hidden="true" tabindex="-1"></a>  mass_lower x := <span class="kw">by</span></span>
+<span id="cb118-28"><a href="#cb118-28" aria-hidden="true" tabindex="-1"></a>    <span class="cf">rw</span> [refMarg_univ, initial_prob, mul_one]</span>
+<span id="cb118-29"><a href="#cb118-29" aria-hidden="true" tabindex="-1"></a>    <span class="cf">exact</span> (henv x).<span class="dv">1</span></span>
+<span id="cb118-30"><a href="#cb118-30" aria-hidden="true" tabindex="-1"></a>  mass_upper x := <span class="kw">by</span></span>
+<span id="cb118-31"><a href="#cb118-31" aria-hidden="true" tabindex="-1"></a>    <span class="cf">rw</span> [refMarg_univ, initial_prob, mul_one]</span>
+<span id="cb118-32"><a href="#cb118-32" aria-hidden="true" tabindex="-1"></a>    <span class="cf">exact</span> (henv x).<span class="dv">2</span></span>
+<span id="cb118-33"><a href="#cb118-33" aria-hidden="true" tabindex="-1"></a>  bounded x _ := <span class="kw">by</span></span>
+<span id="cb118-34"><a href="#cb118-34" aria-hidden="true" tabindex="-1"></a>    <span class="cf">rw</span> [initial_util]</span>
+<span id="cb118-35"><a href="#cb118-35" aria-hidden="true" tabindex="-1"></a>    <span class="cf">exact</span> hU x</span>
+<span id="cb118-36"><a href="#cb118-36" aria-hidden="true" tabindex="-1"></a>  realizes x := <span class="kw">by</span></span>
+<span id="cb118-37"><a href="#cb118-37" aria-hidden="true" tabindex="-1"></a>    <span class="cf">rw</span> [refMarg_univ, refMarg_univ, initial_util]</span>
+<span id="cb118-38"><a href="#cb118-38" aria-hidden="true" tabindex="-1"></a>    <span class="cf">simp</span> [mul_comm]</span>
+<span id="cb118-39"><a href="#cb118-39" aria-hidden="true" tabindex="-1"></a>  dominates τ _ x := <span class="kw">by</span></span>
+<span id="cb118-40"><a href="#cb118-40" aria-hidden="true" tabindex="-1"></a>    <span class="cf">rw</span> [refMarg_univ, refMarg_univ, initial_util]</span>
+<span id="cb118-41"><a href="#cb118-41" aria-hidden="true" tabindex="-1"></a>    <span class="cf">simp</span> [mul_comm]</span>
+<span id="cb118-42"><a href="#cb118-42" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb118-43"><a href="#cb118-43" aria-hidden="true" tabindex="-1"></a><span class="do">/-- **A chance step adds at most `(H / L - 1) U` to the error**, for any step whose mass and</span></span>
+<span id="cb118-44"><a href="#cb118-44" aria-hidden="true" tabindex="-1"></a><span class="do">weighted utility are the sums over the eliminated variable (both `sumOut` representatives). -/</span></span>
+<span id="cb118-45"><a href="#cb118-45" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> ApproxInv.chanceOf {κ : id.Kernel ℝ} (hκ : ∀ m x a, <span class="dv">0</span> ≤ κ m x a) {u : Utility id ℝ}</span>
+<span id="cb118-46"><a href="#cb118-46" aria-hidden="true" tabindex="-1"></a>    {L H U e : ℝ} (hL : <span class="dv">0</span> &lt; L) (hU : <span class="dv">0</span> ≤ U) {R : Finset id.V} {s : State id R}</span>
+<span id="cb118-47"><a href="#cb118-47" aria-hidden="true" tabindex="-1"></a>    {σ : Strategy id ℝ} (h : ApproxInv κ u L H U e s σ) (v : id.V) (hv : v ∈ R)</span>
+<span id="cb118-48"><a href="#cb118-48" aria-hidden="true" tabindex="-1"></a>    (hc : ∀ d, id.action d ≠ v) (s&#39; : State id (R.erase v))</span>
+<span id="cb118-49"><a href="#cb118-49" aria-hidden="true" tabindex="-1"></a>    (hp : ∀ x, (collect s&#39;.valuations).prob x =</span>
+<span id="cb118-50"><a href="#cb118-50" aria-hidden="true" tabindex="-1"></a>      ∑ b, (collect s.valuations).prob (Function.update x v b))</span>
+<span id="cb118-51"><a href="#cb118-51" aria-hidden="true" tabindex="-1"></a>    (hw : ∀ x, (collect s&#39;.valuations).weight x =</span>
+<span id="cb118-52"><a href="#cb118-52" aria-hidden="true" tabindex="-1"></a>      ∑ b, (collect s.valuations).weight (Function.update x v b)) :</span>
+<span id="cb118-53"><a href="#cb118-53" aria-hidden="true" tabindex="-1"></a>    ApproxInv κ u L H U (e + (H / L - <span class="dv">1</span>) * U) s&#39; σ := <span class="kw">by</span></span>
+<span id="cb118-54"><a href="#cb118-54" aria-hidden="true" tabindex="-1"></a>  set P := (collect s.valuations).prob</span>
+<span id="cb118-55"><a href="#cb118-55" aria-hidden="true" tabindex="-1"></a>  set W := (collect s.valuations).util</span>
+<span id="cb118-56"><a href="#cb118-56" aria-hidden="true" tabindex="-1"></a>  <span class="kw">have</span> hP0 : ∀ y, <span class="dv">0</span> ≤ P y := <span class="kw">fun</span> y =&gt; (collect s.valuations).nonneg y</span>
+<span id="cb118-57"><a href="#cb118-57" aria-hidden="true" tabindex="-1"></a>  <span class="kw">have</span> hM0 := refMarg_mass_nonneg κ hκ R σ h.nonneg</span>
+<span id="cb118-58"><a href="#cb118-58" aria-hidden="true" tabindex="-1"></a>  <span class="co">-- the stored utility is the `P`-weighted average</span></span>
+<span id="cb118-59"><a href="#cb118-59" aria-hidden="true" tabindex="-1"></a>  <span class="kw">have</span> havg : ∀ x, (∑ b, P (Function.update x v b)) * (collect s&#39;.valuations).util x =</span>
+<span id="cb118-60"><a href="#cb118-60" aria-hidden="true" tabindex="-1"></a>      ∑ b, P (Function.update x v b) * W (Function.update x v b) := <span class="kw">by</span></span>
+<span id="cb118-61"><a href="#cb118-61" aria-hidden="true" tabindex="-1"></a>    <span class="cf">intro</span> x</span>
+<span id="cb118-62"><a href="#cb118-62" aria-hidden="true" tabindex="-1"></a>    <span class="kw">have</span> := hw x</span>
+<span id="cb118-63"><a href="#cb118-63" aria-hidden="true" tabindex="-1"></a>    <span class="cf">rw</span> [weight, hp] <span class="kw">at</span> this</span>
+<span id="cb118-64"><a href="#cb118-64" aria-hidden="true" tabindex="-1"></a>    <span class="cf">simpa</span> only [weight] <span class="kw">using</span> this</span>
+<span id="cb118-65"><a href="#cb118-65" aria-hidden="true" tabindex="-1"></a>  <span class="kw">have</span> hre : ∀ x, |∑ b, W (Function.update x v b) * refMarg κ R σ (<span class="kw">fun</span> _ =&gt; <span class="dv">1</span>)</span>
+<span id="cb118-66"><a href="#cb118-66" aria-hidden="true" tabindex="-1"></a>      (Function.update x v b) - (collect s&#39;.valuations).util x *</span>
+<span id="cb118-67"><a href="#cb118-67" aria-hidden="true" tabindex="-1"></a>        ∑ b, refMarg κ R σ (<span class="kw">fun</span> _ =&gt; <span class="dv">1</span>) (Function.update x v b)| ≤</span>
+<span id="cb118-68"><a href="#cb118-68" aria-hidden="true" tabindex="-1"></a>      (H / L - <span class="dv">1</span>) * U * ∑ b, refMarg κ R σ (<span class="kw">fun</span> _ =&gt; <span class="dv">1</span>) (Function.update x v b) := <span class="kw">fun</span> x =&gt;</span>
+<span id="cb118-69"><a href="#cb118-69" aria-hidden="true" tabindex="-1"></a>    reweight_error (<span class="kw">fun</span> b =&gt; P (Function.update x v b))</span>
+<span id="cb118-70"><a href="#cb118-70" aria-hidden="true" tabindex="-1"></a>      (<span class="kw">fun</span> b =&gt; refMarg κ R σ (<span class="kw">fun</span> _ =&gt; <span class="dv">1</span>) (Function.update x v b))</span>
+<span id="cb118-71"><a href="#cb118-71" aria-hidden="true" tabindex="-1"></a>      (<span class="kw">fun</span> b =&gt; W (Function.update x v b)) _ L H U hL (<span class="kw">fun</span> b =&gt; hM0 _)</span>
+<span id="cb118-72"><a href="#cb118-72" aria-hidden="true" tabindex="-1"></a>      (<span class="kw">fun</span> b =&gt; h.mass_lower _) (<span class="kw">fun</span> b =&gt; h.mass_upper _) (<span class="kw">fun</span> b hb =&gt; h.bounded _ hb) hU</span>
+<span id="cb118-73"><a href="#cb118-73" aria-hidden="true" tabindex="-1"></a>      (havg x)</span>
+<span id="cb118-74"><a href="#cb118-74" aria-hidden="true" tabindex="-1"></a>  <span class="cf">refine</span> ⟨h.nonneg, <span class="kw">fun</span> x =&gt; ?_, <span class="kw">fun</span> x =&gt; ?_, <span class="kw">fun</span> x hx =&gt; ?_, <span class="kw">fun</span> x =&gt; ?_, <span class="kw">fun</span> τ hτ x =&gt; ?_⟩</span>
+<span id="cb118-75"><a href="#cb118-75" aria-hidden="true" tabindex="-1"></a>  · <span class="cf">rw</span> [refMarg_chance κ σ _ v hv hc, hp, Finset.mul_sum]</span>
+<span id="cb118-76"><a href="#cb118-76" aria-hidden="true" tabindex="-1"></a>    <span class="cf">exact</span> Finset.sum_le_sum <span class="kw">fun</span> b _ =&gt; h.mass_lower _</span>
+<span id="cb118-77"><a href="#cb118-77" aria-hidden="true" tabindex="-1"></a>  · <span class="cf">rw</span> [refMarg_chance κ σ _ v hv hc, hp, Finset.mul_sum]</span>
+<span id="cb118-78"><a href="#cb118-78" aria-hidden="true" tabindex="-1"></a>    <span class="cf">exact</span> Finset.sum_le_sum <span class="kw">fun</span> b _ =&gt; h.mass_upper _</span>
+<span id="cb118-79"><a href="#cb118-79" aria-hidden="true" tabindex="-1"></a>  · <span class="kw">have</span> hpos : <span class="dv">0</span> &lt; ∑ b, P (Function.update x v b) := <span class="kw">by</span></span>
+<span id="cb118-80"><a href="#cb118-80" aria-hidden="true" tabindex="-1"></a>      <span class="cf">rw</span> [← hp]</span>
+<span id="cb118-81"><a href="#cb118-81" aria-hidden="true" tabindex="-1"></a>      <span class="cf">exact</span> lt_of_le_of_ne ((collect s&#39;.valuations).nonneg x) (Ne.symm hx)</span>
+<span id="cb118-82"><a href="#cb118-82" aria-hidden="true" tabindex="-1"></a>    <span class="kw">have</span> hb : |∑ b, P (Function.update x v b) * W (Function.update x v b)| ≤</span>
+<span id="cb118-83"><a href="#cb118-83" aria-hidden="true" tabindex="-1"></a>        U * ∑ b, P (Function.update x v b) := <span class="kw">by</span></span>
+<span id="cb118-84"><a href="#cb118-84" aria-hidden="true" tabindex="-1"></a>      <span class="cf">rw</span> [Finset.mul_sum]</span>
+<span id="cb118-85"><a href="#cb118-85" aria-hidden="true" tabindex="-1"></a>      <span class="cf">refine</span> (Finset.abs_sum_le_sum_abs _ _).trans (Finset.sum_le_sum <span class="kw">fun</span> b _ =&gt; ?_)</span>
+<span id="cb118-86"><a href="#cb118-86" aria-hidden="true" tabindex="-1"></a>      <span class="cf">rw</span> [abs_mul, abs_of_nonneg (hP0 _), mul_comm]</span>
+<span id="cb118-87"><a href="#cb118-87" aria-hidden="true" tabindex="-1"></a>      <span class="cf">by_cases</span> hz : P (Function.update x v b) = <span class="dv">0</span></span>
+<span id="cb118-88"><a href="#cb118-88" aria-hidden="true" tabindex="-1"></a>      · <span class="cf">simp</span> [hz]</span>
+<span id="cb118-89"><a href="#cb118-89" aria-hidden="true" tabindex="-1"></a>      · <span class="cf">exact</span> mul_le_mul_of_nonneg_right (h.bounded _ hz) (hP0 _)</span>
+<span id="cb118-90"><a href="#cb118-90" aria-hidden="true" tabindex="-1"></a>    <span class="cf">rw</span> [← havg x, abs_mul, abs_of_pos hpos, mul_comm] <span class="kw">at</span> hb</span>
+<span id="cb118-91"><a href="#cb118-91" aria-hidden="true" tabindex="-1"></a>    <span class="cf">exact</span> le_of_mul_le_mul_right hb hpos</span>
+<span id="cb118-92"><a href="#cb118-92" aria-hidden="true" tabindex="-1"></a>  · <span class="cf">rw</span> [refMarg_chance κ σ _ v hv hc, refMarg_chance κ σ _ v hv hc]</span>
+<span id="cb118-93"><a href="#cb118-93" aria-hidden="true" tabindex="-1"></a>    <span class="kw">have</span> h1 : |∑ b, (refMarg κ R σ (totalUtility u) (Function.update x v b) -</span>
+<span id="cb118-94"><a href="#cb118-94" aria-hidden="true" tabindex="-1"></a>        W (Function.update x v b) * refMarg κ R σ (<span class="kw">fun</span> _ =&gt; <span class="dv">1</span>) (Function.update x v b))| ≤</span>
+<span id="cb118-95"><a href="#cb118-95" aria-hidden="true" tabindex="-1"></a>        e * ∑ b, refMarg κ R σ (<span class="kw">fun</span> _ =&gt; <span class="dv">1</span>) (Function.update x v b) := <span class="kw">by</span></span>
+<span id="cb118-96"><a href="#cb118-96" aria-hidden="true" tabindex="-1"></a>      <span class="cf">rw</span> [Finset.mul_sum]</span>
+<span id="cb118-97"><a href="#cb118-97" aria-hidden="true" tabindex="-1"></a>      <span class="cf">exact</span> (Finset.abs_sum_le_sum_abs _ _).trans</span>
+<span id="cb118-98"><a href="#cb118-98" aria-hidden="true" tabindex="-1"></a>        (Finset.sum_le_sum <span class="kw">fun</span> b _ =&gt; h.realizes _)</span>
+<span id="cb118-99"><a href="#cb118-99" aria-hidden="true" tabindex="-1"></a>    <span class="kw">have</span> h2 := hre x</span>
+<span id="cb118-100"><a href="#cb118-100" aria-hidden="true" tabindex="-1"></a>    <span class="cf">rw</span> [Finset.sum_sub_distrib] <span class="kw">at</span> h1</span>
+<span id="cb118-101"><a href="#cb118-101" aria-hidden="true" tabindex="-1"></a>    <span class="kw">calc</span> _ = |(∑ b, refMarg κ R σ (totalUtility u) (Function.update x v b) -</span>
+<span id="cb118-102"><a href="#cb118-102" aria-hidden="true" tabindex="-1"></a>            ∑ b, W (Function.update x v b) * refMarg κ R σ (<span class="kw">fun</span> _ =&gt; <span class="dv">1</span>) (Function.update x v b)) +</span>
+<span id="cb118-103"><a href="#cb118-103" aria-hidden="true" tabindex="-1"></a>          (∑ b, W (Function.update x v b) * refMarg κ R σ (<span class="kw">fun</span> _ =&gt; <span class="dv">1</span>) (Function.update x v b) -</span>
+<span id="cb118-104"><a href="#cb118-104" aria-hidden="true" tabindex="-1"></a>            (collect s&#39;.valuations).util x *</span>
+<span id="cb118-105"><a href="#cb118-105" aria-hidden="true" tabindex="-1"></a>              ∑ b, refMarg κ R σ (<span class="kw">fun</span> _ =&gt; <span class="dv">1</span>) (Function.update x v b))| := <span class="kw">by</span> ring_nf</span>
+<span id="cb118-106"><a href="#cb118-106" aria-hidden="true" tabindex="-1"></a>      _ ≤ _ := (abs_add_le _ _).trans (<span class="kw">by</span> <span class="cf">linarith</span>)</span>
+<span id="cb118-107"><a href="#cb118-107" aria-hidden="true" tabindex="-1"></a>  · <span class="cf">rw</span> [refMarg_chance κ τ _ v hv hc, refMarg_chance κ σ _ v hv hc]</span>
+<span id="cb118-108"><a href="#cb118-108" aria-hidden="true" tabindex="-1"></a>    <span class="kw">have</span> h1 : ∑ b, refMarg κ R τ (totalUtility u) (Function.update x v b) ≤</span>
+<span id="cb118-109"><a href="#cb118-109" aria-hidden="true" tabindex="-1"></a>        ∑ b, W (Function.update x v b) * refMarg κ R σ (<span class="kw">fun</span> _ =&gt; <span class="dv">1</span>) (Function.update x v b) +</span>
+<span id="cb118-110"><a href="#cb118-110" aria-hidden="true" tabindex="-1"></a>          e * ∑ b, refMarg κ R σ (<span class="kw">fun</span> _ =&gt; <span class="dv">1</span>) (Function.update x v b) := <span class="kw">by</span></span>
+<span id="cb118-111"><a href="#cb118-111" aria-hidden="true" tabindex="-1"></a>      <span class="cf">rw</span> [Finset.mul_sum, ← Finset.sum_add_distrib]</span>
+<span id="cb118-112"><a href="#cb118-112" aria-hidden="true" tabindex="-1"></a>      <span class="cf">exact</span> Finset.sum_le_sum <span class="kw">fun</span> b _ =&gt; <span class="kw">by</span></span>
+<span id="cb118-113"><a href="#cb118-113" aria-hidden="true" tabindex="-1"></a>        <span class="kw">have</span> := h.dominates τ hτ (Function.update x v b)</span>
+<span id="cb118-114"><a href="#cb118-114" aria-hidden="true" tabindex="-1"></a>        <span class="cf">linarith</span></span>
+<span id="cb118-115"><a href="#cb118-115" aria-hidden="true" tabindex="-1"></a>    <span class="kw">have</span> h2 := (abs_le<span class="fl">.1</span> (hre x)).<span class="dv">2</span></span>
+<span id="cb118-116"><a href="#cb118-116" aria-hidden="true" tabindex="-1"></a>    nlinarith</span>
+<span id="cb118-117"><a href="#cb118-117" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb118-118"><a href="#cb118-118" aria-hidden="true" tabindex="-1"></a><span class="do">/-- **A decision step adds nothing to the error.** The reference mass does not depend on the free</span></span>
+<span id="cb118-119"><a href="#cb118-119" aria-hidden="true" tabindex="-1"></a><span class="do">action (`Independent`), so the run&#39;s mass at its probability maximizer and the reference mass at</span></span>
+<span id="cb118-120"><a href="#cb118-120" aria-hidden="true" tabindex="-1"></a><span class="do">the chosen action are comparable, and every competitor&#39;s action average is dominated. -/</span></span>
+<span id="cb118-121"><a href="#cb118-121" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> ApproxInv.decisionWith {κ : id.Kernel ℝ} (hκ : ∀ m x a, <span class="dv">0</span> ≤ κ m x a)</span>
+<span id="cb118-122"><a href="#cb118-122" aria-hidden="true" tabindex="-1"></a>    (hind : Independent κ (<span class="kw">fun</span> _ =&gt; <span class="dv">1</span>)) (hinj : Function.Injective id.action)</span>
+<span id="cb118-123"><a href="#cb118-123" aria-hidden="true" tabindex="-1"></a>    {u : Utility id ℝ} {L H U e : ℝ} (hL : <span class="dv">0</span> &lt; L) {R : Finset id.V} {s : State id R}</span>
+<span id="cb118-124"><a href="#cb118-124" aria-hidden="true" tabindex="-1"></a>    {σ : Strategy id ℝ} (h : ApproxInv κ u L H U e s σ) (sel : Selector id) (d : id.D)</span>
+<span id="cb118-125"><a href="#cb118-125" aria-hidden="true" tabindex="-1"></a>    (hd : id.action d ∈ R) (hi : R.erase (id.action d) = id.info d) :</span>
+<span id="cb118-126"><a href="#cb118-126" aria-hidden="true" tabindex="-1"></a>    ApproxInv κ u L H U e (s.decision d) (Function.update σ d (s.policyWith sel d hi)) := <span class="kw">by</span></span>
+<span id="cb118-127"><a href="#cb118-127" aria-hidden="true" tabindex="-1"></a>  <span class="kw">have</span> hn : id.action d ∉ Rᶜ := <span class="kw">by</span> <span class="cf">simpa</span> <span class="kw">using</span> hd</span>
+<span id="cb118-128"><a href="#cb118-128" aria-hidden="true" tabindex="-1"></a>  <span class="kw">have</span> hinfo := info_disjoint d hi</span>
+<span id="cb118-129"><a href="#cb118-129" aria-hidden="true" tabindex="-1"></a>  set a := id.action d</span>
+<span id="cb118-130"><a href="#cb118-130" aria-hidden="true" tabindex="-1"></a>  set π := s.policyWith sel d hi</span>
+<span id="cb118-131"><a href="#cb118-131" aria-hidden="true" tabindex="-1"></a>  set f : id.Assignment → id.states a := <span class="kw">fun</span> x =&gt; sel.pick d (bucketScore s.valuations a x)</span>
+<span id="cb118-132"><a href="#cb118-132" aria-hidden="true" tabindex="-1"></a>  set P := (collect s.valuations).prob</span>
+<span id="cb118-133"><a href="#cb118-133" aria-hidden="true" tabindex="-1"></a>  set W := (collect s.valuations).util</span>
+<span id="cb118-134"><a href="#cb118-134" aria-hidden="true" tabindex="-1"></a>  <span class="kw">have</span> hπ : ∀ x b, π.kernel x b = <span class="kw">if</span> b = f x <span class="kw">then</span> <span class="dv">1</span> <span class="kw">else</span> <span class="dv">0</span> := <span class="kw">fun</span> _ _ =&gt; <span class="cf">rfl</span></span>
+<span id="cb118-135"><a href="#cb118-135" aria-hidden="true" tabindex="-1"></a>  <span class="kw">have</span> hM0 := refMarg_mass_nonneg κ hκ R σ h.nonneg</span>
+<span id="cb118-136"><a href="#cb118-136" aria-hidden="true" tabindex="-1"></a>  <span class="kw">have</span> heval : ∀ (F : id.Assignment → ℝ) (x : id.Assignment),</span>
+<span id="cb118-137"><a href="#cb118-137" aria-hidden="true" tabindex="-1"></a>      refMarg κ (R.erase a) (Function.update σ d π) F x =</span>
+<span id="cb118-138"><a href="#cb118-138" aria-hidden="true" tabindex="-1"></a>        refMarg κ R σ F (Function.update x a (f x)) := <span class="kw">by</span></span>
+<span id="cb118-139"><a href="#cb118-139" aria-hidden="true" tabindex="-1"></a>    <span class="cf">intro</span> F x</span>
+<span id="cb118-140"><a href="#cb118-140" aria-hidden="true" tabindex="-1"></a>    <span class="cf">unfold</span> refMarg</span>
+<span id="cb118-141"><a href="#cb118-141" aria-hidden="true" tabindex="-1"></a>    <span class="cf">rw</span> [compl_erase, decision_marginal κ Rᶜ σ hinj d hn hinfo]</span>
+<span id="cb118-142"><a href="#cb118-142" aria-hidden="true" tabindex="-1"></a>    <span class="cf">simp</span> [hπ, ite_mul]</span>
+<span id="cb118-143"><a href="#cb118-143" aria-hidden="true" tabindex="-1"></a>    <span class="cf">rfl</span></span>
+<span id="cb118-144"><a href="#cb118-144" aria-hidden="true" tabindex="-1"></a>  <span class="kw">have</span> hM : ∀ x b, refMarg κ R σ (<span class="kw">fun</span> _ =&gt; <span class="dv">1</span>) (Function.update x a b) =</span>
+<span id="cb118-145"><a href="#cb118-145" aria-hidden="true" tabindex="-1"></a>      refMarg κ R σ (<span class="kw">fun</span> _ =&gt; <span class="dv">1</span>) x := <span class="kw">fun</span> x b =&gt;</span>
+<span id="cb118-146"><a href="#cb118-146" aria-hidden="true" tabindex="-1"></a>    hind Rᶜ σ d hn (<span class="kw">by</span> <span class="cf">simpa</span> <span class="kw">using</span> information_boundary d hi) x b</span>
+<span id="cb118-147"><a href="#cb118-147" aria-hidden="true" tabindex="-1"></a>  <span class="kw">have</span> hscore : ∀ x b, W (Function.update x a b) ≤ W (Function.update x a (f x)) := <span class="kw">by</span></span>
+<span id="cb118-148"><a href="#cb118-148" aria-hidden="true" tabindex="-1"></a>    <span class="cf">intro</span> x b</span>
+<span id="cb118-149"><a href="#cb118-149" aria-hidden="true" tabindex="-1"></a>    <span class="kw">show</span> (collect s.valuations).util _ ≤ (collect s.valuations).util _</span>
+<span id="cb118-150"><a href="#cb118-150" aria-hidden="true" tabindex="-1"></a>    <span class="cf">rw</span> [util_update_eq_score, util_update_eq_score]</span>
+<span id="cb118-151"><a href="#cb118-151" aria-hidden="true" tabindex="-1"></a>    <span class="cf">exact</span> add_le_add (sel.maximizes d _ b) le_rfl</span>
+<span id="cb118-152"><a href="#cb118-152" aria-hidden="true" tabindex="-1"></a>  <span class="kw">have</span> hutil : ∀ x, (collect (s.decision d).valuations).util x = W (Function.update x a (f x)) := <span class="kw">by</span></span>
+<span id="cb118-153"><a href="#cb118-153" aria-hidden="true" tabindex="-1"></a>    <span class="cf">intro</span> x</span>
+<span id="cb118-154"><a href="#cb118-154" aria-hidden="true" tabindex="-1"></a>    change (collect (decisionStep a s.valuations)).util x = _</span>
+<span id="cb118-155"><a href="#cb118-155" aria-hidden="true" tabindex="-1"></a>    <span class="cf">rw</span> [decisionStep_util_eq]</span>
+<span id="cb118-156"><a href="#cb118-156" aria-hidden="true" tabindex="-1"></a>    <span class="cf">exact</span> le_antisymm (hscore x _) (<span class="kw">by</span></span>
+<span id="cb118-157"><a href="#cb118-157" aria-hidden="true" tabindex="-1"></a>      <span class="kw">show</span> (collect s.valuations).util _ ≤ (collect s.valuations).util _</span>
+<span id="cb118-158"><a href="#cb118-158" aria-hidden="true" tabindex="-1"></a>      <span class="cf">rw</span> [util_update_eq_score, util_update_eq_score]</span>
+<span id="cb118-159"><a href="#cb118-159" aria-hidden="true" tabindex="-1"></a>      <span class="cf">exact</span> add_le_add (le_argmax (bucketScore s.valuations a x) (f x)) le_rfl)</span>
+<span id="cb118-160"><a href="#cb118-160" aria-hidden="true" tabindex="-1"></a>  <span class="kw">have</span> hprob : ∀ x, (collect (s.decision d).valuations).prob x =</span>
+<span id="cb118-161"><a href="#cb118-161" aria-hidden="true" tabindex="-1"></a>      P (Function.update x a (probabilityChoice a (collect (bucket a s.valuations)) x)) :=</span>
+<span id="cb118-162"><a href="#cb118-162" aria-hidden="true" tabindex="-1"></a>    <span class="kw">fun</span> x =&gt; decisionStep_prob_eq a s.valuations x</span>
+<span id="cb118-163"><a href="#cb118-163" aria-hidden="true" tabindex="-1"></a>  <span class="kw">have</span> hmass : ∀ x, refMarg κ (R.erase a) (Function.update σ d π) (<span class="kw">fun</span> _ =&gt; <span class="dv">1</span>) x =</span>
+<span id="cb118-164"><a href="#cb118-164" aria-hidden="true" tabindex="-1"></a>      refMarg κ R σ (<span class="kw">fun</span> _ =&gt; <span class="dv">1</span>) x := <span class="kw">fun</span> x =&gt; <span class="kw">by</span> <span class="cf">rw</span> [heval, hM]</span>
+<span id="cb118-165"><a href="#cb118-165" aria-hidden="true" tabindex="-1"></a>  <span class="cf">refine</span> ⟨?_, <span class="kw">fun</span> x =&gt; ?_, <span class="kw">fun</span> x =&gt; ?_, <span class="kw">fun</span> x hx =&gt; ?_, <span class="kw">fun</span> x =&gt; ?_, <span class="kw">fun</span> τ hτ x =&gt; ?_⟩</span>
+<span id="cb118-166"><a href="#cb118-166" aria-hidden="true" tabindex="-1"></a>  · <span class="cf">intro</span> e&#39; y b</span>
+<span id="cb118-167"><a href="#cb118-167" aria-hidden="true" tabindex="-1"></a>    <span class="cf">by_cases</span> he : e&#39; = d</span>
+<span id="cb118-168"><a href="#cb118-168" aria-hidden="true" tabindex="-1"></a>    · <span class="cf">subst</span> he</span>
+<span id="cb118-169"><a href="#cb118-169" aria-hidden="true" tabindex="-1"></a>      <span class="cf">rw</span> [Function.update_self, hπ]</span>
+<span id="cb118-170"><a href="#cb118-170" aria-hidden="true" tabindex="-1"></a>      <span class="cf">split_ifs</span> &lt;;&gt; <span class="cf">norm_num</span></span>
+<span id="cb118-171"><a href="#cb118-171" aria-hidden="true" tabindex="-1"></a>    · <span class="cf">rw</span> [Function.update_of_ne he]</span>
+<span id="cb118-172"><a href="#cb118-172" aria-hidden="true" tabindex="-1"></a>      <span class="cf">exact</span> h.nonneg e&#39; y b</span>
+<span id="cb118-173"><a href="#cb118-173" aria-hidden="true" tabindex="-1"></a>  · <span class="cf">rw</span> [hmass, hprob, ← hM x (probabilityChoice a (collect (bucket a s.valuations)) x)]</span>
+<span id="cb118-174"><a href="#cb118-174" aria-hidden="true" tabindex="-1"></a>    <span class="cf">exact</span> h.mass_lower _</span>
+<span id="cb118-175"><a href="#cb118-175" aria-hidden="true" tabindex="-1"></a>  · <span class="cf">rw</span> [hmass, hprob, ← hM x (probabilityChoice a (collect (bucket a s.valuations)) x)]</span>
+<span id="cb118-176"><a href="#cb118-176" aria-hidden="true" tabindex="-1"></a>    <span class="cf">exact</span> h.mass_upper _</span>
+<span id="cb118-177"><a href="#cb118-177" aria-hidden="true" tabindex="-1"></a>  · <span class="cf">rw</span> [hprob] <span class="kw">at</span> hx</span>
+<span id="cb118-178"><a href="#cb118-178" aria-hidden="true" tabindex="-1"></a>    <span class="cf">rw</span> [hutil]</span>
+<span id="cb118-179"><a href="#cb118-179" aria-hidden="true" tabindex="-1"></a>    <span class="cf">apply</span> h.bounded</span>
+<span id="cb118-180"><a href="#cb118-180" aria-hidden="true" tabindex="-1"></a>    <span class="kw">have</span> hpos : <span class="dv">0</span> &lt; P (Function.update x a</span>
+<span id="cb118-181"><a href="#cb118-181" aria-hidden="true" tabindex="-1"></a>        (probabilityChoice a (collect (bucket a s.valuations)) x)) :=</span>
+<span id="cb118-182"><a href="#cb118-182" aria-hidden="true" tabindex="-1"></a>      lt_of_le_of_ne ((collect s.valuations).nonneg _) (Ne.symm hx)</span>
+<span id="cb118-183"><a href="#cb118-183" aria-hidden="true" tabindex="-1"></a>    <span class="kw">have</span> hmpos : <span class="dv">0</span> &lt; refMarg κ R σ (<span class="kw">fun</span> _ =&gt; <span class="dv">1</span>) x := <span class="kw">by</span></span>
+<span id="cb118-184"><a href="#cb118-184" aria-hidden="true" tabindex="-1"></a>      <span class="kw">have</span> := h.mass_upper (Function.update x a</span>
+<span id="cb118-185"><a href="#cb118-185" aria-hidden="true" tabindex="-1"></a>        (probabilityChoice a (collect (bucket a s.valuations)) x))</span>
+<span id="cb118-186"><a href="#cb118-186" aria-hidden="true" tabindex="-1"></a>      <span class="cf">rw</span> [hM] <span class="kw">at</span> this</span>
+<span id="cb118-187"><a href="#cb118-187" aria-hidden="true" tabindex="-1"></a>      <span class="cf">rcases</span> (hM0 x).lt_or_eq <span class="kw">with</span> hlt | heq</span>
+<span id="cb118-188"><a href="#cb118-188" aria-hidden="true" tabindex="-1"></a>      · <span class="cf">exact</span> hlt</span>
+<span id="cb118-189"><a href="#cb118-189" aria-hidden="true" tabindex="-1"></a>      · <span class="cf">rw</span> [← heq, mul_zero] <span class="kw">at</span> this</span>
+<span id="cb118-190"><a href="#cb118-190" aria-hidden="true" tabindex="-1"></a>        <span class="cf">exact</span> absurd (lt_of_lt_of_le hpos this) (lt_irrefl <span class="dv">0</span>)</span>
+<span id="cb118-191"><a href="#cb118-191" aria-hidden="true" tabindex="-1"></a>    <span class="kw">have</span> := h.mass_lower (Function.update x a (f x))</span>
+<span id="cb118-192"><a href="#cb118-192" aria-hidden="true" tabindex="-1"></a>    <span class="cf">rw</span> [hM] <span class="kw">at</span> this</span>
+<span id="cb118-193"><a href="#cb118-193" aria-hidden="true" tabindex="-1"></a>    <span class="cf">exact</span> ne_of_gt (lt_of_lt_of_le (mul_pos hL hmpos) this)</span>
+<span id="cb118-194"><a href="#cb118-194" aria-hidden="true" tabindex="-1"></a>  · <span class="cf">rw</span> [hutil, heval, heval]</span>
+<span id="cb118-195"><a href="#cb118-195" aria-hidden="true" tabindex="-1"></a>    <span class="cf">exact</span> h.realizes _</span>
+<span id="cb118-196"><a href="#cb118-196" aria-hidden="true" tabindex="-1"></a>  · <span class="kw">have</span> hc := decision_marginal κ Rᶜ τ hinj d hn hinfo (τ d) (totalUtility u) x</span>
+<span id="cb118-197"><a href="#cb118-197" aria-hidden="true" tabindex="-1"></a>    <span class="cf">simp</span> only [Function.update_eq_self] <span class="kw">at</span> hc</span>
+<span id="cb118-198"><a href="#cb118-198" aria-hidden="true" tabindex="-1"></a>    <span class="kw">have</span> hlhs : refMarg κ (R.erase a) τ (totalUtility u) x =</span>
+<span id="cb118-199"><a href="#cb118-199" aria-hidden="true" tabindex="-1"></a>        ∑ b, (τ d).kernel x b * refMarg κ R τ (totalUtility u) (Function.update x a b) := <span class="kw">by</span></span>
+<span id="cb118-200"><a href="#cb118-200" aria-hidden="true" tabindex="-1"></a>      <span class="cf">unfold</span> refMarg</span>
+<span id="cb118-201"><a href="#cb118-201" aria-hidden="true" tabindex="-1"></a>      <span class="cf">rw</span> [compl_erase]</span>
+<span id="cb118-202"><a href="#cb118-202" aria-hidden="true" tabindex="-1"></a>      <span class="cf">exact</span> hc</span>
+<span id="cb118-203"><a href="#cb118-203" aria-hidden="true" tabindex="-1"></a>    <span class="cf">rw</span> [hlhs, hutil, hmass]</span>
+<span id="cb118-204"><a href="#cb118-204" aria-hidden="true" tabindex="-1"></a>    <span class="kw">calc</span> ∑ b, (τ d).kernel x b * refMarg κ R τ (totalUtility u) (Function.update x a b)</span>
+<span id="cb118-205"><a href="#cb118-205" aria-hidden="true" tabindex="-1"></a>        ≤ ∑ b, (τ d).kernel x b * ((W (Function.update x a (f x)) + e) *</span>
+<span id="cb118-206"><a href="#cb118-206" aria-hidden="true" tabindex="-1"></a>            refMarg κ R σ (<span class="kw">fun</span> _ =&gt; <span class="dv">1</span>) x) := <span class="kw">by</span></span>
+<span id="cb118-207"><a href="#cb118-207" aria-hidden="true" tabindex="-1"></a>          <span class="cf">refine</span> Finset.sum_le_sum <span class="kw">fun</span> b _ =&gt; mul_le_mul_of_nonneg_left ?_ (hτ d x b)</span>
+<span id="cb118-208"><a href="#cb118-208" aria-hidden="true" tabindex="-1"></a>          <span class="cf">refine</span> (h.dominates τ hτ _).trans ?_</span>
+<span id="cb118-209"><a href="#cb118-209" aria-hidden="true" tabindex="-1"></a>          <span class="cf">rw</span> [hM]</span>
+<span id="cb118-210"><a href="#cb118-210" aria-hidden="true" tabindex="-1"></a>          <span class="cf">exact</span> mul_le_mul_of_nonneg_right (<span class="kw">by</span> <span class="cf">linarith</span> [hscore x b]) (hM0 x)</span>
+<span id="cb118-211"><a href="#cb118-211" aria-hidden="true" tabindex="-1"></a>      _ = _ := <span class="kw">by</span> <span class="cf">rw</span> [← Finset.sum_mul, (τ d).normalised x, one_mul]</span></code></pre></div>
+<h2 id="the-run">The run</h2>
+<div class="sourceCode" id="cb119"><pre
+class="sourceCode lean"><code class="sourceCode lean"><span id="cb119-1"><a href="#cb119-1" aria-hidden="true" tabindex="-1"></a><span class="do">/-- The number of chance eliminations of a plan. -/</span></span>
+<span id="cb119-2"><a href="#cb119-2" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> Plan.chanceCount : {R : Finset id.V} → Plan id R → ℕ</span>
+<span id="cb119-3"><a href="#cb119-3" aria-hidden="true" tabindex="-1"></a>  | _, .done =&gt; <span class="dv">0</span></span>
+<span id="cb119-4"><a href="#cb119-4" aria-hidden="true" tabindex="-1"></a>  | _, .chance _ _ _ next =&gt; next.chanceCount + <span class="dv">1</span></span>
+<span id="cb119-5"><a href="#cb119-5" aria-hidden="true" tabindex="-1"></a>  | _, .decision _ _ _ next =&gt; next.chanceCount</span>
+<span id="cb119-6"><a href="#cb119-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb119-7"><a href="#cb119-7" aria-hidden="true" tabindex="-1"></a><span class="do">/-- A plan eliminates every chance variable of its set exactly once. -/</span></span>
+<span id="cb119-8"><a href="#cb119-8" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> Plan.chanceCount_eq {R : Finset id.V} (plan : Plan id R) :</span>
+<span id="cb119-9"><a href="#cb119-9" aria-hidden="true" tabindex="-1"></a>    plan.chanceCount = (R.filter <span class="kw">fun</span> v =&gt; ∀ d, id.action d ≠ v).card := <span class="kw">by</span></span>
+<span id="cb119-10"><a href="#cb119-10" aria-hidden="true" tabindex="-1"></a>  <span class="cf">induction</span> plan <span class="kw">with</span></span>
+<span id="cb119-11"><a href="#cb119-11" aria-hidden="true" tabindex="-1"></a>  | done =&gt; <span class="cf">rfl</span></span>
+<span id="cb119-12"><a href="#cb119-12" aria-hidden="true" tabindex="-1"></a>  | @chance R v hv hc next ih =&gt;</span>
+<span id="cb119-13"><a href="#cb119-13" aria-hidden="true" tabindex="-1"></a>    <span class="cf">rw</span> [Plan.chanceCount, ih, Finset.filter_erase,</span>
+<span id="cb119-14"><a href="#cb119-14" aria-hidden="true" tabindex="-1"></a>      Finset.card_erase_of_mem (Finset.mem_filter<span class="fl">.2</span> ⟨hv, hc⟩)]</span>
+<span id="cb119-15"><a href="#cb119-15" aria-hidden="true" tabindex="-1"></a>    <span class="kw">have</span> : <span class="dv">0</span> &lt; (R.filter <span class="kw">fun</span> v =&gt; ∀ d, id.action d ≠ v).card :=</span>
+<span id="cb119-16"><a href="#cb119-16" aria-hidden="true" tabindex="-1"></a>      Finset.card_pos<span class="fl">.2</span> ⟨v, Finset.mem_filter<span class="fl">.2</span> ⟨hv, hc⟩⟩</span>
+<span id="cb119-17"><a href="#cb119-17" aria-hidden="true" tabindex="-1"></a>    <span class="cf">omega</span></span>
+<span id="cb119-18"><a href="#cb119-18" aria-hidden="true" tabindex="-1"></a>  | @decision R d hd hi next ih =&gt;</span>
+<span id="cb119-19"><a href="#cb119-19" aria-hidden="true" tabindex="-1"></a>    <span class="kw">have</span> hnot : id.action d ∉ R.filter <span class="kw">fun</span> v =&gt; ∀ d, id.action d ≠ v :=</span>
+<span id="cb119-20"><a href="#cb119-20" aria-hidden="true" tabindex="-1"></a>      <span class="kw">fun</span> h =&gt; (Finset.mem_filter<span class="fl">.1</span> h).<span class="dv">2</span> d <span class="cf">rfl</span></span>
+<span id="cb119-21"><a href="#cb119-21" aria-hidden="true" tabindex="-1"></a>    <span class="cf">rw</span> [Plan.chanceCount, ih, Finset.filter_erase, Finset.erase_eq_of_notMem hnot]</span>
+<span id="cb119-22"><a href="#cb119-22" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb119-23"><a href="#cb119-23" aria-hidden="true" tabindex="-1"></a><span class="do">/-- In a closed diagram, the chance variables are the mechanisms&#39; targets. -/</span></span>
+<span id="cb119-24"><a href="#cb119-24" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> card_chance_eq (hclosed : id.Closed) :</span>
+<span id="cb119-25"><a href="#cb119-25" aria-hidden="true" tabindex="-1"></a>    (Finset.univ.filter <span class="kw">fun</span> v =&gt; ∀ d, id.action d ≠ v).card = Fintype.card id.M := <span class="kw">by</span></span>
+<span id="cb119-26"><a href="#cb119-26" aria-hidden="true" tabindex="-1"></a>  <span class="cf">obtain</span> ⟨hT, -, hdisj, hcover⟩ := id.closed_iff<span class="fl">.1</span> hclosed</span>
+<span id="cb119-27"><a href="#cb119-27" aria-hidden="true" tabindex="-1"></a>  <span class="kw">have</span> : (Finset.univ.filter <span class="kw">fun</span> v =&gt; ∀ d, id.action d ≠ v) = Finset.univ.image id.target := <span class="kw">by</span></span>
+<span id="cb119-28"><a href="#cb119-28" aria-hidden="true" tabindex="-1"></a>    <span class="cf">ext</span> v</span>
+<span id="cb119-29"><a href="#cb119-29" aria-hidden="true" tabindex="-1"></a>    <span class="cf">simp</span> only [Finset.mem_filter, Finset.mem_univ, true_and, Finset.mem_image]</span>
+<span id="cb119-30"><a href="#cb119-30" aria-hidden="true" tabindex="-1"></a>    <span class="cf">constructor</span></span>
+<span id="cb119-31"><a href="#cb119-31" aria-hidden="true" tabindex="-1"></a>    · <span class="cf">intro</span> hv</span>
+<span id="cb119-32"><a href="#cb119-32" aria-hidden="true" tabindex="-1"></a>      <span class="cf">rcases</span> hcover v <span class="kw">with</span> ⟨m, hm⟩ | ⟨d, hd⟩</span>
+<span id="cb119-33"><a href="#cb119-33" aria-hidden="true" tabindex="-1"></a>      · <span class="cf">exact</span> ⟨m, hm⟩</span>
+<span id="cb119-34"><a href="#cb119-34" aria-hidden="true" tabindex="-1"></a>      · <span class="cf">exact</span> absurd hd (hv d)</span>
+<span id="cb119-35"><a href="#cb119-35" aria-hidden="true" tabindex="-1"></a>    · <span class="cf">rintro</span> ⟨m, rfl⟩ d hd</span>
+<span id="cb119-36"><a href="#cb119-36" aria-hidden="true" tabindex="-1"></a>      <span class="cf">exact</span> hdisj m d hd.symm</span>
+<span id="cb119-37"><a href="#cb119-37" aria-hidden="true" tabindex="-1"></a>  <span class="cf">rw</span> [this, Finset.card_image_of_injective _ hT, Finset.card_univ]</span>
+<span id="cb119-38"><a href="#cb119-38" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb119-39"><a href="#cb119-39" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> runRepWith_approx (sel : Selector id) (keep : id.V → Bool) {κ : id.Kernel ℝ}</span>
+<span id="cb119-40"><a href="#cb119-40" aria-hidden="true" tabindex="-1"></a>    (hκ : ∀ m x a, <span class="dv">0</span> ≤ κ m x a) (hind : Independent κ (<span class="kw">fun</span> _ =&gt; <span class="dv">1</span>))</span>
+<span id="cb119-41"><a href="#cb119-41" aria-hidden="true" tabindex="-1"></a>    (hinj : Function.Injective id.action) {u : Utility id ℝ} {L H U : ℝ} (hL : <span class="dv">0</span> &lt; L)</span>
+<span id="cb119-42"><a href="#cb119-42" aria-hidden="true" tabindex="-1"></a>    (hU : <span class="dv">0</span> ≤ U) {R : Finset id.V} (plan : Plan id R) (s : State id R) (σ : Strategy id ℝ)</span>
+<span id="cb119-43"><a href="#cb119-43" aria-hidden="true" tabindex="-1"></a>    (e : ℝ) (h : ApproxInv κ u L H U e s σ) :</span>
+<span id="cb119-44"><a href="#cb119-44" aria-hidden="true" tabindex="-1"></a>    ApproxInv κ u L H U (e + plan.chanceCount * ((H / L - <span class="dv">1</span>) * U))</span>
+<span id="cb119-45"><a href="#cb119-45" aria-hidden="true" tabindex="-1"></a>      (runRepWith sel keep plan s σ).<span class="dv">1</span> (runRepWith sel keep plan s σ).<span class="dv">2</span> := <span class="kw">by</span></span>
+<span id="cb119-46"><a href="#cb119-46" aria-hidden="true" tabindex="-1"></a>  <span class="cf">induction</span> plan <span class="kw">generalizing</span> σ e <span class="kw">with</span></span>
+<span id="cb119-47"><a href="#cb119-47" aria-hidden="true" tabindex="-1"></a>  | done =&gt; <span class="cf">simpa</span> [Plan.chanceCount] <span class="kw">using</span> h</span>
+<span id="cb119-48"><a href="#cb119-48" aria-hidden="true" tabindex="-1"></a>  | chance v hv hc next ih =&gt;</span>
+<span id="cb119-49"><a href="#cb119-49" aria-hidden="true" tabindex="-1"></a>    <span class="kw">have</span> hs : ApproxInv κ u L H U (e + (H / L - <span class="dv">1</span>) * U) (s.chanceKeep keep v) σ := <span class="kw">by</span></span>
+<span id="cb119-50"><a href="#cb119-50" aria-hidden="true" tabindex="-1"></a>      <span class="cf">obtain</span> ⟨hp, hw⟩ := chanceStepKeep_collect (keep v) v s.valuations</span>
+<span id="cb119-51"><a href="#cb119-51" aria-hidden="true" tabindex="-1"></a>      <span class="cf">refine</span> h.chanceOf hκ hL hU v hv hc _ (<span class="kw">fun</span> x =&gt; ?_) (<span class="kw">fun</span> x =&gt; ?_)</span>
+<span id="cb119-52"><a href="#cb119-52" aria-hidden="true" tabindex="-1"></a>      · change (collect (chanceStepKeep (keep v) v s.valuations)).prob x = _</span>
+<span id="cb119-53"><a href="#cb119-53" aria-hidden="true" tabindex="-1"></a>        <span class="cf">rw</span> [hp]</span>
+<span id="cb119-54"><a href="#cb119-54" aria-hidden="true" tabindex="-1"></a>        <span class="cf">exact</span> chanceStep_prob v s.valuations x</span>
+<span id="cb119-55"><a href="#cb119-55" aria-hidden="true" tabindex="-1"></a>      · change (collect (chanceStepKeep (keep v) v s.valuations)).weight x = _</span>
+<span id="cb119-56"><a href="#cb119-56" aria-hidden="true" tabindex="-1"></a>        <span class="cf">rw</span> [hw]</span>
+<span id="cb119-57"><a href="#cb119-57" aria-hidden="true" tabindex="-1"></a>        <span class="cf">exact</span> chanceStep_weight v s.valuations x</span>
+<span id="cb119-58"><a href="#cb119-58" aria-hidden="true" tabindex="-1"></a>    <span class="kw">have</span> := ih (s.chanceKeep keep v) σ _ hs</span>
+<span id="cb119-59"><a href="#cb119-59" aria-hidden="true" tabindex="-1"></a>    <span class="cf">simp</span> only [Plan.chanceCount, Nat.cast_add, Nat.cast_one] <span class="kw">at</span> this ⊢</span>
+<span id="cb119-60"><a href="#cb119-60" aria-hidden="true" tabindex="-1"></a>    convert this <span class="kw">using</span> <span class="dv">1</span></span>
+<span id="cb119-61"><a href="#cb119-61" aria-hidden="true" tabindex="-1"></a>    <span class="cf">ring</span></span>
+<span id="cb119-62"><a href="#cb119-62" aria-hidden="true" tabindex="-1"></a>  | decision d hd hi next ih =&gt;</span>
+<span id="cb119-63"><a href="#cb119-63" aria-hidden="true" tabindex="-1"></a>    <span class="cf">exact</span> ih (s.decision d) _ e (h.decisionWith hκ hind hinj hL sel d hd hi)</span>
+<span id="cb119-64"><a href="#cb119-64" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb119-65"><a href="#cb119-65" aria-hidden="true" tabindex="-1"></a><span class="do">/-- The error after a whole plan: `k (H / L - 1) U` for `k` chance eliminations. -/</span></span>
+<span id="cb119-66"><a href="#cb119-66" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> approxGap (k : ℕ) (L H U : ℝ) : ℝ := k * ((H / L - <span class="dv">1</span>) * U)</span>
+<span id="cb119-67"><a href="#cb119-67" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb119-68"><a href="#cb119-68" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> approxGap_nonneg (k : ℕ) {L H U : ℝ} (hL : <span class="dv">0</span> &lt; L) (hLH : L ≤ H) (hU : <span class="dv">0</span> ≤ U) :</span>
+<span id="cb119-69"><a href="#cb119-69" aria-hidden="true" tabindex="-1"></a>    <span class="dv">0</span> ≤ approxGap k L H U := <span class="kw">by</span></span>
+<span id="cb119-70"><a href="#cb119-70" aria-hidden="true" tabindex="-1"></a>  <span class="cf">unfold</span> approxGap</span>
+<span id="cb119-71"><a href="#cb119-71" aria-hidden="true" tabindex="-1"></a>  <span class="cf">refine</span> mul_nonneg (Nat.cast_nonneg _) (mul_nonneg ?_ hU)</span>
+<span id="cb119-72"><a href="#cb119-72" aria-hidden="true" tabindex="-1"></a>  <span class="cf">rw</span> [sub_nonneg, le_div_iff₀ hL, one_mul]</span>
+<span id="cb119-73"><a href="#cb119-73" aria-hidden="true" tabindex="-1"></a>  <span class="cf">exact</span> hLH</span>
+<span id="cb119-74"><a href="#cb119-74" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb119-75"><a href="#cb119-75" aria-hidden="true" tabindex="-1"></a><span class="do">/-- **Approximate DVE on an approximately normalised kernel.** The exact representative run</span></span>
+<span id="cb119-76"><a href="#cb119-76" aria-hidden="true" tabindex="-1"></a><span class="do">`solveRepPlanWith sel keep` on `κ&#39;` (any maximizing selector, any representative choice, any</span></span>
+<span id="cb119-77"><a href="#cb119-77" aria-hidden="true" tabindex="-1"></a><span class="do">plan) returns a deterministic strategy whose expected utility under the normalised reference</span></span>
+<span id="cb119-78"><a href="#cb119-78" aria-hidden="true" tabindex="-1"></a><span class="do">kernel `κ` is within `e = approxGap k L H U` of the run&#39;s value, and every nonnegative strategy&#39;s</span></span>
+<span id="cb119-79"><a href="#cb119-79" aria-hidden="true" tabindex="-1"></a><span class="do">reference expected utility is at most the run&#39;s value plus `e`. Here the run&#39;s joint weight is</span></span>
+<span id="cb119-80"><a href="#cb119-80" aria-hidden="true" tabindex="-1"></a><span class="do">within `[L, H]` of the reference joint, `|U x| ≤ U`, and `k` is the plan&#39;s number of chance</span></span>
+<span id="cb119-81"><a href="#cb119-81" aria-hidden="true" tabindex="-1"></a><span class="do">eliminations. -/</span></span>
+<span id="cb119-82"><a href="#cb119-82" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> solveRepPlanWith_approx (sel : Selector id) (keep : id.V → Bool) (κ κ&#39; : id.Kernel ℝ)</span>
+<span id="cb119-83"><a href="#cb119-83" aria-hidden="true" tabindex="-1"></a>    (hclosed : id.Closed) (ord : id.IDOrder) (hloc : ∀ m, Local κ m)</span>
+<span id="cb119-84"><a href="#cb119-84" aria-hidden="true" tabindex="-1"></a>    (hnorm : ∀ m, Normalised κ m) (hnonneg : ∀ m x a, <span class="dv">0</span> ≤ κ m x a) (hloc&#39; : ∀ m, Local κ&#39; m)</span>
+<span id="cb119-85"><a href="#cb119-85" aria-hidden="true" tabindex="-1"></a>    (hnonneg&#39; : ∀ m x a, <span class="dv">0</span> ≤ κ&#39; m x a) (u : Utility id ℝ) (hu : ∀ j, Utility.Local u j)</span>
+<span id="cb119-86"><a href="#cb119-86" aria-hidden="true" tabindex="-1"></a>    (plan : Plan id Finset.univ) (L H U : ℝ) (hL : <span class="dv">0</span> &lt; L) (hU : <span class="dv">0</span> ≤ U)</span>
+<span id="cb119-87"><a href="#cb119-87" aria-hidden="true" tabindex="-1"></a>    (henv : ∀ x, L * (∏ m, κ m x (x (id.target m))) ≤ ∏ m, κ&#39; m x (x (id.target m)) ∧</span>
+<span id="cb119-88"><a href="#cb119-88" aria-hidden="true" tabindex="-1"></a>      ∏ m, κ&#39; m x (x (id.target m)) ≤ H * ∏ m, κ m x (x (id.target m)))</span>
+<span id="cb119-89"><a href="#cb119-89" aria-hidden="true" tabindex="-1"></a>    (hUb : ∀ x, |totalUtility u x| ≤ U) :</span>
+<span id="cb119-90"><a href="#cb119-90" aria-hidden="true" tabindex="-1"></a>    <span class="kw">let</span> sol := solveRepPlanWith sel keep κ&#39; hloc&#39; hnonneg&#39; u hu plan</span>
+<span id="cb119-91"><a href="#cb119-91" aria-hidden="true" tabindex="-1"></a>    sol.strategy.Deterministic ∧</span>
+<span id="cb119-92"><a href="#cb119-92" aria-hidden="true" tabindex="-1"></a>      |expectedUtility κ sol.strategy u - sol.value| ≤ approxGap plan.chanceCount L H U ∧</span>
+<span id="cb119-93"><a href="#cb119-93" aria-hidden="true" tabindex="-1"></a>      ∀ τ : Strategy id ℝ, τ.Nonneg →</span>
+<span id="cb119-94"><a href="#cb119-94" aria-hidden="true" tabindex="-1"></a>        expectedUtility κ τ u ≤ sol.value + approxGap plan.chanceCount L H U := <span class="kw">by</span></span>
+<span id="cb119-95"><a href="#cb119-95" aria-hidden="true" tabindex="-1"></a>  <span class="cf">intro</span> sol</span>
+<span id="cb119-96"><a href="#cb119-96" aria-hidden="true" tabindex="-1"></a>  <span class="kw">have</span> hinj := (id.closed_iff<span class="fl">.1</span> hclosed).<span class="fl">2.1</span></span>
+<span id="cb119-97"><a href="#cb119-97" aria-hidden="true" tabindex="-1"></a>  <span class="kw">have</span> hind := independent_one κ hclosed ord hloc hnorm</span>
+<span id="cb119-98"><a href="#cb119-98" aria-hidden="true" tabindex="-1"></a>  <span class="kw">have</span> h0 := ApproxInv.initial κ κ&#39; hloc&#39; hnonneg&#39; u hu L H U henv hUb</span>
+<span id="cb119-99"><a href="#cb119-99" aria-hidden="true" tabindex="-1"></a>  <span class="kw">have</span> hr := runRepWith_approx sel keep hnonneg hind hinj hL hU plan _ _ <span class="dv">0</span> h0</span>
+<span id="cb119-100"><a href="#cb119-100" aria-hidden="true" tabindex="-1"></a>  <span class="cf">rw</span> [zero_add] <span class="kw">at</span> hr</span>
+<span id="cb119-101"><a href="#cb119-101" aria-hidden="true" tabindex="-1"></a>  <span class="kw">have</span> hone : ∀ σ : Strategy id ℝ, refMarg κ ∅ σ (<span class="kw">fun</span> _ =&gt; <span class="dv">1</span>) (baseAssignment id) = <span class="dv">1</span> := <span class="kw">by</span></span>
+<span id="cb119-102"><a href="#cb119-102" aria-hidden="true" tabindex="-1"></a>    <span class="cf">intro</span> σ</span>
+<span id="cb119-103"><a href="#cb119-103" aria-hidden="true" tabindex="-1"></a>    <span class="cf">rw</span> [refMarg_empty]</span>
+<span id="cb119-104"><a href="#cb119-104" aria-hidden="true" tabindex="-1"></a>    <span class="cf">simpa</span> only [mul_one] <span class="kw">using</span> sum_joint_instantiate_eq_one κ σ hclosed ord hloc hnorm</span>
+<span id="cb119-105"><a href="#cb119-105" aria-hidden="true" tabindex="-1"></a>  <span class="kw">have</span> heu : ∀ σ : Strategy id ℝ,</span>
+<span id="cb119-106"><a href="#cb119-106" aria-hidden="true" tabindex="-1"></a>      refMarg κ ∅ σ (totalUtility u) (baseAssignment id) = expectedUtility κ σ u := <span class="kw">by</span></span>
+<span id="cb119-107"><a href="#cb119-107" aria-hidden="true" tabindex="-1"></a>    <span class="cf">intro</span> σ</span>
+<span id="cb119-108"><a href="#cb119-108" aria-hidden="true" tabindex="-1"></a>    <span class="cf">rw</span> [refMarg_empty]</span>
+<span id="cb119-109"><a href="#cb119-109" aria-hidden="true" tabindex="-1"></a>    <span class="cf">rfl</span></span>
+<span id="cb119-110"><a href="#cb119-110" aria-hidden="true" tabindex="-1"></a>  <span class="cf">refine</span> ⟨runRepWith_deterministic sel keep _ _ _ defaultStrategy_deterministic, ?_, ?_⟩</span>
+<span id="cb119-111"><a href="#cb119-111" aria-hidden="true" tabindex="-1"></a>  · <span class="kw">have</span> := hr.realizes (baseAssignment id)</span>
+<span id="cb119-112"><a href="#cb119-112" aria-hidden="true" tabindex="-1"></a>    <span class="cf">rw</span> [hone, heu, mul_one, mul_one] <span class="kw">at</span> this</span>
+<span id="cb119-113"><a href="#cb119-113" aria-hidden="true" tabindex="-1"></a>    <span class="cf">exact</span> this</span>
+<span id="cb119-114"><a href="#cb119-114" aria-hidden="true" tabindex="-1"></a>  · <span class="cf">intro</span> τ hτ</span>
+<span id="cb119-115"><a href="#cb119-115" aria-hidden="true" tabindex="-1"></a>    <span class="kw">have</span> := hr.dominates τ hτ (baseAssignment id)</span>
+<span id="cb119-116"><a href="#cb119-116" aria-hidden="true" tabindex="-1"></a>    <span class="cf">rw</span> [hone, heu, mul_one] <span class="kw">at</span> this</span>
+<span id="cb119-117"><a href="#cb119-117" aria-hidden="true" tabindex="-1"></a>    <span class="cf">exact</span> this</span>
+<span id="cb119-118"><a href="#cb119-118" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb119-119"><a href="#cb119-119" aria-hidden="true" tabindex="-1"></a><span class="do">/-- **Approximate optimality.** Under the hypotheses of `solveRepPlanWith_approx`, with</span></span>
+<span id="cb119-120"><a href="#cb119-120" aria-hidden="true" tabindex="-1"></a><span class="do">`e = approxGap k L H U`: the run&#39;s strategy is within `2 e` of every nonnegative strategy and</span></span>
+<span id="cb119-121"><a href="#cb119-121" aria-hidden="true" tabindex="-1"></a><span class="do">of the optimum under the reference kernel, and the run&#39;s value is within `e` of that optimum. -/</span></span>
+<span id="cb119-122"><a href="#cb119-122" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> solveRepPlanWith_approx_optimal (sel : Selector id) (keep : id.V → Bool)</span>
+<span id="cb119-123"><a href="#cb119-123" aria-hidden="true" tabindex="-1"></a>    (κ κ&#39; : id.Kernel ℝ) (hclosed : id.Closed) (ord : id.IDOrder) (hloc : ∀ m, Local κ m)</span>
+<span id="cb119-124"><a href="#cb119-124" aria-hidden="true" tabindex="-1"></a>    (hnorm : ∀ m, Normalised κ m) (hnonneg : ∀ m x a, <span class="dv">0</span> ≤ κ m x a) (hloc&#39; : ∀ m, Local κ&#39; m)</span>
+<span id="cb119-125"><a href="#cb119-125" aria-hidden="true" tabindex="-1"></a>    (hnonneg&#39; : ∀ m x a, <span class="dv">0</span> ≤ κ&#39; m x a) (u : Utility id ℝ) (hu : ∀ j, Utility.Local u j)</span>
+<span id="cb119-126"><a href="#cb119-126" aria-hidden="true" tabindex="-1"></a>    (plan : Plan id Finset.univ) (L H U : ℝ) (hL : <span class="dv">0</span> &lt; L) (hU : <span class="dv">0</span> ≤ U)</span>
+<span id="cb119-127"><a href="#cb119-127" aria-hidden="true" tabindex="-1"></a>    (henv : ∀ x, L * (∏ m, κ m x (x (id.target m))) ≤ ∏ m, κ&#39; m x (x (id.target m)) ∧</span>
+<span id="cb119-128"><a href="#cb119-128" aria-hidden="true" tabindex="-1"></a>      ∏ m, κ&#39; m x (x (id.target m)) ≤ H * ∏ m, κ m x (x (id.target m)))</span>
+<span id="cb119-129"><a href="#cb119-129" aria-hidden="true" tabindex="-1"></a>    (hUb : ∀ x, |totalUtility u x| ≤ U) :</span>
+<span id="cb119-130"><a href="#cb119-130" aria-hidden="true" tabindex="-1"></a>    <span class="kw">let</span> sol := solveRepPlanWith sel keep κ&#39; hloc&#39; hnonneg&#39; u hu plan</span>
+<span id="cb119-131"><a href="#cb119-131" aria-hidden="true" tabindex="-1"></a>    <span class="kw">let</span> e := approxGap plan.chanceCount L H U</span>
+<span id="cb119-132"><a href="#cb119-132" aria-hidden="true" tabindex="-1"></a>    sol.strategy.Deterministic ∧</span>
+<span id="cb119-133"><a href="#cb119-133" aria-hidden="true" tabindex="-1"></a>      (∀ τ : Strategy id ℝ, τ.Nonneg →</span>
+<span id="cb119-134"><a href="#cb119-134" aria-hidden="true" tabindex="-1"></a>        expectedUtility κ τ u ≤ expectedUtility κ sol.strategy u + <span class="dv">2</span> * e) ∧</span>
+<span id="cb119-135"><a href="#cb119-135" aria-hidden="true" tabindex="-1"></a>      optimalValue κ u - <span class="dv">2</span> * e ≤ expectedUtility κ sol.strategy u ∧</span>
+<span id="cb119-136"><a href="#cb119-136" aria-hidden="true" tabindex="-1"></a>      expectedUtility κ sol.strategy u ≤ optimalValue κ u ∧</span>
+<span id="cb119-137"><a href="#cb119-137" aria-hidden="true" tabindex="-1"></a>      |sol.value - optimalValue κ u| ≤ e := <span class="kw">by</span></span>
+<span id="cb119-138"><a href="#cb119-138" aria-hidden="true" tabindex="-1"></a>  <span class="cf">intro</span> sol e</span>
+<span id="cb119-139"><a href="#cb119-139" aria-hidden="true" tabindex="-1"></a>  <span class="cf">obtain</span> ⟨hdet, hre, hdom⟩ := solveRepPlanWith_approx sel keep κ κ&#39; hclosed ord hloc hnorm</span>
+<span id="cb119-140"><a href="#cb119-140" aria-hidden="true" tabindex="-1"></a>    hnonneg hloc&#39; hnonneg&#39; u hu plan L H U hL hU henv hUb</span>
+<span id="cb119-141"><a href="#cb119-141" aria-hidden="true" tabindex="-1"></a>  <span class="kw">have</span> hre&#39; := abs_le<span class="fl">.1</span> hre</span>
+<span id="cb119-142"><a href="#cb119-142" aria-hidden="true" tabindex="-1"></a>  <span class="kw">have</span> hall : ∀ τ : Strategy id ℝ, τ.Nonneg →</span>
+<span id="cb119-143"><a href="#cb119-143" aria-hidden="true" tabindex="-1"></a>      expectedUtility κ τ u ≤ expectedUtility κ sol.strategy u + <span class="dv">2</span> * e := <span class="kw">by</span></span>
+<span id="cb119-144"><a href="#cb119-144" aria-hidden="true" tabindex="-1"></a>    <span class="cf">intro</span> τ hτ</span>
+<span id="cb119-145"><a href="#cb119-145" aria-hidden="true" tabindex="-1"></a>    <span class="kw">have</span> := hdom τ hτ</span>
+<span id="cb119-146"><a href="#cb119-146" aria-hidden="true" tabindex="-1"></a>    change _ ≤ sol.value + e <span class="kw">at</span> this</span>
+<span id="cb119-147"><a href="#cb119-147" aria-hidden="true" tabindex="-1"></a>    <span class="cf">linarith</span> [hre&#39;.<span class="dv">1</span>]</span>
+<span id="cb119-148"><a href="#cb119-148" aria-hidden="true" tabindex="-1"></a>  <span class="kw">have</span> hle : expectedUtility κ sol.strategy u ≤ optimalValue κ u :=</span>
+<span id="cb119-149"><a href="#cb119-149" aria-hidden="true" tabindex="-1"></a>    expectedUtility_le_optimalValue κ u _ (deterministic_nonneg _ hdet)</span>
+<span id="cb119-150"><a href="#cb119-150" aria-hidden="true" tabindex="-1"></a>  <span class="cf">obtain</span> ⟨σo, _, hσo, hvo⟩ := optimalValue_attained κ u</span>
+<span id="cb119-151"><a href="#cb119-151" aria-hidden="true" tabindex="-1"></a>  <span class="cf">refine</span> ⟨hdet, hall, ?_, hle, ?_⟩</span>
+<span id="cb119-152"><a href="#cb119-152" aria-hidden="true" tabindex="-1"></a>  · <span class="kw">have</span> := hall σo hσo</span>
+<span id="cb119-153"><a href="#cb119-153" aria-hidden="true" tabindex="-1"></a>    <span class="cf">rw</span> [hvo] <span class="kw">at</span> this</span>
+<span id="cb119-154"><a href="#cb119-154" aria-hidden="true" tabindex="-1"></a>    <span class="cf">linarith</span></span>
+<span id="cb119-155"><a href="#cb119-155" aria-hidden="true" tabindex="-1"></a>  · <span class="kw">have</span> := hdom σo hσo</span>
+<span id="cb119-156"><a href="#cb119-156" aria-hidden="true" tabindex="-1"></a>    <span class="cf">rw</span> [hvo] <span class="kw">at</span> this</span>
+<span id="cb119-157"><a href="#cb119-157" aria-hidden="true" tabindex="-1"></a>    change _ ≤ sol.value + e <span class="kw">at</span> this</span>
+<span id="cb119-158"><a href="#cb119-158" aria-hidden="true" tabindex="-1"></a>    <span class="cf">rw</span> [abs_le]</span>
+<span id="cb119-159"><a href="#cb119-159" aria-hidden="true" tabindex="-1"></a>    <span class="cf">constructor</span></span>
+<span id="cb119-160"><a href="#cb119-160" aria-hidden="true" tabindex="-1"></a>    · <span class="cf">linarith</span></span>
+<span id="cb119-161"><a href="#cb119-161" aria-hidden="true" tabindex="-1"></a>    · <span class="cf">linarith</span> [hre&#39;.<span class="dv">1</span>, hle]</span>
+<span id="cb119-162"><a href="#cb119-162" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb119-163"><a href="#cb119-163" aria-hidden="true" tabindex="-1"></a><span class="kw">end</span></span>
+<span id="cb119-164"><a href="#cb119-164" aria-hidden="true" tabindex="-1"></a><span class="kw">end</span> InfluenceDiagramsProofs.DVE</span></code></pre></div>
+<!-- InfluenceDiagramsProofs/Finite/DVE/CertificateApprox.lean -->
+<h1
+id="approximate-optimality-on-a-certificate-whose-rows-nearly-sum-to-one">Approximate
+optimality on a certificate whose rows nearly sum to one</h1>
+<div class="sourceCode" id="cb120"><pre
+class="sourceCode lean"><code class="sourceCode lean"><span id="cb120-1"><a href="#cb120-1" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> InfluenceDiagramsProofs.Finite.DVE.CertificateCheck</span>
+<span id="cb120-2"><a href="#cb120-2" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> InfluenceDiagramsProofs.Finite.DVE.Approximate</span></code></pre></div>
+<p><code>certificate_solve_spec</code> needs every CPT row of the
+certificate to sum to exactly one (<code>ExactNormalised</code>). The
+binary64 words Julia writes almost never do (0 of the 14 binary64
+certificates of the cross-check), so this module bounds the loss
+instead.</p>
+<p><strong>Computable quantities</strong> (all exact rationals, read
+from the certificate alone):</p>
+<ul>
+<li><code>certificateEpsilon c</code>: the largest
+<code>|row sum - 1|</code> over the certificate’s CPT rows, a row being
+a coordinate list of the parents (axes <code>parents</code>, extents the
+certificate’s own state counts <code>certDim</code>) and its sum running
+over the target’s states;</li>
+<li><code>certChanceCount c = n</code>: the number of mechanisms (chance
+variables); decisions have no rows in the certificate, and their
+policies are normalised by construction
+(<code>Policy.normalised</code>), so they enter no factor below;</li>
+<li><code>certUmax c</code>: the sum over utility tables of the largest
+absolute cell, an upper bound of the absolute total utility
+<code>|∑ j, u j x|</code> (<code>certUtility_total_le</code>);</li>
+<li><code>approxError ε n U = n (((1 + ε) / (1 - ε)) ^ n - 1) U</code>
+and
+<code>certificateBound c = 2 * approxError (certificateEpsilon c) n (certUmax c)</code>.</li>
+</ul>
+<p><strong>The reference model</strong> is <code>certNormKernel</code>:
+every row divided by its own sum, which is positive when
+<code>certificateEpsilon c &lt; 1</code>. It is the only normalised
+model the certificate determines; the intended model whose decimal CPTs
+Julia rounded is not known to the certificate. The certificate’s joint
+weight is the reference joint times <code>∏ m, rowsum_m x</code>, which
+lies in <code>[(1 - ε) ^ n, (1 + ε) ^ n]</code>
+(<code>certKernel_envelope</code>).</p>
+<p><strong>Theorems.</strong></p>
+<ul>
+<li><code>certificate_approx_optimal</code>: for a matching certificate
+with nonnegative cells and <code>certificateEpsilon c &lt; 1</code>, the
+exact representative DVE run on the certificate’s data (any maximizing
+selector, in particular Julia’s first-label one <code>r.selector</code>,
+any representative choice <code>keep</code>, any plan) returns a
+deterministic strategy <code>σ*</code> with, writing <code>κ̂</code> for
+<code>certNormKernel</code>, <code>u</code> for <code>certUtility</code>
+and <code>e = approxError ε n U</code>,
+<code>EU κ̂ τ u ≤ EU κ̂ σ* u + 2 e</code> for every nonnegative strategy
+<code>τ</code>,
+<code>optimalValue κ̂ u - 2 e ≤ EU κ̂ σ* u ≤ optimalValue κ̂ u</code>, and
+<code>|value - optimalValue κ̂ u| ≤ e</code>;</li>
+<li><code>certificate_solve_approx</code>: the same for
+<code>DVE.solve</code> scheduled by the certificate’s orders, the run of
+<code>certificate_solve_spec</code>;</li>
+<li><code>certificateEpsilon_eq_zero_iff</code>:
+<code>certificateEpsilon c = 0</code> exactly when
+<code>ExactNormalised r c</code>; then
+<code>certNormKernel = certKernel</code> and
+<code>approxError 0 n U = 0</code>, so the bound is <code>0</code> and
+the conclusions are <code>certificate_solve_spec</code>’s
+(<code>certificate_approx_exact</code>).</li>
+</ul>
+<p>The bound is
+<code>2 n (((1 + ε) / (1 - ε)) ^ n - 1) U ≈ 4 n² ε U</code>, not
+<code>2 ((1 + ε) ^ n - 1) U</code>; see
+<code>Finite/DVE/Approximate.lean</code> for why the run does not
+maximise the unnormalised score. This is about the exact DVE run on the
+certificate’s exact numbers, not about Julia’s Float64 solver run: the
+version-1 certificate carries no solution.</p>
+<div class="sourceCode" id="cb121"><pre
+class="sourceCode lean"><code class="sourceCode lean"><span id="cb121-1"><a href="#cb121-1" aria-hidden="true" tabindex="-1"></a><span class="kw">set_option</span> autoImplicit false</span>
+<span id="cb121-2"><a href="#cb121-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb121-3"><a href="#cb121-3" aria-hidden="true" tabindex="-1"></a><span class="kw">namespace</span> InfluenceDiagramsProofs.DVECertificate</span>
+<span id="cb121-4"><a href="#cb121-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb121-5"><a href="#cb121-5" aria-hidden="true" tabindex="-1"></a><span class="kw">open</span> BayesianNetworksProofs BayesianNetworksProofs.FinBayesNet FinInfluenceDiagram</span>
+<span id="cb121-6"><a href="#cb121-6" aria-hidden="true" tabindex="-1"></a><span class="kw">open</span> BayesianNetworksProofs.Raw InfluenceDiagramsProofs.Records Spec</span></code></pre></div>
+<h2 id="computable-quantities">Computable quantities</h2>
+<div class="sourceCode" id="cb122"><pre
+class="sourceCode lean"><code class="sourceCode lean"><span id="cb122-1"><a href="#cb122-1" aria-hidden="true" tabindex="-1"></a><span class="do">/-- The state count of variable `v` read from the certificate&#39;s own state rows. -/</span></span>
+<span id="cb122-2"><a href="#cb122-2" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> certDim (c : Certificate) (v : Nat) : Nat :=</span>
+<span id="cb122-3"><a href="#cb122-3" aria-hidden="true" tabindex="-1"></a>  ((c.vars[v]?).map <span class="kw">fun</span> e =&gt; e.states.length).getD <span class="dv">0</span></span>
+<span id="cb122-4"><a href="#cb122-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb122-5"><a href="#cb122-5" aria-hidden="true" tabindex="-1"></a><span class="do">/-- The exact sum of the CPT row `row` of a mechanism, over the target&#39;s states. -/</span></span>
+<span id="cb122-6"><a href="#cb122-6" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> rowSum (c : Certificate) (e : MechanismEntry) (row : List Nat) : ℚ :=</span>
+<span id="cb122-7"><a href="#cb122-7" aria-hidden="true" tabindex="-1"></a>  ((List.range (certDim c e.target)).map <span class="kw">fun</span> a =&gt; cellValue e.cpt (row ++ [a])).sum</span>
+<span id="cb122-8"><a href="#cb122-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb122-9"><a href="#cb122-9" aria-hidden="true" tabindex="-1"></a><span class="do">/-- `|row sum - 1|` for every CPT row of the certificate. -/</span></span>
+<span id="cb122-10"><a href="#cb122-10" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> rowDeviations (c : Certificate) : List ℚ :=</span>
+<span id="cb122-11"><a href="#cb122-11" aria-hidden="true" tabindex="-1"></a>  c.mechanisms.flatMap <span class="kw">fun</span> e =&gt;</span>
+<span id="cb122-12"><a href="#cb122-12" aria-hidden="true" tabindex="-1"></a>    (lexCoords ((e.parents.map Slot.var).map (certDim c))).map <span class="kw">fun</span> row =&gt; |rowSum c e row - <span class="dv">1</span>|</span>
+<span id="cb122-13"><a href="#cb122-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb122-14"><a href="#cb122-14" aria-hidden="true" tabindex="-1"></a><span class="do">/-- **The certificate&#39;s normalisation error**: the largest `|row sum - 1|` over its CPT rows. -/</span></span>
+<span id="cb122-15"><a href="#cb122-15" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> certificateEpsilon (c : Certificate) : ℚ := (rowDeviations c).foldr max <span class="dv">0</span></span>
+<span id="cb122-16"><a href="#cb122-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb122-17"><a href="#cb122-17" aria-hidden="true" tabindex="-1"></a><span class="do">/-- The largest absolute cell of a table. -/</span></span>
+<span id="cb122-18"><a href="#cb122-18" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> tableMaxAbs (t : NumTable) : ℚ := (t.entries.map <span class="kw">fun</span> x =&gt; |x.value.toRat|).foldr max <span class="dv">0</span></span>
+<span id="cb122-19"><a href="#cb122-19" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb122-20"><a href="#cb122-20" aria-hidden="true" tabindex="-1"></a><span class="do">/-- An upper bound of the absolute total utility: the sum of the tables&#39; largest absolute</span></span>
+<span id="cb122-21"><a href="#cb122-21" aria-hidden="true" tabindex="-1"></a><span class="do">cells. -/</span></span>
+<span id="cb122-22"><a href="#cb122-22" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> certUmax (c : Certificate) : ℚ := (c.utilities.map <span class="kw">fun</span> e =&gt; tableMaxAbs e.table).sum</span>
+<span id="cb122-23"><a href="#cb122-23" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb122-24"><a href="#cb122-24" aria-hidden="true" tabindex="-1"></a><span class="do">/-- The number of chance variables (mechanisms). -/</span></span>
+<span id="cb122-25"><a href="#cb122-25" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> certChanceCount (c : Certificate) : ℕ := c.mechanisms.length</span>
+<span id="cb122-26"><a href="#cb122-26" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb122-27"><a href="#cb122-27" aria-hidden="true" tabindex="-1"></a><span class="do">/-- The per-run error `n (((1 + ε) / (1 - ε)) ^ n - 1) U`. -/</span></span>
+<span id="cb122-28"><a href="#cb122-28" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> approxError (ε : ℚ) (n : ℕ) (U : ℚ) : ℚ := n * (((<span class="dv">1</span> + ε) / (<span class="dv">1</span> - ε)) ^ n - <span class="dv">1</span>) * U</span>
+<span id="cb122-29"><a href="#cb122-29" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb122-30"><a href="#cb122-30" aria-hidden="true" tabindex="-1"></a><span class="do">/-- **The certificate&#39;s optimality gap** `2 * approxError ε n U`. -/</span></span>
+<span id="cb122-31"><a href="#cb122-31" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> certificateBound (c : Certificate) : ℚ :=</span>
+<span id="cb122-32"><a href="#cb122-32" aria-hidden="true" tabindex="-1"></a>  <span class="dv">2</span> * approxError (certificateEpsilon c) (certChanceCount c) (certUmax c)</span>
+<span id="cb122-33"><a href="#cb122-33" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb122-34"><a href="#cb122-34" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> le_foldr_max {l : List ℚ} {x : ℚ} (hx : x ∈ l) : x ≤ l.foldr max <span class="dv">0</span> := <span class="kw">by</span></span>
+<span id="cb122-35"><a href="#cb122-35" aria-hidden="true" tabindex="-1"></a>  <span class="cf">induction</span> l <span class="kw">with</span></span>
+<span id="cb122-36"><a href="#cb122-36" aria-hidden="true" tabindex="-1"></a>  | nil =&gt; <span class="cf">simp</span> <span class="kw">at</span> hx</span>
+<span id="cb122-37"><a href="#cb122-37" aria-hidden="true" tabindex="-1"></a>  | cons y l ih =&gt;</span>
+<span id="cb122-38"><a href="#cb122-38" aria-hidden="true" tabindex="-1"></a>    <span class="cf">rcases</span> List.mem_cons<span class="fl">.1</span> hx <span class="kw">with</span> <span class="cf">rfl</span> | h</span>
+<span id="cb122-39"><a href="#cb122-39" aria-hidden="true" tabindex="-1"></a>    · <span class="cf">exact</span> le_max_left _ _</span>
+<span id="cb122-40"><a href="#cb122-40" aria-hidden="true" tabindex="-1"></a>    · <span class="cf">exact</span> (ih h).trans (le_max_right _ _)</span>
+<span id="cb122-41"><a href="#cb122-41" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb122-42"><a href="#cb122-42" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> foldr_max_nonneg (l : List ℚ) : <span class="dv">0</span> ≤ l.foldr max <span class="dv">0</span> := <span class="kw">by</span></span>
+<span id="cb122-43"><a href="#cb122-43" aria-hidden="true" tabindex="-1"></a>  <span class="cf">induction</span> l <span class="kw">with</span></span>
+<span id="cb122-44"><a href="#cb122-44" aria-hidden="true" tabindex="-1"></a>  | nil =&gt; <span class="cf">exact</span> le_refl <span class="dv">0</span></span>
+<span id="cb122-45"><a href="#cb122-45" aria-hidden="true" tabindex="-1"></a>  | cons y l ih =&gt; <span class="cf">exact</span> ih.trans (le_max_right _ _)</span>
+<span id="cb122-46"><a href="#cb122-46" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb122-47"><a href="#cb122-47" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> foldr_max_le {l : List ℚ} {b : ℚ} (hb : <span class="dv">0</span> ≤ b) (h : ∀ x ∈ l, x ≤ b) :</span>
+<span id="cb122-48"><a href="#cb122-48" aria-hidden="true" tabindex="-1"></a>    l.foldr max <span class="dv">0</span> ≤ b := <span class="kw">by</span></span>
+<span id="cb122-49"><a href="#cb122-49" aria-hidden="true" tabindex="-1"></a>  <span class="cf">induction</span> l <span class="kw">with</span></span>
+<span id="cb122-50"><a href="#cb122-50" aria-hidden="true" tabindex="-1"></a>  | nil =&gt; <span class="cf">exact</span> hb</span>
+<span id="cb122-51"><a href="#cb122-51" aria-hidden="true" tabindex="-1"></a>  | cons y l ih =&gt;</span>
+<span id="cb122-52"><a href="#cb122-52" aria-hidden="true" tabindex="-1"></a>    <span class="cf">exact</span> max_le (h y List.mem_cons_self) (ih <span class="kw">fun</span> x hx =&gt; h x (List.mem_cons_of_mem _ hx))</span>
+<span id="cb122-53"><a href="#cb122-53" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb122-54"><a href="#cb122-54" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> certificateEpsilon_nonneg (c : Certificate) : <span class="dv">0</span> ≤ certificateEpsilon c :=</span>
+<span id="cb122-55"><a href="#cb122-55" aria-hidden="true" tabindex="-1"></a>  foldr_max_nonneg _</span>
+<span id="cb122-56"><a href="#cb122-56" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb122-57"><a href="#cb122-57" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> tableMaxAbs_nonneg (t : NumTable) : <span class="dv">0</span> ≤ tableMaxAbs t := foldr_max_nonneg _</span>
+<span id="cb122-58"><a href="#cb122-58" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb122-59"><a href="#cb122-59" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> certUmax_nonneg (c : Certificate) : <span class="dv">0</span> ≤ certUmax c :=</span>
+<span id="cb122-60"><a href="#cb122-60" aria-hidden="true" tabindex="-1"></a>  List.sum_nonneg <span class="kw">fun</span> x hx =&gt; <span class="kw">by</span></span>
+<span id="cb122-61"><a href="#cb122-61" aria-hidden="true" tabindex="-1"></a>    <span class="cf">obtain</span> ⟨e, -, rfl⟩ := List.mem_map<span class="fl">.1</span> hx</span>
+<span id="cb122-62"><a href="#cb122-62" aria-hidden="true" tabindex="-1"></a>    <span class="cf">exact</span> tableMaxAbs_nonneg _</span>
+<span id="cb122-63"><a href="#cb122-63" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb122-64"><a href="#cb122-64" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> approxError_zero (n : ℕ) (U : ℚ) : approxError <span class="dv">0</span> n U = <span class="dv">0</span> := <span class="kw">by</span></span>
+<span id="cb122-65"><a href="#cb122-65" aria-hidden="true" tabindex="-1"></a>  <span class="cf">simp</span> [approxError]</span>
+<span id="cb122-66"><a href="#cb122-66" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb122-67"><a href="#cb122-67" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> sum_range_list {M : <span class="kw">Type</span>} [AddCommMonoid M] (f : ℕ → M) (n : ℕ) :</span>
+<span id="cb122-68"><a href="#cb122-68" aria-hidden="true" tabindex="-1"></a>    ((List.range n).map f).sum = ∑ i : Fin n, f i.val := <span class="kw">by</span></span>
+<span id="cb122-69"><a href="#cb122-69" aria-hidden="true" tabindex="-1"></a>  <span class="cf">rw</span> [Fin.sum_univ_eq_sum_range]</span>
+<span id="cb122-70"><a href="#cb122-70" aria-hidden="true" tabindex="-1"></a>  <span class="cf">induction</span> n <span class="kw">with</span></span>
+<span id="cb122-71"><a href="#cb122-71" aria-hidden="true" tabindex="-1"></a>  | zero =&gt; <span class="cf">simp</span></span>
+<span id="cb122-72"><a href="#cb122-72" aria-hidden="true" tabindex="-1"></a>  | succ n ih =&gt;</span>
+<span id="cb122-73"><a href="#cb122-73" aria-hidden="true" tabindex="-1"></a>    <span class="cf">rw</span> [List.range_succ, List.map_append, List.sum_append, ih, Finset.sum_range_succ]</span>
+<span id="cb122-74"><a href="#cb122-74" aria-hidden="true" tabindex="-1"></a>    <span class="cf">simp</span></span>
+<span id="cb122-75"><a href="#cb122-75" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb122-76"><a href="#cb122-76" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> sum_fin_getElem? {α : <span class="kw">Type</span>} (l : List α) (f : α → ℚ) (n : ℕ) (hn : l.length = n) :</span>
+<span id="cb122-77"><a href="#cb122-77" aria-hidden="true" tabindex="-1"></a>    ∑ j : Fin n, ((l[j.val]?).map f).getD <span class="dv">0</span> = (l.map f).sum := <span class="kw">by</span></span>
+<span id="cb122-78"><a href="#cb122-78" aria-hidden="true" tabindex="-1"></a>  <span class="cf">subst</span> hn</span>
+<span id="cb122-79"><a href="#cb122-79" aria-hidden="true" tabindex="-1"></a>  <span class="cf">induction</span> l <span class="kw">with</span></span>
+<span id="cb122-80"><a href="#cb122-80" aria-hidden="true" tabindex="-1"></a>  | nil =&gt; <span class="cf">simp</span></span>
+<span id="cb122-81"><a href="#cb122-81" aria-hidden="true" tabindex="-1"></a>  | cons a l ih =&gt;</span>
+<span id="cb122-82"><a href="#cb122-82" aria-hidden="true" tabindex="-1"></a>    <span class="cf">refine</span> (Fin.sum_univ_succ (n := l.length)</span>
+<span id="cb122-83"><a href="#cb122-83" aria-hidden="true" tabindex="-1"></a>      <span class="kw">fun</span> j : Fin (l.length + <span class="dv">1</span>) =&gt; (((a :: l)[j.val]?).map f).getD <span class="dv">0</span>).trans ?_</span>
+<span id="cb122-84"><a href="#cb122-84" aria-hidden="true" tabindex="-1"></a>    <span class="cf">simp</span></span></code></pre></div>
+<h2 id="the-certificates-rows-are-the-models-rows">The certificate’s
+rows are the model’s rows</h2>
+<div class="sourceCode" id="cb123"><pre
+class="sourceCode lean"><code class="sourceCode lean"><span id="cb123-1"><a href="#cb123-1" aria-hidden="true" tabindex="-1"></a><span class="kw">section</span> Rows</span>
+<span id="cb123-2"><a href="#cb123-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb123-3"><a href="#cb123-3" aria-hidden="true" tabindex="-1"></a><span class="kw">variable</span> {r : Diagram} {c : Certificate}</span>
+<span id="cb123-4"><a href="#cb123-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb123-5"><a href="#cb123-5" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> certDim_eq (hm : Matches r c) (v : Nat) : certDim c v = dim r v := <span class="kw">by</span></span>
+<span id="cb123-6"><a href="#cb123-6" aria-hidden="true" tabindex="-1"></a>  <span class="cf">unfold</span> certDim dim</span>
+<span id="cb123-7"><a href="#cb123-7" aria-hidden="true" tabindex="-1"></a>  <span class="cf">by_cases</span> hv : v &lt; r.nv</span>
+<span id="cb123-8"><a href="#cb123-8" aria-hidden="true" tabindex="-1"></a>  · <span class="cf">rw</span> [dif_pos hv]</span>
+<span id="cb123-9"><a href="#cb123-9" aria-hidden="true" tabindex="-1"></a>    <span class="kw">have</span> hvo := hm.vars ⟨v, hv⟩</span>
+<span id="cb123-10"><a href="#cb123-10" aria-hidden="true" tabindex="-1"></a>    <span class="cf">cases</span> hc : c.vars[v]? <span class="kw">with</span></span>
+<span id="cb123-11"><a href="#cb123-11" aria-hidden="true" tabindex="-1"></a>    | none =&gt; <span class="cf">rw</span> [hc] <span class="kw">at</span> hvo; <span class="cf">exact</span> hvo.elim</span>
+<span id="cb123-12"><a href="#cb123-12" aria-hidden="true" tabindex="-1"></a>    | some e =&gt;</span>
+<span id="cb123-13"><a href="#cb123-13" aria-hidden="true" tabindex="-1"></a>      <span class="cf">rw</span> [hc] <span class="kw">at</span> hvo</span>
+<span id="cb123-14"><a href="#cb123-14" aria-hidden="true" tabindex="-1"></a>      <span class="cf">exact</span> hvo.<span class="dv">2</span>.<span class="dv">2</span>.<span class="fl">2.1</span></span>
+<span id="cb123-15"><a href="#cb123-15" aria-hidden="true" tabindex="-1"></a>  · <span class="cf">rw</span> [dif_neg hv]</span>
+<span id="cb123-16"><a href="#cb123-16" aria-hidden="true" tabindex="-1"></a>    <span class="kw">have</span> : c.vars[v]? = none := <span class="kw">by</span></span>
+<span id="cb123-17"><a href="#cb123-17" aria-hidden="true" tabindex="-1"></a>      <span class="cf">rw</span> [List.getElem?_eq_none_iff, hm.vars_length]</span>
+<span id="cb123-18"><a href="#cb123-18" aria-hidden="true" tabindex="-1"></a>      <span class="cf">omega</span></span>
+<span id="cb123-19"><a href="#cb123-19" aria-hidden="true" tabindex="-1"></a>    <span class="cf">rw</span> [this]</span>
+<span id="cb123-20"><a href="#cb123-20" aria-hidden="true" tabindex="-1"></a>    <span class="cf">rfl</span></span>
+<span id="cb123-21"><a href="#cb123-21" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb123-22"><a href="#cb123-22" aria-hidden="true" tabindex="-1"></a><span class="do">/-- The exact row sum of the certificate&#39;s kernel is the certificate&#39;s `rowSum`. -/</span></span>
+<span id="cb123-23"><a href="#cb123-23" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> rowSum_eq (hm : Matches r c) (m : Fin r.nm) {e : MechanismEntry}</span>
+<span id="cb123-24"><a href="#cb123-24" aria-hidden="true" tabindex="-1"></a>    (hc : c.mechanisms[m.val]? = some e) (row : List Nat) :</span>
+<span id="cb123-25"><a href="#cb123-25" aria-hidden="true" tabindex="-1"></a>    rowSum c e row = ∑ a : Fin (r.stateCount (r.mechanisms m).target),</span>
+<span id="cb123-26"><a href="#cb123-26" aria-hidden="true" tabindex="-1"></a>      cellValue e.cpt (row ++ [a.val]) := <span class="kw">by</span></span>
+<span id="cb123-27"><a href="#cb123-27" aria-hidden="true" tabindex="-1"></a>  <span class="kw">have</span> hmo := hm.mechanisms m</span>
+<span id="cb123-28"><a href="#cb123-28" aria-hidden="true" tabindex="-1"></a>  <span class="cf">rw</span> [hc] <span class="kw">at</span> hmo</span>
+<span id="cb123-29"><a href="#cb123-29" aria-hidden="true" tabindex="-1"></a>  change MechanismOk r c.pool m e <span class="kw">at</span> hmo</span>
+<span id="cb123-30"><a href="#cb123-30" aria-hidden="true" tabindex="-1"></a>  <span class="kw">have</span> ht : certDim c e.target = r.stateCount (r.mechanisms m).target := <span class="kw">by</span></span>
+<span id="cb123-31"><a href="#cb123-31" aria-hidden="true" tabindex="-1"></a>    <span class="cf">rw</span> [certDim_eq hm, hmo.<span class="fl">2.1</span>, dim, dif_pos (r.mechanisms m).target.isLt]</span>
+<span id="cb123-32"><a href="#cb123-32" aria-hidden="true" tabindex="-1"></a>  <span class="cf">unfold</span> rowSum</span>
+<span id="cb123-33"><a href="#cb123-33" aria-hidden="true" tabindex="-1"></a>  <span class="cf">rw</span> [sum_range_list, ht]</span>
+<span id="cb123-34"><a href="#cb123-34" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb123-35"><a href="#cb123-35" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> rows_eq (hm : Matches r c) (e : MechanismEntry) :</span>
+<span id="cb123-36"><a href="#cb123-36" aria-hidden="true" tabindex="-1"></a>    (e.parents.map Slot.var).map (certDim c) = (e.parents.map Slot.var).map (dim r) :=</span>
+<span id="cb123-37"><a href="#cb123-37" aria-hidden="true" tabindex="-1"></a>  List.map_congr_left <span class="kw">fun</span> v _ =&gt; certDim_eq hm v</span>
+<span id="cb123-38"><a href="#cb123-38" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb123-39"><a href="#cb123-39" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> mem_rowDeviations {e : MechanismEntry} (he : e ∈ c.mechanisms) {row : List Nat}</span>
+<span id="cb123-40"><a href="#cb123-40" aria-hidden="true" tabindex="-1"></a>    (hrow : row ∈ lexCoords ((e.parents.map Slot.var).map (certDim c))) :</span>
+<span id="cb123-41"><a href="#cb123-41" aria-hidden="true" tabindex="-1"></a>    |rowSum c e row - <span class="dv">1</span>| ≤ certificateEpsilon c :=</span>
+<span id="cb123-42"><a href="#cb123-42" aria-hidden="true" tabindex="-1"></a>  le_foldr_max (List.mem_flatMap<span class="fl">.2</span> ⟨e, he, List.mem_map<span class="fl">.2</span> ⟨row, hrow, rfl⟩⟩)</span>
+<span id="cb123-43"><a href="#cb123-43" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb123-44"><a href="#cb123-44" aria-hidden="true" tabindex="-1"></a><span class="do">/-- **`certificateEpsilon` is zero exactly on exactly normalised certificates.** -/</span></span>
+<span id="cb123-45"><a href="#cb123-45" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> certificateEpsilon_eq_zero_iff (hm : Matches r c) :</span>
+<span id="cb123-46"><a href="#cb123-46" aria-hidden="true" tabindex="-1"></a>    certificateEpsilon c = <span class="dv">0</span> ↔ ExactNormalised r c := <span class="kw">by</span></span>
+<span id="cb123-47"><a href="#cb123-47" aria-hidden="true" tabindex="-1"></a>  <span class="cf">constructor</span></span>
+<span id="cb123-48"><a href="#cb123-48" aria-hidden="true" tabindex="-1"></a>  · <span class="cf">intro</span> h0 m</span>
+<span id="cb123-49"><a href="#cb123-49" aria-hidden="true" tabindex="-1"></a>    <span class="kw">have</span> hmo := hm.mechanisms m</span>
+<span id="cb123-50"><a href="#cb123-50" aria-hidden="true" tabindex="-1"></a>    <span class="cf">cases</span> hc : c.mechanisms[m.val]? <span class="kw">with</span></span>
+<span id="cb123-51"><a href="#cb123-51" aria-hidden="true" tabindex="-1"></a>    | none =&gt; <span class="cf">rw</span> [hc] <span class="kw">at</span> hmo; <span class="cf">exact</span> hmo.elim</span>
+<span id="cb123-52"><a href="#cb123-52" aria-hidden="true" tabindex="-1"></a>    | some e =&gt;</span>
+<span id="cb123-53"><a href="#cb123-53" aria-hidden="true" tabindex="-1"></a>      <span class="cf">intro</span> row hrow</span>
+<span id="cb123-54"><a href="#cb123-54" aria-hidden="true" tabindex="-1"></a>      <span class="cf">rw</span> [← rows_eq hm] <span class="kw">at</span> hrow</span>
+<span id="cb123-55"><a href="#cb123-55" aria-hidden="true" tabindex="-1"></a>      <span class="kw">have</span> := mem_rowDeviations (List.mem_of_getElem? hc) hrow</span>
+<span id="cb123-56"><a href="#cb123-56" aria-hidden="true" tabindex="-1"></a>      <span class="cf">rw</span> [h0] <span class="kw">at</span> this</span>
+<span id="cb123-57"><a href="#cb123-57" aria-hidden="true" tabindex="-1"></a>      <span class="cf">rw</span> [← rowSum_eq hm m hc]</span>
+<span id="cb123-58"><a href="#cb123-58" aria-hidden="true" tabindex="-1"></a>      <span class="cf">exact</span> sub_eq_zero<span class="fl">.1</span> (abs_nonpos_iff<span class="fl">.1</span> this)</span>
+<span id="cb123-59"><a href="#cb123-59" aria-hidden="true" tabindex="-1"></a>  · <span class="cf">intro</span> hex</span>
+<span id="cb123-60"><a href="#cb123-60" aria-hidden="true" tabindex="-1"></a>    <span class="cf">refine</span> le_antisymm (foldr_max_le (le_refl <span class="dv">0</span>) <span class="kw">fun</span> x hx =&gt; ?_) (certificateEpsilon_nonneg c)</span>
+<span id="cb123-61"><a href="#cb123-61" aria-hidden="true" tabindex="-1"></a>    <span class="cf">obtain</span> ⟨e, he, hx⟩ := List.mem_flatMap<span class="fl">.1</span> hx</span>
+<span id="cb123-62"><a href="#cb123-62" aria-hidden="true" tabindex="-1"></a>    <span class="cf">obtain</span> ⟨row, hrow, rfl⟩ := List.mem_map<span class="fl">.1</span> hx</span>
+<span id="cb123-63"><a href="#cb123-63" aria-hidden="true" tabindex="-1"></a>    <span class="cf">obtain</span> ⟨i, hi, hie⟩ := List.getElem_of_mem he</span>
+<span id="cb123-64"><a href="#cb123-64" aria-hidden="true" tabindex="-1"></a>    <span class="kw">have</span> hlen : i &lt; r.nm := hm.mechanisms_length ▸ hi</span>
+<span id="cb123-65"><a href="#cb123-65" aria-hidden="true" tabindex="-1"></a>    <span class="kw">have</span> hc : c.mechanisms[(⟨i, hlen⟩ : Fin r.nm).val]? = some e := <span class="kw">by</span></span>
+<span id="cb123-66"><a href="#cb123-66" aria-hidden="true" tabindex="-1"></a>      <span class="cf">simp</span> [List.getElem?_eq_getElem hi, hie]</span>
+<span id="cb123-67"><a href="#cb123-67" aria-hidden="true" tabindex="-1"></a>    <span class="kw">have</span> hno := hex ⟨i, hlen⟩</span>
+<span id="cb123-68"><a href="#cb123-68" aria-hidden="true" tabindex="-1"></a>    <span class="cf">rw</span> [hc] <span class="kw">at</span> hno</span>
+<span id="cb123-69"><a href="#cb123-69" aria-hidden="true" tabindex="-1"></a>    <span class="cf">rw</span> [rows_eq hm] <span class="kw">at</span> hrow</span>
+<span id="cb123-70"><a href="#cb123-70" aria-hidden="true" tabindex="-1"></a>    <span class="cf">rw</span> [rowSum_eq hm _ hc, hno row hrow, sub_self, abs_zero]</span>
+<span id="cb123-71"><a href="#cb123-71" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb123-72"><a href="#cb123-72" aria-hidden="true" tabindex="-1"></a><span class="kw">end</span> Rows</span></code></pre></div>
+<h2 id="the-normalised-reference-kernel">The normalised reference
+kernel</h2>
+<div class="sourceCode" id="cb124"><pre
+class="sourceCode lean"><code class="sourceCode lean"><span id="cb124-1"><a href="#cb124-1" aria-hidden="true" tabindex="-1"></a><span class="kw">section</span> Kernel</span>
+<span id="cb124-2"><a href="#cb124-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb124-3"><a href="#cb124-3" aria-hidden="true" tabindex="-1"></a><span class="kw">variable</span> (r : Diagram) (h : r.Valid) (c : Certificate)</span>
+<span id="cb124-4"><a href="#cb124-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb124-5"><a href="#cb124-5" aria-hidden="true" tabindex="-1"></a><span class="do">/-- The row sum of the certificate&#39;s kernel. -/</span></span>
+<span id="cb124-6"><a href="#cb124-6" aria-hidden="true" tabindex="-1"></a><span class="kw">noncomputable</span> <span class="kw">def</span> certRowSum (m : (r.compile h).M) (x : (r.compile h).Assignment) : ℝ :=</span>
+<span id="cb124-7"><a href="#cb124-7" aria-hidden="true" tabindex="-1"></a>  ∑ b, certKernel r h c m x b</span>
+<span id="cb124-8"><a href="#cb124-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb124-9"><a href="#cb124-9" aria-hidden="true" tabindex="-1"></a><span class="do">/-- **The reference model**: every certificate row divided by its own sum. -/</span></span>
+<span id="cb124-10"><a href="#cb124-10" aria-hidden="true" tabindex="-1"></a><span class="kw">noncomputable</span> <span class="kw">def</span> certNormKernel : (r.compile h).Kernel ℝ := <span class="kw">fun</span> m x a =&gt;</span>
+<span id="cb124-11"><a href="#cb124-11" aria-hidden="true" tabindex="-1"></a>  certKernel r h c m x a / certRowSum r h c m x</span>
+<span id="cb124-12"><a href="#cb124-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb124-13"><a href="#cb124-13" aria-hidden="true" tabindex="-1"></a><span class="kw">variable</span> {r c}</span>
+<span id="cb124-14"><a href="#cb124-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb124-15"><a href="#cb124-15" aria-hidden="true" tabindex="-1"></a><span class="do">/-- Every row of the certificate&#39;s kernel sums to within `certificateEpsilon c` of one. -/</span></span>
+<span id="cb124-16"><a href="#cb124-16" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> certRowSum_dev (hm : Matches r c) (h : r.Valid) (m : Fin r.nm)</span>
+<span id="cb124-17"><a href="#cb124-17" aria-hidden="true" tabindex="-1"></a>    (x : (r.compile h).Assignment) :</span>
+<span id="cb124-18"><a href="#cb124-18" aria-hidden="true" tabindex="-1"></a>    |certRowSum r h c m x - <span class="dv">1</span>| ≤ (certificateEpsilon c : ℝ) := <span class="kw">by</span></span>
+<span id="cb124-19"><a href="#cb124-19" aria-hidden="true" tabindex="-1"></a>  <span class="kw">have</span> hmo := hm.mechanisms m</span>
+<span id="cb124-20"><a href="#cb124-20" aria-hidden="true" tabindex="-1"></a>  <span class="cf">unfold</span> certRowSum certKernel</span>
+<span id="cb124-21"><a href="#cb124-21" aria-hidden="true" tabindex="-1"></a>  <span class="cf">cases</span> hc : c.mechanisms[m.val]? <span class="kw">with</span></span>
+<span id="cb124-22"><a href="#cb124-22" aria-hidden="true" tabindex="-1"></a>  | none =&gt; <span class="cf">rw</span> [hc] <span class="kw">at</span> hmo; <span class="cf">exact</span> hmo.elim</span>
+<span id="cb124-23"><a href="#cb124-23" aria-hidden="true" tabindex="-1"></a>  | some e =&gt;</span>
+<span id="cb124-24"><a href="#cb124-24" aria-hidden="true" tabindex="-1"></a>    <span class="cf">rw</span> [hc] <span class="kw">at</span> hmo</span>
+<span id="cb124-25"><a href="#cb124-25" aria-hidden="true" tabindex="-1"></a>    change MechanismOk r c.pool m e <span class="kw">at</span> hmo</span>
+<span id="cb124-26"><a href="#cb124-26" aria-hidden="true" tabindex="-1"></a>    <span class="kw">have</span> hsl := hmo.<span class="dv">2</span>.<span class="dv">2</span>.<span class="fl">2.1</span></span>
+<span id="cb124-27"><a href="#cb124-27" aria-hidden="true" tabindex="-1"></a>    <span class="cf">simp</span> only</span>
+<span id="cb124-28"><a href="#cb124-28" aria-hidden="true" tabindex="-1"></a>    <span class="kw">have</span> hrow : coordsOf r h x (e.parents.map Slot.var) ∈</span>
+<span id="cb124-29"><a href="#cb124-29" aria-hidden="true" tabindex="-1"></a>        lexCoords ((e.parents.map Slot.var).map (certDim c)) := <span class="kw">by</span></span>
+<span id="cb124-30"><a href="#cb124-30" aria-hidden="true" tabindex="-1"></a>      <span class="cf">rw</span> [rows_eq hm, mem_lexCoords, coordsOf, List.forall₂_map_left_iff,</span>
+<span id="cb124-31"><a href="#cb124-31" aria-hidden="true" tabindex="-1"></a>        List.forall₂_map_right_iff, List.forall₂_same]</span>
+<span id="cb124-32"><a href="#cb124-32" aria-hidden="true" tabindex="-1"></a>      <span class="cf">intro</span> v hv</span>
+<span id="cb124-33"><a href="#cb124-33" aria-hidden="true" tabindex="-1"></a>      <span class="cf">obtain</span> ⟨s, hs, rfl⟩ := List.mem_map<span class="fl">.1</span> hv</span>
+<span id="cb124-34"><a href="#cb124-34" aria-hidden="true" tabindex="-1"></a>      <span class="cf">obtain</span> ⟨i, -, hvar⟩ := hsl.mem hs</span>
+<span id="cb124-35"><a href="#cb124-35" aria-hidden="true" tabindex="-1"></a>      <span class="kw">have</span> hlt : s.var &lt; r.nv := hvar ▸ (r.inputs i).var.isLt</span>
+<span id="cb124-36"><a href="#cb124-36" aria-hidden="true" tabindex="-1"></a>      <span class="cf">simp</span> only [dif_pos hlt, dim]</span>
+<span id="cb124-37"><a href="#cb124-37" aria-hidden="true" tabindex="-1"></a>      <span class="cf">exact</span> (x ⟨s.var, hlt⟩).isLt</span>
+<span id="cb124-38"><a href="#cb124-38" aria-hidden="true" tabindex="-1"></a>    <span class="kw">have</span> hd := mem_rowDeviations (List.mem_of_getElem? hc) hrow</span>
+<span id="cb124-39"><a href="#cb124-39" aria-hidden="true" tabindex="-1"></a>    <span class="cf">rw</span> [rowSum_eq hm m hc] <span class="kw">at</span> hd</span>
+<span id="cb124-40"><a href="#cb124-40" aria-hidden="true" tabindex="-1"></a>    <span class="kw">have</span> hcast : (∑ b : Fin (r.stateCount (r.mechanisms m).target),</span>
+<span id="cb124-41"><a href="#cb124-41" aria-hidden="true" tabindex="-1"></a>        ((cellValue e.cpt (coordsOf r h x (e.parents.map Slot.var) ++ [b.val]) : ℚ) : ℝ)) =</span>
+<span id="cb124-42"><a href="#cb124-42" aria-hidden="true" tabindex="-1"></a>        ((∑ b : Fin (r.stateCount (r.mechanisms m).target),</span>
+<span id="cb124-43"><a href="#cb124-43" aria-hidden="true" tabindex="-1"></a>          cellValue e.cpt (coordsOf r h x (e.parents.map Slot.var) ++ [b.val]) : ℚ) : ℝ) := <span class="kw">by</span></span>
+<span id="cb124-44"><a href="#cb124-44" aria-hidden="true" tabindex="-1"></a>      <span class="cf">push_cast</span></span>
+<span id="cb124-45"><a href="#cb124-45" aria-hidden="true" tabindex="-1"></a>      <span class="cf">rfl</span></span>
+<span id="cb124-46"><a href="#cb124-46" aria-hidden="true" tabindex="-1"></a>    <span class="cf">rw</span> [hcast]</span>
+<span id="cb124-47"><a href="#cb124-47" aria-hidden="true" tabindex="-1"></a>    exact_mod_cast hd</span>
+<span id="cb124-48"><a href="#cb124-48" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb124-49"><a href="#cb124-49" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> certRowSum_pos (hm : Matches r c) (hε : certificateEpsilon c &lt; <span class="dv">1</span>) (h : r.Valid)</span>
+<span id="cb124-50"><a href="#cb124-50" aria-hidden="true" tabindex="-1"></a>    (m : Fin r.nm) (x : (r.compile h).Assignment) : <span class="dv">0</span> &lt; certRowSum r h c m x := <span class="kw">by</span></span>
+<span id="cb124-51"><a href="#cb124-51" aria-hidden="true" tabindex="-1"></a>  <span class="kw">have</span> hd := abs_le<span class="fl">.1</span> (certRowSum_dev hm h m x)</span>
+<span id="cb124-52"><a href="#cb124-52" aria-hidden="true" tabindex="-1"></a>  <span class="kw">have</span> : (certificateEpsilon c : ℝ) &lt; <span class="dv">1</span> := <span class="kw">by</span> exact_mod_cast hε</span>
+<span id="cb124-53"><a href="#cb124-53" aria-hidden="true" tabindex="-1"></a>  <span class="cf">linarith</span> [hd<span class="fl">.1</span>]</span>
+<span id="cb124-54"><a href="#cb124-54" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb124-55"><a href="#cb124-55" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> certNormKernel_local (hm : Matches r c) (h : r.Valid) (m : Fin r.nm) :</span>
+<span id="cb124-56"><a href="#cb124-56" aria-hidden="true" tabindex="-1"></a>    Local (certNormKernel r h c) m := <span class="kw">by</span></span>
+<span id="cb124-57"><a href="#cb124-57" aria-hidden="true" tabindex="-1"></a>  <span class="cf">intro</span> x x&#39; hxx</span>
+<span id="cb124-58"><a href="#cb124-58" aria-hidden="true" tabindex="-1"></a>  <span class="kw">have</span> hk := certKernel_local hm h m x x&#39; hxx</span>
+<span id="cb124-59"><a href="#cb124-59" aria-hidden="true" tabindex="-1"></a>  <span class="cf">funext</span> a</span>
+<span id="cb124-60"><a href="#cb124-60" aria-hidden="true" tabindex="-1"></a>  <span class="cf">unfold</span> certNormKernel certRowSum</span>
+<span id="cb124-61"><a href="#cb124-61" aria-hidden="true" tabindex="-1"></a>  <span class="cf">rw</span> [hk]</span>
+<span id="cb124-62"><a href="#cb124-62" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb124-63"><a href="#cb124-63" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> certNormKernel_nonneg (hn : Nonneg c) (h : r.Valid) (m : Fin r.nm)</span>
+<span id="cb124-64"><a href="#cb124-64" aria-hidden="true" tabindex="-1"></a>    (x : (r.compile h).Assignment) (a : (r.compile h).states ((r.compile h).target m)) :</span>
+<span id="cb124-65"><a href="#cb124-65" aria-hidden="true" tabindex="-1"></a>    <span class="dv">0</span> ≤ certNormKernel r h c m x a :=</span>
+<span id="cb124-66"><a href="#cb124-66" aria-hidden="true" tabindex="-1"></a>  div_nonneg (certKernel_nonneg hn h m x a)</span>
+<span id="cb124-67"><a href="#cb124-67" aria-hidden="true" tabindex="-1"></a>    (Finset.sum_nonneg <span class="kw">fun</span> b _ =&gt; certKernel_nonneg hn h m x b)</span>
+<span id="cb124-68"><a href="#cb124-68" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb124-69"><a href="#cb124-69" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> certNormKernel_normalised (hm : Matches r c) (hε : certificateEpsilon c &lt; <span class="dv">1</span>)</span>
+<span id="cb124-70"><a href="#cb124-70" aria-hidden="true" tabindex="-1"></a>    (h : r.Valid) (m : Fin r.nm) : Normalised (certNormKernel r h c) m := <span class="kw">by</span></span>
+<span id="cb124-71"><a href="#cb124-71" aria-hidden="true" tabindex="-1"></a>  <span class="cf">intro</span> x</span>
+<span id="cb124-72"><a href="#cb124-72" aria-hidden="true" tabindex="-1"></a>  <span class="cf">unfold</span> certNormKernel</span>
+<span id="cb124-73"><a href="#cb124-73" aria-hidden="true" tabindex="-1"></a>  <span class="cf">rw</span> [← Finset.sum_div]</span>
+<span id="cb124-74"><a href="#cb124-74" aria-hidden="true" tabindex="-1"></a>  <span class="cf">exact</span> div_self (ne_of_gt (certRowSum_pos hm hε h m x))</span>
+<span id="cb124-75"><a href="#cb124-75" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb124-76"><a href="#cb124-76" aria-hidden="true" tabindex="-1"></a><span class="do">/-- On an exactly normalised certificate the reference model is the certificate&#39;s model. -/</span></span>
+<span id="cb124-77"><a href="#cb124-77" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> certNormKernel_eq_of_exact (hm : Matches r c) (hex : ExactNormalised r c) (h : r.Valid) :</span>
+<span id="cb124-78"><a href="#cb124-78" aria-hidden="true" tabindex="-1"></a>    certNormKernel r h c = certKernel r h c := <span class="kw">by</span></span>
+<span id="cb124-79"><a href="#cb124-79" aria-hidden="true" tabindex="-1"></a>  <span class="cf">funext</span> m x a</span>
+<span id="cb124-80"><a href="#cb124-80" aria-hidden="true" tabindex="-1"></a>  <span class="cf">unfold</span> certNormKernel certRowSum</span>
+<span id="cb124-81"><a href="#cb124-81" aria-hidden="true" tabindex="-1"></a>  <span class="cf">rw</span> [certKernel_normalised hm hex h m x, div_one]</span>
+<span id="cb124-82"><a href="#cb124-82" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb124-83"><a href="#cb124-83" aria-hidden="true" tabindex="-1"></a><span class="do">/-- **The joint weight envelope**: the certificate&#39;s joint is the reference joint times the</span></span>
+<span id="cb124-84"><a href="#cb124-84" aria-hidden="true" tabindex="-1"></a><span class="do">product of the `n` chance row sums, which lies in `[(1 - ε) ^ n, (1 + ε) ^ n]`. -/</span></span>
+<span id="cb124-85"><a href="#cb124-85" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> certKernel_envelope (hm : Matches r c) (hn : Nonneg c) (hε : certificateEpsilon c &lt; <span class="dv">1</span>)</span>
+<span id="cb124-86"><a href="#cb124-86" aria-hidden="true" tabindex="-1"></a>    (h : r.Valid) (x : (r.compile h).Assignment) :</span>
+<span id="cb124-87"><a href="#cb124-87" aria-hidden="true" tabindex="-1"></a>    (<span class="dv">1</span> - (certificateEpsilon c : ℝ)) ^ certChanceCount c *</span>
+<span id="cb124-88"><a href="#cb124-88" aria-hidden="true" tabindex="-1"></a>        (∏ m, certNormKernel r h c m x (x ((r.compile h).target m))) ≤</span>
+<span id="cb124-89"><a href="#cb124-89" aria-hidden="true" tabindex="-1"></a>      ∏ m, certKernel r h c m x (x ((r.compile h).target m)) ∧</span>
+<span id="cb124-90"><a href="#cb124-90" aria-hidden="true" tabindex="-1"></a>    ∏ m, certKernel r h c m x (x ((r.compile h).target m)) ≤</span>
+<span id="cb124-91"><a href="#cb124-91" aria-hidden="true" tabindex="-1"></a>      (<span class="dv">1</span> + (certificateEpsilon c : ℝ)) ^ certChanceCount c *</span>
+<span id="cb124-92"><a href="#cb124-92" aria-hidden="true" tabindex="-1"></a>        ∏ m, certNormKernel r h c m x (x ((r.compile h).target m)) := <span class="kw">by</span></span>
+<span id="cb124-93"><a href="#cb124-93" aria-hidden="true" tabindex="-1"></a>  <span class="kw">have</span> hε1 : (certificateEpsilon c : ℝ) &lt; <span class="dv">1</span> := <span class="kw">by</span> exact_mod_cast hε</span>
+<span id="cb124-94"><a href="#cb124-94" aria-hidden="true" tabindex="-1"></a>  set ε : ℝ := (certificateEpsilon c : ℝ)</span>
+<span id="cb124-95"><a href="#cb124-95" aria-hidden="true" tabindex="-1"></a>  <span class="kw">have</span> hfac : ∏ m, certKernel r h c m x (x ((r.compile h).target m)) =</span>
+<span id="cb124-96"><a href="#cb124-96" aria-hidden="true" tabindex="-1"></a>      (∏ m : Fin r.nm, certRowSum r h c m x) *</span>
+<span id="cb124-97"><a href="#cb124-97" aria-hidden="true" tabindex="-1"></a>        ∏ m, certNormKernel r h c m x (x ((r.compile h).target m)) := <span class="kw">by</span></span>
+<span id="cb124-98"><a href="#cb124-98" aria-hidden="true" tabindex="-1"></a>    <span class="cf">rw</span> [← Finset.prod_mul_distrib]</span>
+<span id="cb124-99"><a href="#cb124-99" aria-hidden="true" tabindex="-1"></a>    <span class="cf">refine</span> Finset.prod_congr <span class="cf">rfl</span> <span class="kw">fun</span> m _ =&gt; ?_</span>
+<span id="cb124-100"><a href="#cb124-100" aria-hidden="true" tabindex="-1"></a>    <span class="cf">unfold</span> certNormKernel</span>
+<span id="cb124-101"><a href="#cb124-101" aria-hidden="true" tabindex="-1"></a>    <span class="cf">rw</span> [mul_div_cancel₀ _ (ne_of_gt (certRowSum_pos hm hε h m x))]</span>
+<span id="cb124-102"><a href="#cb124-102" aria-hidden="true" tabindex="-1"></a>  <span class="kw">have</span> hn&#39; : certChanceCount c = Fintype.card (Fin r.nm) := <span class="kw">by</span></span>
+<span id="cb124-103"><a href="#cb124-103" aria-hidden="true" tabindex="-1"></a>    <span class="cf">rw</span> [Fintype.card_fin, certChanceCount, hm.mechanisms_length]</span>
+<span id="cb124-104"><a href="#cb124-104" aria-hidden="true" tabindex="-1"></a>  <span class="kw">have</span> hK : <span class="dv">0</span> ≤ ∏ m, certNormKernel r h c m x (x ((r.compile h).target m)) :=</span>
+<span id="cb124-105"><a href="#cb124-105" aria-hidden="true" tabindex="-1"></a>    Finset.prod_nonneg <span class="kw">fun</span> m _ =&gt; certNormKernel_nonneg hn h m x _</span>
+<span id="cb124-106"><a href="#cb124-106" aria-hidden="true" tabindex="-1"></a>  <span class="kw">have</span> hlo : (<span class="dv">1</span> - ε) ^ certChanceCount c ≤ ∏ m : Fin r.nm, certRowSum r h c m x := <span class="kw">by</span></span>
+<span id="cb124-107"><a href="#cb124-107" aria-hidden="true" tabindex="-1"></a>    <span class="cf">rw</span> [hn&#39;, ← Finset.card_univ, ← Finset.prod_const]</span>
+<span id="cb124-108"><a href="#cb124-108" aria-hidden="true" tabindex="-1"></a>    <span class="cf">exact</span> Finset.prod_le_prod (<span class="kw">fun</span> _ _ =&gt; <span class="kw">by</span> <span class="cf">linarith</span>)</span>
+<span id="cb124-109"><a href="#cb124-109" aria-hidden="true" tabindex="-1"></a>      <span class="kw">fun</span> m _ =&gt; <span class="kw">by</span> <span class="cf">linarith</span> [(abs_le<span class="fl">.1</span> (certRowSum_dev hm h m x)).<span class="dv">1</span>]</span>
+<span id="cb124-110"><a href="#cb124-110" aria-hidden="true" tabindex="-1"></a>  <span class="kw">have</span> hhi : ∏ m : Fin r.nm, certRowSum r h c m x ≤ (<span class="dv">1</span> + ε) ^ certChanceCount c := <span class="kw">by</span></span>
+<span id="cb124-111"><a href="#cb124-111" aria-hidden="true" tabindex="-1"></a>    <span class="cf">rw</span> [hn&#39;, ← Finset.card_univ, ← Finset.prod_const]</span>
+<span id="cb124-112"><a href="#cb124-112" aria-hidden="true" tabindex="-1"></a>    <span class="cf">exact</span> Finset.prod_le_prod (<span class="kw">fun</span> m _ =&gt; (certRowSum_pos hm hε h m x).le)</span>
+<span id="cb124-113"><a href="#cb124-113" aria-hidden="true" tabindex="-1"></a>      <span class="kw">fun</span> m _ =&gt; <span class="kw">by</span> <span class="cf">linarith</span> [(abs_le<span class="fl">.1</span> (certRowSum_dev hm h m x)).<span class="dv">2</span>]</span>
+<span id="cb124-114"><a href="#cb124-114" aria-hidden="true" tabindex="-1"></a>  <span class="cf">rw</span> [hfac]</span>
+<span id="cb124-115"><a href="#cb124-115" aria-hidden="true" tabindex="-1"></a>  <span class="cf">exact</span> ⟨mul_le_mul_of_nonneg_right hlo hK, mul_le_mul_of_nonneg_right hhi hK⟩</span>
+<span id="cb124-116"><a href="#cb124-116" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb124-117"><a href="#cb124-117" aria-hidden="true" tabindex="-1"></a><span class="do">/-- The absolute total utility is at most `certUmax c`. -/</span></span>
+<span id="cb124-118"><a href="#cb124-118" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> certUtility_total_le (hm : Matches r c) (h : r.Valid) (x : (r.compile h).Assignment) :</span>
+<span id="cb124-119"><a href="#cb124-119" aria-hidden="true" tabindex="-1"></a>    |totalUtility (certUtility r h c) x| ≤ (certUmax c : ℝ) := <span class="kw">by</span></span>
+<span id="cb124-120"><a href="#cb124-120" aria-hidden="true" tabindex="-1"></a>  <span class="kw">have</span> hcell : ∀ (t : NumTable) (coords : List Nat), |cellValue t coords| ≤ tableMaxAbs t := <span class="kw">by</span></span>
+<span id="cb124-121"><a href="#cb124-121" aria-hidden="true" tabindex="-1"></a>    <span class="cf">intro</span> t coords</span>
+<span id="cb124-122"><a href="#cb124-122" aria-hidden="true" tabindex="-1"></a>    <span class="cf">unfold</span> cellValue lookup</span>
+<span id="cb124-123"><a href="#cb124-123" aria-hidden="true" tabindex="-1"></a>    <span class="cf">cases</span> hf : t.entries.find? (<span class="kw">fun</span> e =&gt; <span class="cf">decide</span> (e.coords = coords)) <span class="kw">with</span></span>
+<span id="cb124-124"><a href="#cb124-124" aria-hidden="true" tabindex="-1"></a>    | none =&gt; <span class="cf">simpa</span> <span class="kw">using</span> tableMaxAbs_nonneg t</span>
+<span id="cb124-125"><a href="#cb124-125" aria-hidden="true" tabindex="-1"></a>    | some e =&gt;</span>
+<span id="cb124-126"><a href="#cb124-126" aria-hidden="true" tabindex="-1"></a>      <span class="cf">simp</span> only [Option.map_some, Option.getD_some]</span>
+<span id="cb124-127"><a href="#cb124-127" aria-hidden="true" tabindex="-1"></a>      <span class="cf">exact</span> le_foldr_max (List.mem_map<span class="fl">.2</span> ⟨e, List.mem_of_find?_eq_some hf, rfl⟩)</span>
+<span id="cb124-128"><a href="#cb124-128" aria-hidden="true" tabindex="-1"></a>  <span class="kw">have</span> hj : ∀ j : Fin r.nu, |certUtility r h c j x| ≤</span>
+<span id="cb124-129"><a href="#cb124-129" aria-hidden="true" tabindex="-1"></a>      ((((c.utilities[j.val]?).map <span class="kw">fun</span> e =&gt; tableMaxAbs e.table).getD <span class="dv">0</span> : ℚ) : ℝ) := <span class="kw">by</span></span>
+<span id="cb124-130"><a href="#cb124-130" aria-hidden="true" tabindex="-1"></a>    <span class="cf">intro</span> j</span>
+<span id="cb124-131"><a href="#cb124-131" aria-hidden="true" tabindex="-1"></a>    <span class="cf">unfold</span> certUtility</span>
+<span id="cb124-132"><a href="#cb124-132" aria-hidden="true" tabindex="-1"></a>    <span class="cf">cases</span> c.utilities[j.val]? <span class="kw">with</span></span>
+<span id="cb124-133"><a href="#cb124-133" aria-hidden="true" tabindex="-1"></a>    | none =&gt; <span class="cf">simp</span></span>
+<span id="cb124-134"><a href="#cb124-134" aria-hidden="true" tabindex="-1"></a>    | some e =&gt;</span>
+<span id="cb124-135"><a href="#cb124-135" aria-hidden="true" tabindex="-1"></a>      <span class="cf">simp</span> only [Option.map_some, Option.getD_some]</span>
+<span id="cb124-136"><a href="#cb124-136" aria-hidden="true" tabindex="-1"></a>      exact_mod_cast hcell e.table _</span>
+<span id="cb124-137"><a href="#cb124-137" aria-hidden="true" tabindex="-1"></a>  <span class="kw">have</span> hsum := sum_fin_getElem? c.utilities (<span class="kw">fun</span> e =&gt; tableMaxAbs e.table) r.nu</span>
+<span id="cb124-138"><a href="#cb124-138" aria-hidden="true" tabindex="-1"></a>    hm.utilities_length</span>
+<span id="cb124-139"><a href="#cb124-139" aria-hidden="true" tabindex="-1"></a>  <span class="kw">calc</span> |totalUtility (certUtility r h c) x| ≤ ∑ j, |certUtility r h c j x| :=</span>
+<span id="cb124-140"><a href="#cb124-140" aria-hidden="true" tabindex="-1"></a>        Finset.abs_sum_le_sum_abs _ _</span>
+<span id="cb124-141"><a href="#cb124-141" aria-hidden="true" tabindex="-1"></a>    _ ≤ ∑ j : Fin r.nu,</span>
+<span id="cb124-142"><a href="#cb124-142" aria-hidden="true" tabindex="-1"></a>        ((((c.utilities[j.val]?).map <span class="kw">fun</span> e =&gt; tableMaxAbs e.table).getD <span class="dv">0</span> : ℚ) : ℝ) :=</span>
+<span id="cb124-143"><a href="#cb124-143" aria-hidden="true" tabindex="-1"></a>        Finset.sum_le_sum <span class="kw">fun</span> j _ =&gt; hj j</span>
+<span id="cb124-144"><a href="#cb124-144" aria-hidden="true" tabindex="-1"></a>    _ = (certUmax c : ℝ) := <span class="kw">by</span></span>
+<span id="cb124-145"><a href="#cb124-145" aria-hidden="true" tabindex="-1"></a>        <span class="cf">rw</span> [certUmax, ← hsum]</span>
+<span id="cb124-146"><a href="#cb124-146" aria-hidden="true" tabindex="-1"></a>        <span class="cf">push_cast</span></span>
+<span id="cb124-147"><a href="#cb124-147" aria-hidden="true" tabindex="-1"></a>        <span class="cf">rfl</span></span>
+<span id="cb124-148"><a href="#cb124-148" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb124-149"><a href="#cb124-149" aria-hidden="true" tabindex="-1"></a><span class="kw">end</span> Kernel</span></code></pre></div>
+<h2 id="approximate-optimality">Approximate optimality</h2>
+<div class="sourceCode" id="cb125"><pre
+class="sourceCode lean"><code class="sourceCode lean"><span id="cb125-1"><a href="#cb125-1" aria-hidden="true" tabindex="-1"></a><span class="kw">section</span> Approx</span>
+<span id="cb125-2"><a href="#cb125-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb125-3"><a href="#cb125-3" aria-hidden="true" tabindex="-1"></a><span class="kw">variable</span> (r : Diagram) (h : r.FullValid) (c : Certificate)</span>
+<span id="cb125-4"><a href="#cb125-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb125-5"><a href="#cb125-5" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> approxGap_eq (hm : Matches r c) (hε : certificateEpsilon c &lt; <span class="dv">1</span>)</span>
+<span id="cb125-6"><a href="#cb125-6" aria-hidden="true" tabindex="-1"></a>    (plan : DVE.Plan (r.compile h.valid) Finset.univ) :</span>
+<span id="cb125-7"><a href="#cb125-7" aria-hidden="true" tabindex="-1"></a>    DVE.approxGap plan.chanceCount ((<span class="dv">1</span> - (certificateEpsilon c : ℝ)) ^ certChanceCount c)</span>
+<span id="cb125-8"><a href="#cb125-8" aria-hidden="true" tabindex="-1"></a>        ((<span class="dv">1</span> + (certificateEpsilon c : ℝ)) ^ certChanceCount c) (certUmax c) =</span>
+<span id="cb125-9"><a href="#cb125-9" aria-hidden="true" tabindex="-1"></a>      (approxError (certificateEpsilon c) (certChanceCount c) (certUmax c) : ℝ) := <span class="kw">by</span></span>
+<span id="cb125-10"><a href="#cb125-10" aria-hidden="true" tabindex="-1"></a>  <span class="kw">have</span> hk : plan.chanceCount = certChanceCount c := <span class="kw">by</span></span>
+<span id="cb125-11"><a href="#cb125-11" aria-hidden="true" tabindex="-1"></a>    <span class="cf">rw</span> [DVE.Plan.chanceCount_eq, DVE.card_chance_eq h.closed, certChanceCount,</span>
+<span id="cb125-12"><a href="#cb125-12" aria-hidden="true" tabindex="-1"></a>      hm.mechanisms_length]</span>
+<span id="cb125-13"><a href="#cb125-13" aria-hidden="true" tabindex="-1"></a>    <span class="cf">exact</span> Fintype.card_fin _</span>
+<span id="cb125-14"><a href="#cb125-14" aria-hidden="true" tabindex="-1"></a>  <span class="kw">have</span> hε1 : (certificateEpsilon c : ℝ) ≠ <span class="dv">1</span> := ne_of_lt (<span class="kw">by</span> exact_mod_cast hε)</span>
+<span id="cb125-15"><a href="#cb125-15" aria-hidden="true" tabindex="-1"></a>  <span class="cf">unfold</span> DVE.approxGap approxError</span>
+<span id="cb125-16"><a href="#cb125-16" aria-hidden="true" tabindex="-1"></a>  <span class="cf">rw</span> [hk, ← div_pow]</span>
+<span id="cb125-17"><a href="#cb125-17" aria-hidden="true" tabindex="-1"></a>  <span class="cf">push_cast</span></span>
+<span id="cb125-18"><a href="#cb125-18" aria-hidden="true" tabindex="-1"></a>  <span class="cf">ring</span></span>
+<span id="cb125-19"><a href="#cb125-19" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb125-20"><a href="#cb125-20" aria-hidden="true" tabindex="-1"></a><span class="do">/-- **Approximate optimality of the exact DVE run on the certificate&#39;s data.** For a matching</span></span>
+<span id="cb125-21"><a href="#cb125-21" aria-hidden="true" tabindex="-1"></a><span class="do">certificate with nonnegative cells and `certificateEpsilon c &lt; 1`, the exact representative DVE</span></span>
+<span id="cb125-22"><a href="#cb125-22" aria-hidden="true" tabindex="-1"></a><span class="do">run on the certificate&#39;s exact numbers (any maximizing selector, any representative choice, any</span></span>
+<span id="cb125-23"><a href="#cb125-23" aria-hidden="true" tabindex="-1"></a><span class="do">plan) returns a deterministic strategy `σ*` that is within `2 e` of every nonnegative strategy</span></span>
+<span id="cb125-24"><a href="#cb125-24" aria-hidden="true" tabindex="-1"></a><span class="do">and of the optimum of the normalised reference model `certNormKernel`, and whose value is within</span></span>
+<span id="cb125-25"><a href="#cb125-25" aria-hidden="true" tabindex="-1"></a><span class="do">`e` of that optimum, where `e = approxError (certificateEpsilon c) (certChanceCount c)</span></span>
+<span id="cb125-26"><a href="#cb125-26" aria-hidden="true" tabindex="-1"></a><span class="do">(certUmax c)`. -/</span></span>
+<span id="cb125-27"><a href="#cb125-27" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> certificate_approx_optimal (hm : certificateMatches r h c) (hn : Nonneg c)</span>
+<span id="cb125-28"><a href="#cb125-28" aria-hidden="true" tabindex="-1"></a>    (hε : certificateEpsilon c &lt; <span class="dv">1</span>) (sel : DVE.Selector (r.compile h.valid))</span>
+<span id="cb125-29"><a href="#cb125-29" aria-hidden="true" tabindex="-1"></a>    (keep : (r.compile h.valid).V → Bool) (plan : DVE.Plan (r.compile h.valid) Finset.univ) :</span>
+<span id="cb125-30"><a href="#cb125-30" aria-hidden="true" tabindex="-1"></a>    <span class="kw">let</span> sol := DVE.solveRepPlanWith sel keep (certKernel r h.valid c)</span>
+<span id="cb125-31"><a href="#cb125-31" aria-hidden="true" tabindex="-1"></a>      (certKernel_local hm h.valid) (certKernel_nonneg hn h.valid) (certUtility r h.valid c)</span>
+<span id="cb125-32"><a href="#cb125-32" aria-hidden="true" tabindex="-1"></a>      (certUtility_local hm h.valid) plan</span>
+<span id="cb125-33"><a href="#cb125-33" aria-hidden="true" tabindex="-1"></a>    <span class="kw">let</span> e : ℝ := approxError (certificateEpsilon c) (certChanceCount c) (certUmax c)</span>
+<span id="cb125-34"><a href="#cb125-34" aria-hidden="true" tabindex="-1"></a>    sol.strategy.Deterministic ∧</span>
+<span id="cb125-35"><a href="#cb125-35" aria-hidden="true" tabindex="-1"></a>      (∀ τ : Strategy (r.compile h.valid) ℝ, τ.Nonneg →</span>
+<span id="cb125-36"><a href="#cb125-36" aria-hidden="true" tabindex="-1"></a>        expectedUtility (certNormKernel r h.valid c) τ (certUtility r h.valid c) ≤</span>
+<span id="cb125-37"><a href="#cb125-37" aria-hidden="true" tabindex="-1"></a>          expectedUtility (certNormKernel r h.valid c) sol.strategy (certUtility r h.valid c) +</span>
+<span id="cb125-38"><a href="#cb125-38" aria-hidden="true" tabindex="-1"></a>            <span class="dv">2</span> * e) ∧</span>
+<span id="cb125-39"><a href="#cb125-39" aria-hidden="true" tabindex="-1"></a>      optimalValue (certNormKernel r h.valid c) (certUtility r h.valid c) - <span class="dv">2</span> * e ≤</span>
+<span id="cb125-40"><a href="#cb125-40" aria-hidden="true" tabindex="-1"></a>        expectedUtility (certNormKernel r h.valid c) sol.strategy (certUtility r h.valid c) ∧</span>
+<span id="cb125-41"><a href="#cb125-41" aria-hidden="true" tabindex="-1"></a>      expectedUtility (certNormKernel r h.valid c) sol.strategy (certUtility r h.valid c) ≤</span>
+<span id="cb125-42"><a href="#cb125-42" aria-hidden="true" tabindex="-1"></a>        optimalValue (certNormKernel r h.valid c) (certUtility r h.valid c) ∧</span>
+<span id="cb125-43"><a href="#cb125-43" aria-hidden="true" tabindex="-1"></a>      |sol.value - optimalValue (certNormKernel r h.valid c) (certUtility r h.valid c)| ≤ e := <span class="kw">by</span></span>
+<span id="cb125-44"><a href="#cb125-44" aria-hidden="true" tabindex="-1"></a>  <span class="cf">intro</span> sol e</span>
+<span id="cb125-45"><a href="#cb125-45" aria-hidden="true" tabindex="-1"></a>  <span class="kw">have</span> hε1 : (certificateEpsilon c : ℝ) &lt; <span class="dv">1</span> := <span class="kw">by</span> exact_mod_cast hε</span>
+<span id="cb125-46"><a href="#cb125-46" aria-hidden="true" tabindex="-1"></a>  <span class="kw">have</span> hL : <span class="dv">0</span> &lt; (<span class="dv">1</span> - (certificateEpsilon c : ℝ)) ^ certChanceCount c :=</span>
+<span id="cb125-47"><a href="#cb125-47" aria-hidden="true" tabindex="-1"></a>    pow_pos (<span class="kw">by</span> <span class="cf">linarith</span>) _</span>
+<span id="cb125-48"><a href="#cb125-48" aria-hidden="true" tabindex="-1"></a>  <span class="kw">have</span> hU : (<span class="dv">0</span> : ℝ) ≤ certUmax c := <span class="kw">by</span> exact_mod_cast certUmax_nonneg c</span>
+<span id="cb125-49"><a href="#cb125-49" aria-hidden="true" tabindex="-1"></a>  <span class="kw">have</span> := DVE.solveRepPlanWith_approx_optimal sel keep (certNormKernel r h.valid c)</span>
+<span id="cb125-50"><a href="#cb125-50" aria-hidden="true" tabindex="-1"></a>    (certKernel r h.valid c) h.closed h.idOrder (certNormKernel_local hm h.valid)</span>
+<span id="cb125-51"><a href="#cb125-51" aria-hidden="true" tabindex="-1"></a>    (certNormKernel_normalised hm hε h.valid) (certNormKernel_nonneg hn h.valid)</span>
+<span id="cb125-52"><a href="#cb125-52" aria-hidden="true" tabindex="-1"></a>    (certKernel_local hm h.valid) (certKernel_nonneg hn h.valid) (certUtility r h.valid c)</span>
+<span id="cb125-53"><a href="#cb125-53" aria-hidden="true" tabindex="-1"></a>    (certUtility_local hm h.valid) plan _ _ _ hL hU</span>
+<span id="cb125-54"><a href="#cb125-54" aria-hidden="true" tabindex="-1"></a>    (certKernel_envelope hm hn hε h.valid) (certUtility_total_le hm h.valid)</span>
+<span id="cb125-55"><a href="#cb125-55" aria-hidden="true" tabindex="-1"></a>  <span class="cf">rw</span> [approxGap_eq r h c hm hε plan] <span class="kw">at</span> this</span>
+<span id="cb125-56"><a href="#cb125-56" aria-hidden="true" tabindex="-1"></a>  <span class="cf">exact</span> this</span>
+<span id="cb125-57"><a href="#cb125-57" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb125-58"><a href="#cb125-58" aria-hidden="true" tabindex="-1"></a><span class="do">/-- The same bound for `DVE.solve` scheduled by the certificate&#39;s orders, the run of</span></span>
+<span id="cb125-59"><a href="#cb125-59" aria-hidden="true" tabindex="-1"></a><span class="do">`certificate_solve_spec`. -/</span></span>
+<span id="cb125-60"><a href="#cb125-60" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> certificate_solve_approx (hm : certificateMatches r h c) (hn : Nonneg c)</span>
+<span id="cb125-61"><a href="#cb125-61" aria-hidden="true" tabindex="-1"></a>    (hε : certificateEpsilon c &lt; <span class="dv">1</span>) :</span>
+<span id="cb125-62"><a href="#cb125-62" aria-hidden="true" tabindex="-1"></a>    <span class="kw">let</span> sol := DVE.solve (certKernel r h.valid c) (certKernel_local hm h.valid)</span>
+<span id="cb125-63"><a href="#cb125-63" aria-hidden="true" tabindex="-1"></a>      (certKernel_nonneg hn h.valid) (certUtility r h.valid c) (certUtility_local hm h.valid)</span>
+<span id="cb125-64"><a href="#cb125-64" aria-hidden="true" tabindex="-1"></a>      (certOrder hm h) (certNoForgetting hm h)</span>
+<span id="cb125-65"><a href="#cb125-65" aria-hidden="true" tabindex="-1"></a>    <span class="kw">let</span> e : ℝ := approxError (certificateEpsilon c) (certChanceCount c) (certUmax c)</span>
+<span id="cb125-66"><a href="#cb125-66" aria-hidden="true" tabindex="-1"></a>    sol.strategy.Deterministic ∧</span>
+<span id="cb125-67"><a href="#cb125-67" aria-hidden="true" tabindex="-1"></a>      (∀ τ : Strategy (r.compile h.valid) ℝ, τ.Nonneg →</span>
+<span id="cb125-68"><a href="#cb125-68" aria-hidden="true" tabindex="-1"></a>        expectedUtility (certNormKernel r h.valid c) τ (certUtility r h.valid c) ≤</span>
+<span id="cb125-69"><a href="#cb125-69" aria-hidden="true" tabindex="-1"></a>          expectedUtility (certNormKernel r h.valid c) sol.strategy (certUtility r h.valid c) +</span>
+<span id="cb125-70"><a href="#cb125-70" aria-hidden="true" tabindex="-1"></a>            <span class="dv">2</span> * e) ∧</span>
+<span id="cb125-71"><a href="#cb125-71" aria-hidden="true" tabindex="-1"></a>      optimalValue (certNormKernel r h.valid c) (certUtility r h.valid c) - <span class="dv">2</span> * e ≤</span>
+<span id="cb125-72"><a href="#cb125-72" aria-hidden="true" tabindex="-1"></a>        expectedUtility (certNormKernel r h.valid c) sol.strategy (certUtility r h.valid c) ∧</span>
+<span id="cb125-73"><a href="#cb125-73" aria-hidden="true" tabindex="-1"></a>      expectedUtility (certNormKernel r h.valid c) sol.strategy (certUtility r h.valid c) ≤</span>
+<span id="cb125-74"><a href="#cb125-74" aria-hidden="true" tabindex="-1"></a>        optimalValue (certNormKernel r h.valid c) (certUtility r h.valid c) ∧</span>
+<span id="cb125-75"><a href="#cb125-75" aria-hidden="true" tabindex="-1"></a>      |sol.value - optimalValue (certNormKernel r h.valid c) (certUtility r h.valid c)| ≤ e := <span class="kw">by</span></span>
+<span id="cb125-76"><a href="#cb125-76" aria-hidden="true" tabindex="-1"></a>  <span class="kw">have</span> heq : DVE.solve (certKernel r h.valid c) (certKernel_local hm h.valid)</span>
+<span id="cb125-77"><a href="#cb125-77" aria-hidden="true" tabindex="-1"></a>      (certKernel_nonneg hn h.valid) (certUtility r h.valid c) (certUtility_local hm h.valid)</span>
+<span id="cb125-78"><a href="#cb125-78" aria-hidden="true" tabindex="-1"></a>      (certOrder hm h) (certNoForgetting hm h) =</span>
+<span id="cb125-79"><a href="#cb125-79" aria-hidden="true" tabindex="-1"></a>      DVE.solveRepPlanWith (DVE.Selector.classical _) (<span class="kw">fun</span> _ =&gt; false) (certKernel r h.valid c)</span>
+<span id="cb125-80"><a href="#cb125-80" aria-hidden="true" tabindex="-1"></a>        (certKernel_local hm h.valid) (certKernel_nonneg hn h.valid) (certUtility r h.valid c)</span>
+<span id="cb125-81"><a href="#cb125-81" aria-hidden="true" tabindex="-1"></a>        (certUtility_local hm h.valid)</span>
+<span id="cb125-82"><a href="#cb125-82" aria-hidden="true" tabindex="-1"></a>        ((certNoForgetting hm h).plan (certOrder hm h).no_self_info) := <span class="kw">by</span></span>
+<span id="cb125-83"><a href="#cb125-83" aria-hidden="true" tabindex="-1"></a>    <span class="cf">rw</span> [DVE.solveRepPlanWith_false]</span>
+<span id="cb125-84"><a href="#cb125-84" aria-hidden="true" tabindex="-1"></a>    <span class="cf">unfold</span> DVE.solve DVE.solvePlan DVE.solvePlanWith</span>
+<span id="cb125-85"><a href="#cb125-85" aria-hidden="true" tabindex="-1"></a>    <span class="cf">rw</span> [DVE.runWith_classical]</span>
+<span id="cb125-86"><a href="#cb125-86" aria-hidden="true" tabindex="-1"></a>  <span class="cf">intro</span> sol e</span>
+<span id="cb125-87"><a href="#cb125-87" aria-hidden="true" tabindex="-1"></a>  <span class="cf">rw</span> [<span class="kw">show</span> sol = _ <span class="kw">from</span> heq]</span>
+<span id="cb125-88"><a href="#cb125-88" aria-hidden="true" tabindex="-1"></a>  <span class="cf">exact</span> certificate_approx_optimal r h c hm hn hε _ _ _</span>
+<span id="cb125-89"><a href="#cb125-89" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb125-90"><a href="#cb125-90" aria-hidden="true" tabindex="-1"></a><span class="do">/-- **The exact case.** On an exactly normalised certificate, `certificateEpsilon c = 0`, the</span></span>
+<span id="cb125-91"><a href="#cb125-91" aria-hidden="true" tabindex="-1"></a><span class="do">reference model is the certificate&#39;s model and the bound is `0`; the conclusions of</span></span>
+<span id="cb125-92"><a href="#cb125-92" aria-hidden="true" tabindex="-1"></a><span class="do">`certificate_solve_approx` are then those of `certificate_solve_spec`. -/</span></span>
+<span id="cb125-93"><a href="#cb125-93" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> certificate_approx_exact (hm : certificateMatches r h c) (hex : ExactNormalised r c) :</span>
+<span id="cb125-94"><a href="#cb125-94" aria-hidden="true" tabindex="-1"></a>    certificateEpsilon c = <span class="dv">0</span> ∧ certNormKernel r h.valid c = certKernel r h.valid c ∧</span>
+<span id="cb125-95"><a href="#cb125-95" aria-hidden="true" tabindex="-1"></a>      approxError (certificateEpsilon c) (certChanceCount c) (certUmax c) = <span class="dv">0</span> ∧</span>
+<span id="cb125-96"><a href="#cb125-96" aria-hidden="true" tabindex="-1"></a>      certificateBound c = <span class="dv">0</span> := <span class="kw">by</span></span>
+<span id="cb125-97"><a href="#cb125-97" aria-hidden="true" tabindex="-1"></a>  <span class="kw">have</span> h0 := (certificateEpsilon_eq_zero_iff hm).<span class="dv">2</span> hex</span>
+<span id="cb125-98"><a href="#cb125-98" aria-hidden="true" tabindex="-1"></a>  <span class="cf">refine</span> ⟨h0, certNormKernel_eq_of_exact hm hex h.valid, ?_, ?_⟩</span>
+<span id="cb125-99"><a href="#cb125-99" aria-hidden="true" tabindex="-1"></a>  · <span class="cf">rw</span> [h0, approxError_zero]</span>
+<span id="cb125-100"><a href="#cb125-100" aria-hidden="true" tabindex="-1"></a>  · <span class="cf">rw</span> [certificateBound, h0, approxError_zero, mul_zero]</span>
+<span id="cb125-101"><a href="#cb125-101" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb125-102"><a href="#cb125-102" aria-hidden="true" tabindex="-1"></a><span class="kw">end</span> Approx</span>
+<span id="cb125-103"><a href="#cb125-103" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb125-104"><a href="#cb125-104" aria-hidden="true" tabindex="-1"></a><span class="kw">end</span> InfluenceDiagramsProofs.DVECertificate</span></code></pre></div>
 <!-- InfluenceDiagramsProofs/Roadmap.lean -->
 <h1 id="roadmap-and-exact-scope-of-the-dve-theorem">Roadmap and exact
 scope of the DVE theorem</h1>
-<div class="sourceCode" id="cb113"><pre
-class="sourceCode lean"><code class="sourceCode lean"><span id="cb113-1"><a href="#cb113-1" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> InfluenceDiagramsProofs.Finite.DVE.LabelOrder</span></code></pre></div>
+<div class="sourceCode" id="cb126"><pre
+class="sourceCode lean"><code class="sourceCode lean"><span id="cb126-1"><a href="#cb126-1" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> InfluenceDiagramsProofs.Finite.DVE.LabelOrder</span></code></pre></div>
 <p>The global optimum-existence result is now supplemented by an actual
 bucket solver: <code>DVE.solve_spec</code> proves its deterministic
 policies realize the reported value and attain the existing optimum.
@@ -10731,7 +11838,15 @@ value or plan, so <code>certificate_solve_spec</code> and
 <code>certificate_tables_optimal</code> are about the model its exact
 numbers define (applicable only when its CPT rows sum to exactly one,
 which Julia’s default binary64 words rarely do), not about Julia’s
-computed solution. That Julia’s action axis lists the states in
+computed solution. Rows that do not sum to one are covered approximately
+(<code>Finite/DVE/CertificateApprox.lean</code>,
+<code>certificate_approx_optimal</code>): with
+<code>ε = certificateEpsilon c &lt; 1</code>, the exact run on the
+certificate’s numbers is within
+<code>2 n (((1 + ε) / (1 - ε)) ^ n - 1) Umax</code> of the optimum of
+the row-normalised model. That model is a reference chosen by the proof;
+the decimal model Julia rounded is not recorded, and Julia’s own Float64
+run is still not covered. That Julia’s action axis lists the states in
 <code>state_position</code> order is pinned by a Julia test, and the
 array layout is the <code>FiniteKernels</code> <code>Layout/</code>
 result; Julia’s execution itself is not proved. That Julia’s block

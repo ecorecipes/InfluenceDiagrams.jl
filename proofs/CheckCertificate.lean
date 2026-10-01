@@ -17,11 +17,22 @@ written by `export_dve_certificate` (serialized with `JSON3.write`), parses both
     exactly normalised: yes|no        (`ExactNormalised`)
     theorem certificate_tables: applies|does not apply
     theorem certificate_solve_spec: applies|does not apply
+    normalisation error epsilon: 5.551115e-17  (`certificateEpsilon`, max |row sum - 1|)
+    chance variables n: 2                      (`certChanceCount`)
+    utility bound Umax: 1.000000e2             (`certUmax`)
+    optimality gap 2e: 8.881784e-14            (`certificateBound`)
+    theorem certificate_approx_optimal: applies|does not apply
+
+(the numbers shown are the umbrella's binary64 certificate). The four numbers are exact rationals computed by the definitions named, printed in scientific
+notation with seven significant digits, truncated (`sci`). `certificate_approx_optimal` applies
+when the certificate matches, its cells are nonnegative and `certificateEpsilon < 1`; the gap is
+then the bound on how far the exact DVE run's policy on the certificate's data can fall short of
+the optimum of the row-normalised model.
 
 The exit code is 0 exactly when the certificate matches. The parse and this printing code are
 trusted, not proved; every verdict printed is a `decide` of the proved checker's propositions.
 -/
-import InfluenceDiagramsProofs.Finite.DVE.CertificateCheck
+import InfluenceDiagramsProofs.Finite.DVE.CertificateApprox
 import Lean.Data.Json.Parser
 
 open BayesianNetworksProofs.Raw InfluenceDiagramsProofs.Records InfluenceDiagramsProofs.DVECertificate
@@ -30,6 +41,24 @@ open InfluenceDiagramsProofs.DVECertificate.Spec
 def verdict (b : Bool) : String := if b then "ok" else "FAIL"
 
 def yesNo (b : Bool) : String := if b then "yes" else "no"
+
+/-- `10 ^ k ≤ n / d` for an integer exponent `k`. -/
+def atLeastPow (n d : Nat) (k : Int) : Bool :=
+  if 0 ≤ k then d * 10 ^ k.toNat ≤ n else d ≤ n * 10 ^ (-k).toNat
+
+/-- A rational in scientific notation with `p` significant digits, truncated (printing only:
+trusted, not proved). -/
+def sci (q : ℚ) (p : Nat := 7) : String :=
+  if q = 0 then "0" else
+    let sign := if q < 0 then "-" else ""
+    let n := q.num.natAbs
+    let d := q.den
+    let k0 : Int := (toString n).length - (toString d).length
+    let k : Int := if atLeastPow n d k0 then k0 else k0 - 1
+    let s : Int := (p : Int) - 1 - k
+    let m : Nat := if 0 ≤ s then n * 10 ^ s.toNat / d else n / (d * 10 ^ (-s).toNat)
+    let ms := toString m
+    s!"{sign}{ms.take 1}.{ms.drop 1}e{k}"
 
 /-- The components of `Matches`, decided one by one. -/
 def components (r : Diagram) (c : Certificate) : List (String × Bool) :=
@@ -101,6 +130,13 @@ def main (args : List String) : IO UInt32 := do
           IO.println s!"evidence rows: {c.hard.length}"
           IO.println s!"theorem certificate_tables: {if m && nn then "applies" else "does not apply"}"
           IO.println s!"theorem certificate_solve_spec: {if m && nn && en then "applies" else "does not apply"}"
+          let eps := certificateEpsilon c
+          IO.println s!"normalisation error epsilon: {sci eps}"
+          IO.println s!"chance variables n: {certChanceCount c}"
+          IO.println s!"utility bound Umax: {sci (certUmax c)}"
+          let ok := m && nn && decide (eps < 1)
+          IO.println s!"optimality gap 2e: {if eps < 1 then sci (certificateBound c) else "-"}"
+          IO.println s!"theorem certificate_approx_optimal: {if ok then "applies" else "does not apply"}"
           return if m then 0 else 1
   | _ =>
     IO.eprintln "usage: check_certificate DIAGRAM.json CERTIFICATE.json"

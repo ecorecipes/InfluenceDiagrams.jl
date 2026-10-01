@@ -52,6 +52,12 @@ ordered but neither knows the other's action: that is a forgetting diagram, and 
   diagonal factors must agree. Binary64 bits are retained; rational companions are explicit,
   complete and checked with exact nearest-even midpoint arithmetic. No silent normalization,
   intrinsic-rational inference from floats or execution-trace profile is supported.
+  `solution=true` (or a `DecisionVariableElimination` backend) emits version 2: v1 fields
+  unchanged plus `"solution"`, the output of `_run_decision_elimination` on the certificate's own
+  cells (the `sources` hook; an exact run in `rational_exact` mode reads the companions). Policy
+  entries follow the Lean label order and the exporter checks Julia's axes are that order. The
+  default `solution=false` must stay byte-identical to v1 (`test/fixtures/dve-certificate-v1`).
+  Unsupported combinations are `DVEExportError(:UNSUPPORTED_SOLUTION_PROFILE)`.
 - `proofs/`: the Lean model (`instantiate`, `strategyKernel`, `expectedUtility`, `Strategy.fix`,
   information enlargement). Propositions 5 and 6 and `fix_decision` = hard intervention
   are proved over the abstract finite model, not the ACSet or Julia arrays.
@@ -106,8 +112,15 @@ ordered but neither knows the other's action: that is a forgetting diagram, and 
   `Finite/DVE/CertificateCheck.lean` decides `certificateMatches` against the decoded records;
   `certificate_solve_spec` / `certificate_tables_optimal` hold for the model the certificate's
   exact numbers define when its CPT rows sum to exactly one (rarely true of binary64 words), and
-  `certificate_tables` when they are nonnegative. The certificate has no policy or value, so
-  Julia's own solution is not covered; `lake exe check_certificate` runs the checker. Not proved:
+  `certificate_tables` when they are nonnegative. A v1 certificate has no policy or value, and
+  the decoder rejects v2, so Julia's own solution is not yet covered; `lake exe check_certificate` runs the checker.
+  `Finite/DVE/Approximate.lean` and `CertificateApprox.lean` drop exact normalization:
+  `certificate_approx_optimal` (matching, nonnegative, `certificateEpsilon c < 1`, the largest
+  `|row sum - 1|` over `ℚ`) bounds the exact run on the certificate's numbers by
+  `2 n (((1 + ε) / (1 - ε)) ^ n - 1) Umax` below the optimum of the row-normalised model
+  (`certNormKernel`, a reference: the decimal model Julia rounded is not recorded); gap `0` when
+  `ε = 0`. Not the unnormalised-score argument: the ratio-storing run does not maximise that
+  score. Still not about Julia's Float64 run; `check_certificate` prints `ε`, `n`, `Umax`, gap. Not proved:
   `Lean.Json.parse`, Julia's JSON3/ACSets writer and `export_dve_certificate` (trusted),
   that Julia's action axis follows `state_position` (a test pins it, the cross-check agrees on
   fixtures), and Float64 rounding (near-ties that rounding

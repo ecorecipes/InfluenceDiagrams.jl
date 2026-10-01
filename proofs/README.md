@@ -63,7 +63,9 @@ Module order (`MD_FILES` in the `Makefile`, the import order of `InfluenceDiagra
 14. `Finite/DVE/PlanIndependence.lean` — positive-reach first-label tables are independent of the elimination plan
 15. `Finite/DVE/Representative.lean` — Julia's `sum_out` utility representative on zero-probability rows
 16. `Finite/DVE/LabelOrder.lean` — checked records order each action space by `state_position`
-17. `Roadmap.lean` — remaining literal-implementation refinements; no unproved declarations
+17. `Finite/DVE/RecordsValid.lean`, `JsonRecords.lean`, `CertificateJson.lean`, `CertificateCheck.lean` — checked records, the JSON decoders and the certificate checker
+18. `Finite/DVE/Approximate.lean`, `CertificateApprox.lean` — approximate optimality of the exact run on approximately normalised kernels and certificates
+19. `Roadmap.lean` — remaining literal-implementation refinements; no unproved declarations
 
 ## What is formalised
 
@@ -92,6 +94,8 @@ inherited `FinBayesNet.nonemptyS` fields ensure that every action space is nonem
 | `Finite/DVE/JsonRecords.lean` | The ACSets JSON decoder: row decoders and `…RowMatches` for the five influence-diagram tables, `decodeDiagram`, `decodeDiagram_eq_ok`, `decodeDiagram_encodeDiagram`, `DiagramBodyMatches.shape` and the failure lemmas, `decodeDiagramChecked`, `decodeDiagramChecked_isSome_iff`, `decodeDiagramChecked_encode`, `decodeDiagramChecked_policyAxes`; `decodeDiagramCheckedNames` with `decodeDiagramCheckedNames_isSome_iff`. |
 | `Finite/DVE/CertificateJson.lean` | The DVE certificate decoder: canonical decimal, integer and hexadecimal strings (`parseNat?_eq_some`, `parseInt?_eq_some`, `parseWord?_eq_some`), records and `…Matches` for every key and row, `decodeCertificate`, `decodeCertificate_eq_ok`, `encodeCertificate`, `decodeCertificate_encode`, `decodeCertificate_inRange`, `decodeCertificate_error_of_missing_key`, `decodeCertificate_error_of_not_object`. |
 | `Finite/DVE/CertificateCheck.lean` | `Matches` / `matches_iff` and `certificateMatches` (decidable), `Matches.stateLabel`, `Matches.information`; `Value.toRat` (exact cell values), `certKernel`, `certUtility`, `certKernel_local`, `certUtility_local`, `certKernel_nonneg`, `certKernel_normalised`, `certOrder` (`IDOrder`), `certNoForgetting` (`NoForgettingOrder`); `certificate_tables`, `certificate_solve_spec`, `certificate_tables_optimal`. |
+| `Finite/DVE/Approximate.lean` | No normalisation of the run's kernel `κ'`: against a normalised reference kernel `κ` with `L ∏ κ ≤ ∏ κ' ≤ H ∏ κ` (`0 < L`) and `|U x| ≤ U`, the invariant `ApproxInv` (mass within `[L, H]` of the reference mass, utility bounded on positive rows, reference values within `e` of the stored utility) holds initially with `e = 0`, is unchanged by a decision step (`ApproxInv.decisionWith`) and grows by `(H / L - 1) U` per chance step (`ApproxInv.chanceOf`, from `reweight_error`); `Plan.chanceCount` / `Plan.chanceCount_eq`, `card_chance_eq`, `approxGap`; `solveRepPlanWith_approx` and `solveRepPlanWith_approx_optimal` (every selector, `keep` and plan). |
+| `Finite/DVE/CertificateApprox.lean` | Computable over `ℚ`: `certDim`, `rowSum`, `certificateEpsilon` (largest `|row sum - 1|`), `certUmax`, `certChanceCount`, `approxError ε n U = n (((1 + ε) / (1 - ε)) ^ n - 1) U`, `certificateBound = 2 approxError`. `certificateEpsilon_eq_zero_iff` (`= 0` iff `ExactNormalised`), `certNormKernel` (rows divided by their sums) with `certNormKernel_local`, `_nonneg`, `_normalised`, `_eq_of_exact`; `certRowSum_dev`, `certKernel_envelope` (joint within `[(1 - ε) ^ n, (1 + ε) ^ n]` of the reference joint), `certUtility_total_le`; `certificate_approx_optimal`, `certificate_solve_approx`, `certificate_approx_exact`. |
 | `Roadmap.lean` | Remaining literal-Julia refinements; no unproved declarations. |
 
 `Audit.lean` prints the axioms of every main theorem (and of the definitions `Policy.ofFun`,
@@ -312,6 +316,30 @@ rarely sum to exactly one (none of the umbrella, oil-wildcatter and grazing cert
 does), so `ExactNormalised` holds for a rational-mode certificate with decimal companions,
 not for those. `lake exe check_certificate DIAGRAM.json CERTIFICATE.json` prints each check, and
 the cross-check script runs it on every influence diagram it covers and on mutated certificates.
+
+`Finite/DVE/CertificateApprox.lean` covers the certificates whose rows do not sum to exactly one.
+`certificateEpsilon c` (exact, over `ℚ`) is the largest `|row sum - 1|` over the certificate's CPT
+rows, `n = certChanceCount c` the number of mechanisms and `Umax = certUmax c` the sum of the
+utility tables' largest absolute cells (`certUtility_total_le`: an upper bound of the absolute
+total utility). The reference model `certNormKernel` divides every row by its own sum; it is
+normalised when `ε < 1`, and the certificate's joint is the reference joint times the product
+of the `n` row sums (`certKernel_envelope`); decisions have no rows in the certificate and their
+policies are normalised by construction. `certificate_approx_optimal`: for a matching certificate
+with nonnegative cells and `ε < 1`, the exact representative run on the certificate's numbers
+(any maximizing selector, `keep` and plan) returns a deterministic `σ*` with
+`EU τ ≤ EU σ* + 2 e` for every nonnegative `τ`, `optimalValue - 2 e ≤ EU σ* ≤ optimalValue` and
+`|value - optimalValue| ≤ e` under the reference model, for
+`e = approxError ε n Umax = n (((1 + ε) / (1 - ε)) ^ n - 1) Umax`; `certificate_solve_approx` is
+the same for `DVE.solve` with the certificate's orders. `certificate_approx_exact`: an exactly
+normalised certificate has `ε = 0`, `certNormKernel = certKernel` and gap `0`, so the theorem
+then gives `certificate_solve_spec`'s conclusions. The gap is not `2 ((1 + ε) ^ n - 1) Umax`:
+the run does not maximise the unnormalised expected utility (a chance step stores a ratio, which
+divides out a mechanism's row sum at its target but lets the eliminated part's row sums re-weight
+later averages), so each chance elimination is charged `((1 + ε) / (1 - ε)) ^ n - 1` times `Umax`
+(`Finite/DVE/Approximate.lean`). The reference model is the certificate's rows normalised, not
+the decimal model Julia rounded, which the certificate does not record; and the theorem is about
+the exact run on the certificate's numbers, not Julia's Float64 run. `check_certificate` prints
+`ε`, `n`, `Umax` and `certificateBound c = 2 e` in scientific notation.
 
 Not proved: `Lean.Json.parse` and Julia's JSON3/ACSets writer (trusted; the theorems start from
 a parsed `Json` tree), Julia's `export_dve_certificate` and its `Float64` capture; that Julia's

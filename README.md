@@ -178,6 +178,21 @@ value, so this is a theorem about the exported model, not about Julia's computed
 binary64 words Julia writes by default rarely sum to exactly one, so exact normalization is
 decided (`lake exe check_certificate`), not assumed.
 
+`Finite/DVE/CertificateApprox.lean` drops exact normalization. `certificateEpsilon c` is the
+largest `|row sum - 1|` over the certificate's CPT rows, computed exactly over `ℚ`, and the
+row-normalised model divides every certificate row by its own sum.
+`certificate_approx_optimal` proves that if the certificate matches, its CPT cells are
+nonnegative and `certificateEpsilon c < 1`, the exact DVE run on the certificate's numbers, with
+any maximizing selector, representative choice and plan, returns a deterministic strategy whose
+expected utility under the row-normalised model is within `2 e` of that model's optimum and of
+every nonnegative strategy, and whose value is within `e` of that optimum, where
+`e = n (((1 + ε) / (1 - ε)) ^ n - 1) Umax`. Here `ε = certificateEpsilon c`, `n` is the number of
+chance variables and `Umax` the sum of the utility tables' largest absolute cells; an exactly
+normalised certificate has `ε = 0` and gap `0`. The row-normalised model is the reference only
+because the decimal model Julia rounded is not known to the certificate, and the theorem is about
+the exact run on the certificate's numbers, not about Julia's Float64 solver run.
+`lake exe check_certificate` prints `ε`, `n`, `Umax` and the gap `2 e`.
+
 `Finite/DVE/Conditioning.lean` models Julia's explicit evidence conditioning: every chance and
 utility factor is sliced at the observed states, and variables that no factor mentions are
 skipped. For hard evidence on an action-free chance-ancestral set, `solveConditioned_spec`
@@ -212,6 +227,11 @@ raw Float64 bits, original part IDs and repeated-slot CPT/factor correspondence.
 An explicit rational-companion mode checks exact nearest-even agreement without
 renormalizing. See [the model certificate guide](docs/src/certificates.md).
 This data export is not a proof of a production optimization trace.
+`export_dve_certificate(model; solution=true)`, or `solution=` a
+`DecisionVariableElimination` backend, emits version 2: the same model data plus
+the run's policy tables (action state IDs and per-row maximal scores, in
+`information_position` and `state_position` order), elimination order and value.
+That records what Julia computed; it is not an optimality claim.
 
 `trace_decision_elimination(model)` now captures an actual exact-arithmetic
 stable-DVE run, including initial/conditioned valuations, every combined and

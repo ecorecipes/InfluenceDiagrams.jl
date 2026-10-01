@@ -91,6 +91,11 @@ This is **not** a byte-for-byte verification of Julia. Remaining refinements are
   no policy, value or plan, so `certificate_solve_spec` and `certificate_tables_optimal` are
   about the model its exact numbers define (applicable only when its CPT rows sum to exactly
   one, which Julia's default binary64 words rarely do), not about Julia's computed solution.
+  Rows that do not sum to one are covered approximately (`Finite/DVE/CertificateApprox.lean`,
+  `certificate_approx_optimal`): with `ε = certificateEpsilon c < 1`, the exact run on the
+  certificate's numbers is within `2 n (((1 + ε) / (1 - ε)) ^ n - 1) Umax` of the optimum of the
+  row-normalised model. That model is a reference chosen by the proof; the decimal model Julia
+  rounded is not recorded, and Julia's own Float64 run is still not covered.
   That Julia's action axis lists the
   states in `state_position` order is pinned by a Julia test, and the array layout is the
   `FiniteKernels` `Layout/` result; Julia's execution itself is not proved. That Julia's block
