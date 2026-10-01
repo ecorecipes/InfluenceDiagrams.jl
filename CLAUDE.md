@@ -80,7 +80,9 @@ ordered but neither knows the other's action: that is a forgetting diagram, and 
   on rows of positive probability. `Finite/DVE/Conditioning.lean` models this package's
   sliced evidence conditioning (factors and utilities, absent variables skipped) and
   proves equal evidence mass, value and positive-probability first-label tables versus
-  the likelihood factor. Zero-probability rows, the link from the supplied order to
+  the likelihood factor. `Finite/DVE/PlanIndependence.lean` proves those positive-probability
+  first-label tables (plain, likelihood evidence and sliced evidence) identical for any two
+  elimination plans, so the min-fill order inside a strong block cannot change them. Zero-probability rows, the link from the supplied order to
   Julia's labels, and Float64 comparison (near-ties, `-0.0` versus `0.0`, `NaN`) stay
   outside the proofs.
   Follow the proof README's build, audit and rendering rules when extending this layer.

@@ -112,6 +112,16 @@ maximizing that row's bucket utility, so the returned table is uniquely determin
 maximizing the (unnormalized) expected utility of acting there and then following the returned
 later policies.
 
+`Finite/DVE/PlanIndependence.lean` shows that the order in which min-fill eliminates chance
+variables does not matter on those rows.
+`solvePlanOrdered_table_eq` proves that these first-label tables do not depend on the
+elimination plan: any two plans, for example two min-fill orders of the chance variables inside
+the strong blocks, give the same policy entry on every row of positive probability, and
+`solveConditionedPlan_table_eq` proves the same for the conditioned driver on every row whose
+evidence-clamped row has positive probability. There the entry is the least action maximizing
+the optimal continuation value, a supremum over strategies that mentions no plan. Entries on
+zero-probability rows are not claimed to be plan independent.
+
 `Finite/DVE/Conditioning.lean` models Julia's explicit evidence conditioning: every chance and
 utility factor is sliced at the observed states, and variables that no factor mentions are
 skipped. For hard evidence on an action-free chance-ancestral set, `solveConditioned_spec`

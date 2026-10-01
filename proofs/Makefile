@@ -45,6 +45,7 @@ MD_FILES = \
     Finite/DVE/Guard/Positive.md Finite/DVE/Guard/Provenance.md \
     Finite/DVE/Guard/Complete.md Finite/DVE/Guard/Boundary.md \
     Finite/OrderedPolicies.md Finite/DVE/Selector.md Finite/DVE/Conditioning.md \
+    Finite/DVE/PlanIndependence.md \
     Roadmap.md
 
 JULIAMONO_DIR = $(abspath ../../fonts/JuliaMono)/

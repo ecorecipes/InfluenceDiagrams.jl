@@ -60,7 +60,8 @@ Module order (`MD_FILES` in the `Makefile`, the import order of `InfluenceDiagra
 11. `Finite/OrderedPolicies.lean` — supplied state-order ties, finite information tables and gap stability
 12. `Finite/DVE/Selector.lean` — the driver parameterised by its selector; first-label table identity
 13. `Finite/DVE/Conditioning.lean` — explicit (sliced) evidence conditioning versus the likelihood factor
-14. `Roadmap.lean` — remaining literal-implementation refinements; no unproved declarations
+14. `Finite/DVE/PlanIndependence.lean` — positive-reach first-label tables are independent of the elimination plan
+15. `Roadmap.lean` — remaining literal-implementation refinements; no unproved declarations
 
 ## What is formalised
 
@@ -82,6 +83,7 @@ inherited `FinBayesNet.nonemptyS` fields ensure that every action space is nonem
 | `Finite/DVE/Guard/` | The exact all-row probability diagnostic is complete, including zero-outside contexts. Probability-expression provenance and continuous normalized smoothing remove the temporary strict-positivity assumption. Checked drivers return the previously proved result; zero evidence mass remains a separate rejection. |
 | `Finite/DVE/Selector.lean` | `runWith sel` is the bucket driver with an arbitrary maximizing `Selector`; `runWith_classical` shows `run` is its classical instance and `runWith_state` that valuations do not depend on the selector. `Inv.decisionOf` needs a maximizer only on rows of positive probability. `solveWith_spec`, `solveGuardedWith_spec`, `solveEvidenceWith_spec`, `solveEvidenceGuardedWith_eq`: the guarantees of `solve_spec`, `solveGuarded_spec` and the evidence theorems for every selector. For `Selector.ordered` (least state in a supplied order): `solveOrdered_table` (every row is `orderedTable` of the bucket-utility score `solveScore`) and `solveOrdered_semantic` / `solveEvidenceOrdered_semantic` (on rows with `reach ≠ 0`, the least maximizer of `continuation`). |
 | `Finite/DVE/Conditioning.lean` | `Valuation.condition` slices both potentials at `clamp O o`; `runSkipWith` skips absent chance variables. For `HardEvidence` the invariant `Coupled` (equal probability and weighted utility at `x` and `clamp O o x` on every row) holds initially and after every step. `conditionedMass_eq`, `solveConditioned_spec`, `solveConditionedChecked_eq`, `solveConditioned_policy_eq`, `solveConditioned_semantic`, `solveConditioned_kernel_clamp`. |
+| `Finite/DVE/PlanIndependence.lean` | `MassAll` (the probability potential is the reach marginal under every strategy) is preserved by every step, so `reach_strategy_independent`. `optimalContinuation` is the supremum of `continuation` over nonnegative strategies; `weight_eq_optimalContinuation` identifies it with the weighted valuation at the decision step of any plan, and `runWith_ordered_optimal` makes the first-label entry its least maximizer on rows of positive reach. `solvePlanWith`, `solveEvidencePlanWith`, `solveConditionedPlan` run on an arbitrary `Plan id Finset.univ`; `solvePlanOrdered_table_eq`, `solveEvidencePlanOrdered_table_eq`, `solveConditionedPlan_table_eq` and `solveOrdered_table_plan_independent`. |
 | `Roadmap.lean` | Remaining literal-Julia refinements; no unproved declarations. |
 
 `Audit.lean` prints the axioms of every main theorem (and of the definitions `Policy.ofFun`,
@@ -150,7 +152,32 @@ version rejects exactly zero mass); and, for `Selector.ordered`, `solveCondition
 positive reach) and `solveConditioned_semantic`. `solveConditioned_kernel_clamp` proves that
 the conditioned table is constant along observed coordinates, so a row contradicting the
 evidence repeats the entry of its clamped row. The likelihood driver's entry on such a row is
-fixed by its own representatives, and the two tables are not claimed equal there. `make audit` also rejects missing/ambiguous results, any other axiom and
+fixed by its own representatives, and the two tables are not claimed equal there.
+
+### Independence of the elimination plan
+
+The headline theorems above run on `NoForgettingOrder.plan`, whose enumeration of each chance
+block is arbitrary; Julia orders each block by min-fill on the current factors.
+`Finite/DVE/PlanIndependence.lean` proves that this choice cannot change a first-label entry on
+a row of positive reach. A `Plan` can maximize decision `d` only when the remaining variables
+are exactly `insert (action d) (info d)`, so every plan reaches `d` with the same eliminated
+set. There `Inv` makes the weighted valuation both realized by a nonnegative strategy and an
+upper bound for every nonnegative strategy, hence equal to `optimalContinuation`, a supremum
+over strategies that mentions no plan, bucket or representative
+(`weight_eq_optimalContinuation`). The probability potential at that step is the reach
+probability under every strategy (`MassAll`, `reach_strategy_independent`). So on rows of
+positive reach the ordered entry is the least maximizer of `optimalContinuation` for every plan
+(`runWith_ordered_optimal`), and `solvePlanOrdered_table_eq` (no evidence),
+`solveEvidencePlanOrdered_table_eq` (likelihood evidence) and `solveConditionedPlan_table_eq`
+(sliced hard evidence, with absent variables skipped wherever the plan lists them) state the
+equality for any two plans; `solveOrdered_table_plan_independent` restates it for two
+perfect-recall orders. Any two `Plan id Finset.univ` qualify. Zero-reach entries are fixed by
+bucket representatives, which may depend on the elimination order; they are not claimed plan
+independent. That Julia's
+`_block_order` schedule is a `Plan` (every chance variable of the block eliminated before the
+decision, with exactly its information set remaining) is read off the source, not derived.
+
+`make audit` also rejects missing/ambiguous results, any other axiom and
 proof escape hatches in this project's sources and its own BayesianNetworks proof
 dependency. The CI workflow runs that fail-closed command.
 

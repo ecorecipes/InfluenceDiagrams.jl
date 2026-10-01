@@ -215,6 +215,20 @@ coupling invariant</a></li>
 <li><a href="#the-conditioned-solver"
 id="toc-the-conditioned-solver">The conditioned solver</a></li>
 </ul></li>
+<li><a href="#first-label-tables-do-not-depend-on-the-elimination-plan"
+id="toc-first-label-tables-do-not-depend-on-the-elimination-plan">First-label
+tables do not depend on the elimination plan</a>
+<ul>
+<li><a href="#the-mass-invariant-under-every-strategy"
+id="toc-the-mass-invariant-under-every-strategy">The mass invariant
+under every strategy</a></li>
+<li><a href="#the-optimal-continuation-value"
+id="toc-the-optimal-continuation-value">The optimal continuation
+value</a></li>
+<li><a href="#solvers-on-an-arbitrary-plan"
+id="toc-solvers-on-an-arbitrary-plan">Solvers on an arbitrary
+plan</a></li>
+</ul></li>
 <li><a href="#roadmap-and-exact-scope-of-the-dve-theorem"
 id="toc-roadmap-and-exact-scope-of-the-dve-theorem">Roadmap and exact
 scope of the DVE theorem</a></li>
@@ -5578,11 +5592,386 @@ class="sourceCode lean"><code class="sourceCode lean"><span id="cb58-1"><a href=
 <span id="cb58-309"><a href="#cb58-309" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb58-310"><a href="#cb58-310" aria-hidden="true" tabindex="-1"></a><span class="kw">end</span></span>
 <span id="cb58-311"><a href="#cb58-311" aria-hidden="true" tabindex="-1"></a><span class="kw">end</span> InfluenceDiagramsProofs.DVE</span></code></pre></div>
+<!-- InfluenceDiagramsProofs/Finite/DVE/PlanIndependence.lean -->
+<h1
+id="first-label-tables-do-not-depend-on-the-elimination-plan">First-label
+tables do not depend on the elimination plan</h1>
+<div class="sourceCode" id="cb59"><pre
+class="sourceCode lean"><code class="sourceCode lean"><span id="cb59-1"><a href="#cb59-1" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> InfluenceDiagramsProofs.Finite.DVE.Conditioning</span></code></pre></div>
+<p>The headline first-label theorems of <code>Selector.lean</code> and
+<code>Conditioning.lean</code> run the bucket driver on the plan
+<code>NoForgettingOrder.plan</code> builds, whose chance blocks are
+enumerated in an arbitrary but fixed order. Julia orders each chance
+block by min-fill on the current factors. This module removes that
+dependence: <strong>any two plans</strong> — any interleaving of chance
+eliminations and decisions that <code>Plan</code> accepts, in particular
+two min-fill choices inside the same strong blocks — give the
+first-label (<code>Selector.ordered</code>) solver the same policy entry
+on every information row of positive reach.</p>
+<p>The proof is not a backward induction over tables. A
+<code>Plan</code> can maximize <code>d</code> only when the remaining
+variables are exactly <code>insert (id.action d) (id.info d)</code>, so
+every plan reaches <code>d</code> with the same eliminated set. There
+the invariant <code>Inv</code> says that the weighted valuation is
+realized by some nonnegative strategy and dominates every nonnegative
+strategy; it is therefore the plan-independent <strong>optimal
+continuation value</strong> <code>optimalContinuation</code>, a supremum
+over strategies that mentions no bucket or plan. The probability
+potential at that step is the reach probability, which is the same under
+every strategy (<code>MassAll</code>,
+<code>reach_strategy_independent</code>). On a row of positive reach the
+first-label entry is the least maximizer of the optimal continuation
+value (<code>runWith_ordered_optimal</code>), for every plan.</p>
+<p>Consequences: <code>solvePlanOrdered_table_eq</code> (no evidence),
+<code>solveEvidencePlanOrdered_table_eq</code> (action-independent
+likelihood evidence) and <code>solveConditionedPlan_table_eq</code>
+(Julia’s sliced hard-evidence path, where observed variables are skipped
+wherever the plan lists them).
+<code>solveOrdered_table_plan_independent</code> restates the first for
+two perfect-recall orders.</p>
+<p>Rows of zero reach are excluded. There no semantic score exists and
+the entry is fixed by the bucket representatives, which do depend on the
+elimination order; this module claims nothing about them.</p>
+<div class="sourceCode" id="cb60"><pre
+class="sourceCode lean"><code class="sourceCode lean"><span id="cb60-1"><a href="#cb60-1" aria-hidden="true" tabindex="-1"></a><span class="kw">set_option</span> autoImplicit false</span>
+<span id="cb60-2"><a href="#cb60-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb60-3"><a href="#cb60-3" aria-hidden="true" tabindex="-1"></a><span class="kw">namespace</span> InfluenceDiagramsProofs.DVE</span>
+<span id="cb60-4"><a href="#cb60-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb60-5"><a href="#cb60-5" aria-hidden="true" tabindex="-1"></a><span class="kw">open</span> BayesianNetworksProofs BayesianNetworksProofs.FinBayesNet FinInfluenceDiagram Valuation</span>
+<span id="cb60-6"><a href="#cb60-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb60-7"><a href="#cb60-7" aria-hidden="true" tabindex="-1"></a><span class="kw">noncomputable</span> <span class="kw">section</span></span>
+<span id="cb60-8"><a href="#cb60-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb60-9"><a href="#cb60-9" aria-hidden="true" tabindex="-1"></a><span class="kw">variable</span> {id : FinInfluenceDiagram}</span></code></pre></div>
+<h2 id="the-mass-invariant-under-every-strategy">The mass invariant
+under every strategy</h2>
+<div class="sourceCode" id="cb61"><pre
+class="sourceCode lean"><code class="sourceCode lean"><span id="cb61-1"><a href="#cb61-1" aria-hidden="true" tabindex="-1"></a><span class="do">/-- The probability potential is the weighted marginal of the eliminated variables under</span></span>
+<span id="cb61-2"><a href="#cb61-2" aria-hidden="true" tabindex="-1"></a><span class="do">**every** strategy, not only the one being built. -/</span></span>
+<span id="cb61-3"><a href="#cb61-3" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> MassAll (κ : id.Kernel ℝ) (L : id.Assignment → ℝ) {R : Finset id.V} (s : State id R) :</span>
+<span id="cb61-4"><a href="#cb61-4" aria-hidden="true" tabindex="-1"></a>    <span class="kw">Prop</span> :=</span>
+<span id="cb61-5"><a href="#cb61-5" aria-hidden="true" tabindex="-1"></a>  ∀ (σ : Strategy id ℝ) (x : id.Assignment),</span>
+<span id="cb61-6"><a href="#cb61-6" aria-hidden="true" tabindex="-1"></a>    (collect s.valuations).prob x = marg Rᶜ (<span class="kw">fun</span> y =&gt; freeJoint κ Rᶜ σ y * L y) x</span>
+<span id="cb61-7"><a href="#cb61-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb61-8"><a href="#cb61-8" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> MassAll.chance {κ : id.Kernel ℝ} {L : id.Assignment → ℝ} {R : Finset id.V}</span>
+<span id="cb61-9"><a href="#cb61-9" aria-hidden="true" tabindex="-1"></a>    {s : State id R} (h : MassAll κ L s) (v : id.V) (hv : v ∈ R) (hc : ∀ d, id.action d ≠ v) :</span>
+<span id="cb61-10"><a href="#cb61-10" aria-hidden="true" tabindex="-1"></a>    MassAll κ L (s.chance v) := <span class="kw">by</span></span>
+<span id="cb61-11"><a href="#cb61-11" aria-hidden="true" tabindex="-1"></a>  <span class="kw">have</span> hn : v ∉ Rᶜ := <span class="kw">by</span> <span class="cf">simpa</span> <span class="kw">using</span> hv</span>
+<span id="cb61-12"><a href="#cb61-12" aria-hidden="true" tabindex="-1"></a>  <span class="cf">intro</span> σ x</span>
+<span id="cb61-13"><a href="#cb61-13" aria-hidden="true" tabindex="-1"></a>  change (collect (chanceStep v s.valuations)).prob x = _</span>
+<span id="cb61-14"><a href="#cb61-14" aria-hidden="true" tabindex="-1"></a>  <span class="cf">rw</span> [chanceStep_prob, compl_erase, freeJoint_insert_chance κ Rᶜ σ v hc, marg_insert hn]</span>
+<span id="cb61-15"><a href="#cb61-15" aria-hidden="true" tabindex="-1"></a>  <span class="cf">exact</span> Finset.sum_congr <span class="cf">rfl</span> <span class="kw">fun</span> b _ =&gt; h σ _</span>
+<span id="cb61-16"><a href="#cb61-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb61-17"><a href="#cb61-17" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> MassAll.prob_update {κ : id.Kernel ℝ} {L : id.Assignment → ℝ} {R : Finset id.V}</span>
+<span id="cb61-18"><a href="#cb61-18" aria-hidden="true" tabindex="-1"></a>    {s : State id R} (h : MassAll κ L s) (hind : Independent κ L) (d : id.D)</span>
+<span id="cb61-19"><a href="#cb61-19" aria-hidden="true" tabindex="-1"></a>    (hd : id.action d ∈ R) (hi : R.erase (id.action d) = id.info d) (x : id.Assignment)</span>
+<span id="cb61-20"><a href="#cb61-20" aria-hidden="true" tabindex="-1"></a>    (a : id.states (id.action d)) :</span>
+<span id="cb61-21"><a href="#cb61-21" aria-hidden="true" tabindex="-1"></a>    (collect s.valuations).prob (Function.update x (id.action d) a) =</span>
+<span id="cb61-22"><a href="#cb61-22" aria-hidden="true" tabindex="-1"></a>      (collect s.valuations).prob x := <span class="kw">by</span></span>
+<span id="cb61-23"><a href="#cb61-23" aria-hidden="true" tabindex="-1"></a>  <span class="cf">rw</span> [h defaultStrategy, h defaultStrategy]</span>
+<span id="cb61-24"><a href="#cb61-24" aria-hidden="true" tabindex="-1"></a>  <span class="cf">exact</span> hind Rᶜ defaultStrategy d (<span class="kw">by</span> <span class="cf">simpa</span> <span class="kw">using</span> hd)</span>
+<span id="cb61-25"><a href="#cb61-25" aria-hidden="true" tabindex="-1"></a>    (<span class="kw">by</span> <span class="cf">simpa</span> <span class="kw">using</span> information_boundary d hi) x a</span>
+<span id="cb61-26"><a href="#cb61-26" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb61-27"><a href="#cb61-27" aria-hidden="true" tabindex="-1"></a><span class="do">/-- A decision step keeps the mass identity for every strategy: every normalised policy for</span></span>
+<span id="cb61-28"><a href="#cb61-28" aria-hidden="true" tabindex="-1"></a><span class="do">`d` sums an action-constant marginal to itself. -/</span></span>
+<span id="cb61-29"><a href="#cb61-29" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> MassAll.decision {κ : id.Kernel ℝ} {L : id.Assignment → ℝ} {R : Finset id.V}</span>
+<span id="cb61-30"><a href="#cb61-30" aria-hidden="true" tabindex="-1"></a>    {s : State id R} (h : MassAll κ L s) (hind : Independent κ L) (hclosed : id.Closed)</span>
+<span id="cb61-31"><a href="#cb61-31" aria-hidden="true" tabindex="-1"></a>    (d : id.D) (hd : id.action d ∈ R) (hi : R.erase (id.action d) = id.info d) :</span>
+<span id="cb61-32"><a href="#cb61-32" aria-hidden="true" tabindex="-1"></a>    MassAll κ L (s.decision d) := <span class="kw">by</span></span>
+<span id="cb61-33"><a href="#cb61-33" aria-hidden="true" tabindex="-1"></a>  <span class="kw">have</span> hn : id.action d ∉ Rᶜ := <span class="kw">by</span> <span class="cf">simpa</span> <span class="kw">using</span> hd</span>
+<span id="cb61-34"><a href="#cb61-34" aria-hidden="true" tabindex="-1"></a>  <span class="kw">have</span> hinj := (id.closed_iff<span class="fl">.1</span> hclosed).<span class="fl">2.1</span></span>
+<span id="cb61-35"><a href="#cb61-35" aria-hidden="true" tabindex="-1"></a>  <span class="kw">have</span> hp := h.prob_update hind d hd hi</span>
+<span id="cb61-36"><a href="#cb61-36" aria-hidden="true" tabindex="-1"></a>  <span class="cf">intro</span> σ x</span>
+<span id="cb61-37"><a href="#cb61-37" aria-hidden="true" tabindex="-1"></a>  change (collect (decisionStep (id.action d) s.valuations)).prob x = _</span>
+<span id="cb61-38"><a href="#cb61-38" aria-hidden="true" tabindex="-1"></a>  <span class="cf">rw</span> [(decisionStep_eval _ _ hp x).<span class="dv">1</span>, hp, compl_erase]</span>
+<span id="cb61-39"><a href="#cb61-39" aria-hidden="true" tabindex="-1"></a>  <span class="kw">have</span> hc := decision_marginal κ Rᶜ σ hinj d hn (info_disjoint d hi) (σ d) L x</span>
+<span id="cb61-40"><a href="#cb61-40" aria-hidden="true" tabindex="-1"></a>  <span class="cf">simp</span> only [Function.update_eq_self] <span class="kw">at</span> hc</span>
+<span id="cb61-41"><a href="#cb61-41" aria-hidden="true" tabindex="-1"></a>  <span class="cf">rw</span> [hc]</span>
+<span id="cb61-42"><a href="#cb61-42" aria-hidden="true" tabindex="-1"></a>  <span class="cf">simp_rw</span> [← h σ, hp]</span>
+<span id="cb61-43"><a href="#cb61-43" aria-hidden="true" tabindex="-1"></a>  <span class="cf">rw</span> [← Finset.sum_mul, (σ d).normalised x, one_mul]</span>
+<span id="cb61-44"><a href="#cb61-44" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb61-45"><a href="#cb61-45" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> MassAll.ofInv {κ : id.Kernel ℝ} {u : Utility id ℝ} {L : id.Assignment → ℝ}</span>
+<span id="cb61-46"><a href="#cb61-46" aria-hidden="true" tabindex="-1"></a>    {s : State id Finset.univ} (h : ∀ σ : Strategy id ℝ, Inv κ u L s σ) : MassAll κ L s :=</span>
+<span id="cb61-47"><a href="#cb61-47" aria-hidden="true" tabindex="-1"></a>  <span class="kw">fun</span> σ x =&gt; (h σ).mass x</span>
+<span id="cb61-48"><a href="#cb61-48" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb61-49"><a href="#cb61-49" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> massAll_initial (κ : id.Kernel ℝ) (hloc : ∀ m, Local κ m)</span>
+<span id="cb61-50"><a href="#cb61-50" aria-hidden="true" tabindex="-1"></a>    (hnonneg : ∀ m x a, <span class="dv">0</span> ≤ κ m x a) (u : Utility id ℝ) (hu : ∀ j, Utility.Local u j) :</span>
+<span id="cb61-51"><a href="#cb61-51" aria-hidden="true" tabindex="-1"></a>    MassAll κ (<span class="kw">fun</span> _ =&gt; <span class="dv">1</span>) (initial κ hloc hnonneg u hu) :=</span>
+<span id="cb61-52"><a href="#cb61-52" aria-hidden="true" tabindex="-1"></a>  MassAll.ofInv (u := u) <span class="kw">fun</span> σ =&gt; Inv.ofCorrect (initial_correct κ hloc hnonneg u hu σ)</span>
+<span id="cb61-53"><a href="#cb61-53" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb61-54"><a href="#cb61-54" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> massAll_initialEvidence (κ : id.Kernel ℝ) (hloc : ∀ m, Local κ m)</span>
+<span id="cb61-55"><a href="#cb61-55" aria-hidden="true" tabindex="-1"></a>    (hnonneg : ∀ m x a, <span class="dv">0</span> ≤ κ m x a) (u : Utility id ℝ) (hu : ∀ j, Utility.Local u j)</span>
+<span id="cb61-56"><a href="#cb61-56" aria-hidden="true" tabindex="-1"></a>    (e : Evidence id) :</span>
+<span id="cb61-57"><a href="#cb61-57" aria-hidden="true" tabindex="-1"></a>    MassAll κ e.likelihood (initialEvidence κ hloc hnonneg u hu e) :=</span>
+<span id="cb61-58"><a href="#cb61-58" aria-hidden="true" tabindex="-1"></a>  MassAll.ofInv (u := u) <span class="kw">fun</span> σ =&gt; Inv.ofWeighted (initialEvidence_correct κ hloc hnonneg u hu e σ)</span>
+<span id="cb61-59"><a href="#cb61-59" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb61-60"><a href="#cb61-60" aria-hidden="true" tabindex="-1"></a><span class="do">/-- **Reach does not depend on the strategy.** Whenever some plan eliminates `d` from a state</span></span>
+<span id="cb61-61"><a href="#cb61-61" aria-hidden="true" tabindex="-1"></a><span class="do">whose mass identity holds for every strategy, the weighted probability of each information</span></span>
+<span id="cb61-62"><a href="#cb61-62" aria-hidden="true" tabindex="-1"></a><span class="do">row of `d` is the same under every strategy. -/</span></span>
+<span id="cb61-63"><a href="#cb61-63" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> reach_strategy_independent {κ : id.Kernel ℝ} {L : id.Assignment → ℝ}</span>
+<span id="cb61-64"><a href="#cb61-64" aria-hidden="true" tabindex="-1"></a>    (hind : Independent κ L) (hclosed : id.Closed) {R : Finset id.V} (plan : Plan id R)</span>
+<span id="cb61-65"><a href="#cb61-65" aria-hidden="true" tabindex="-1"></a>    (s : State id R) (hs : MassAll κ L s) (d : id.D) (hd : id.action d ∈ R)</span>
+<span id="cb61-66"><a href="#cb61-66" aria-hidden="true" tabindex="-1"></a>    (σ τ : Strategy id ℝ) (x : id.Assignment) : reach κ L σ d x = reach κ L τ d x := <span class="kw">by</span></span>
+<span id="cb61-67"><a href="#cb61-67" aria-hidden="true" tabindex="-1"></a>  <span class="kw">have</span> hinj := (id.closed_iff<span class="fl">.1</span> hclosed).<span class="fl">2.1</span></span>
+<span id="cb61-68"><a href="#cb61-68" aria-hidden="true" tabindex="-1"></a>  <span class="cf">induction</span> plan <span class="kw">with</span></span>
+<span id="cb61-69"><a href="#cb61-69" aria-hidden="true" tabindex="-1"></a>  | done =&gt; <span class="cf">simp</span> <span class="kw">at</span> hd</span>
+<span id="cb61-70"><a href="#cb61-70" aria-hidden="true" tabindex="-1"></a>  | chance v hv hc next ih =&gt;</span>
+<span id="cb61-71"><a href="#cb61-71" aria-hidden="true" tabindex="-1"></a>    <span class="cf">exact</span> ih (s.chance v) (hs.chance v hv hc) (Finset.mem_erase<span class="fl">.2</span> ⟨hc d, hd⟩)</span>
+<span id="cb61-72"><a href="#cb61-72" aria-hidden="true" tabindex="-1"></a>  | @decision R&#39; d&#39; hd&#39; hi next ih =&gt;</span>
+<span id="cb61-73"><a href="#cb61-73" aria-hidden="true" tabindex="-1"></a>    <span class="cf">by_cases</span> hdd : d&#39; = d</span>
+<span id="cb61-74"><a href="#cb61-74" aria-hidden="true" tabindex="-1"></a>    · <span class="cf">subst</span> hdd</span>
+<span id="cb61-75"><a href="#cb61-75" aria-hidden="true" tabindex="-1"></a>      <span class="kw">have</span> hR : insert (id.action d&#39;) (id.info d&#39;) = R&#39; := <span class="kw">by</span></span>
+<span id="cb61-76"><a href="#cb61-76" aria-hidden="true" tabindex="-1"></a>        <span class="cf">rw</span> [← hi, Finset.insert_erase hd&#39;]</span>
+<span id="cb61-77"><a href="#cb61-77" aria-hidden="true" tabindex="-1"></a>      <span class="cf">unfold</span> reach</span>
+<span id="cb61-78"><a href="#cb61-78" aria-hidden="true" tabindex="-1"></a>      <span class="cf">rw</span> [hR, ← hs σ, ← hs τ]</span>
+<span id="cb61-79"><a href="#cb61-79" aria-hidden="true" tabindex="-1"></a>    · <span class="kw">have</span> hne : id.action d ≠ id.action d&#39; := <span class="kw">fun</span> he =&gt; hdd (hinj he).symm</span>
+<span id="cb61-80"><a href="#cb61-80" aria-hidden="true" tabindex="-1"></a>      <span class="cf">exact</span> ih (s.decision d&#39;) (hs.decision hind hclosed d&#39; hd&#39; hi)</span>
+<span id="cb61-81"><a href="#cb61-81" aria-hidden="true" tabindex="-1"></a>        (Finset.mem_erase<span class="fl">.2</span> ⟨hne, hd⟩)</span></code></pre></div>
+<h2 id="the-optimal-continuation-value">The optimal continuation
+value</h2>
+<div class="sourceCode" id="cb62"><pre
+class="sourceCode lean"><code class="sourceCode lean"><span id="cb62-1"><a href="#cb62-1" aria-hidden="true" tabindex="-1"></a><span class="do">/-- The largest unnormalized expected utility of choosing `b` at `d` on the information row of</span></span>
+<span id="cb62-2"><a href="#cb62-2" aria-hidden="true" tabindex="-1"></a><span class="do">`x` and then following any nonnegative strategy. It mentions no plan, bucket or selector. -/</span></span>
+<span id="cb62-3"><a href="#cb62-3" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> optimalContinuation (κ : id.Kernel ℝ) (u : Utility id ℝ) (L : id.Assignment → ℝ)</span>
+<span id="cb62-4"><a href="#cb62-4" aria-hidden="true" tabindex="-1"></a>    (d : id.D) (x : id.Assignment) (b : id.states (id.action d)) : ℝ :=</span>
+<span id="cb62-5"><a href="#cb62-5" aria-hidden="true" tabindex="-1"></a>  sSup ((<span class="kw">fun</span> τ : Strategy id ℝ =&gt; continuation κ u L τ d x b) &#39;&#39; {τ | τ.Nonneg})</span>
+<span id="cb62-6"><a href="#cb62-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb62-7"><a href="#cb62-7" aria-hidden="true" tabindex="-1"></a><span class="do">/-- At the step that maximizes `d`, the weighted valuation is the optimal continuation value,</span></span>
+<span id="cb62-8"><a href="#cb62-8" aria-hidden="true" tabindex="-1"></a><span class="do">whatever plan led there: it is attained by the final strategy and dominates every other. -/</span></span>
+<span id="cb62-9"><a href="#cb62-9" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> weight_eq_optimalContinuation {κ : id.Kernel ℝ} {u : Utility id ℝ}</span>
+<span id="cb62-10"><a href="#cb62-10" aria-hidden="true" tabindex="-1"></a>    {L : id.Assignment → ℝ} {R : Finset id.V} {s : State id R} {σ : Strategy id ℝ}</span>
+<span id="cb62-11"><a href="#cb62-11" aria-hidden="true" tabindex="-1"></a>    (h : Inv κ u L s σ) (d : id.D) (hd : id.action d ∈ R)</span>
+<span id="cb62-12"><a href="#cb62-12" aria-hidden="true" tabindex="-1"></a>    (hi : R.erase (id.action d) = id.info d) (τ : Strategy id ℝ) (hτn : τ.Nonneg)</span>
+<span id="cb62-13"><a href="#cb62-13" aria-hidden="true" tabindex="-1"></a>    (hτ : ∀ e, id.action e ∉ R → τ e = σ e) (x : id.Assignment) :</span>
+<span id="cb62-14"><a href="#cb62-14" aria-hidden="true" tabindex="-1"></a>    (<span class="kw">fun</span> b =&gt; (collect s.valuations).weight (Function.update x (id.action d) b)) =</span>
+<span id="cb62-15"><a href="#cb62-15" aria-hidden="true" tabindex="-1"></a>      optimalContinuation κ u L d x := <span class="kw">by</span></span>
+<span id="cb62-16"><a href="#cb62-16" aria-hidden="true" tabindex="-1"></a>  <span class="kw">have</span> hR : insert (id.action d) (id.info d) = R := <span class="kw">by</span> <span class="cf">rw</span> [← hi, Finset.insert_erase hd]</span>
+<span id="cb62-17"><a href="#cb62-17" aria-hidden="true" tabindex="-1"></a>  <span class="cf">funext</span> b</span>
+<span id="cb62-18"><a href="#cb62-18" aria-hidden="true" tabindex="-1"></a>  symm</span>
+<span id="cb62-19"><a href="#cb62-19" aria-hidden="true" tabindex="-1"></a>  <span class="cf">apply</span> IsGreatest.csSup_eq</span>
+<span id="cb62-20"><a href="#cb62-20" aria-hidden="true" tabindex="-1"></a>  <span class="cf">constructor</span></span>
+<span id="cb62-21"><a href="#cb62-21" aria-hidden="true" tabindex="-1"></a>  · <span class="cf">refine</span> ⟨τ, hτn, ?_⟩</span>
+<span id="cb62-22"><a href="#cb62-22" aria-hidden="true" tabindex="-1"></a>    <span class="kw">show</span> continuation κ u L τ d x b = _</span>
+<span id="cb62-23"><a href="#cb62-23" aria-hidden="true" tabindex="-1"></a>    <span class="cf">rw</span> [(reach_continuation_at_step h d hd hi τ hτ x).<span class="dv">2</span>]</span>
+<span id="cb62-24"><a href="#cb62-24" aria-hidden="true" tabindex="-1"></a>  · <span class="cf">rintro</span> c ⟨ρ, hρ, rfl⟩</span>
+<span id="cb62-25"><a href="#cb62-25" aria-hidden="true" tabindex="-1"></a>    <span class="cf">unfold</span> continuation</span>
+<span id="cb62-26"><a href="#cb62-26" aria-hidden="true" tabindex="-1"></a>    <span class="cf">rw</span> [hR]</span>
+<span id="cb62-27"><a href="#cb62-27" aria-hidden="true" tabindex="-1"></a>    <span class="cf">exact</span> h.dominates ρ hρ _</span>
+<span id="cb62-28"><a href="#cb62-28" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb62-29"><a href="#cb62-29" aria-hidden="true" tabindex="-1"></a><span class="do">/-- **First-label entries are least maximizers of the optimal continuation value.** For every</span></span>
+<span id="cb62-30"><a href="#cb62-30" aria-hidden="true" tabindex="-1"></a><span class="do">plan, on every row of positive reach (under any strategy), the ordered driver&#39;s entry is the</span></span>
+<span id="cb62-31"><a href="#cb62-31" aria-hidden="true" tabindex="-1"></a><span class="do">least action maximizing `optimalContinuation`. -/</span></span>
+<span id="cb62-32"><a href="#cb62-32" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> runWith_ordered_optimal [∀ d : id.D, LinearOrder (id.states (id.action d))]</span>
+<span id="cb62-33"><a href="#cb62-33" aria-hidden="true" tabindex="-1"></a>    {κ : id.Kernel ℝ} {u : Utility id ℝ} {L : id.Assignment → ℝ}</span>
+<span id="cb62-34"><a href="#cb62-34" aria-hidden="true" tabindex="-1"></a>    (hind : Independent κ L) (hclosed : id.Closed) {R : Finset id.V} (plan : Plan id R)</span>
+<span id="cb62-35"><a href="#cb62-35" aria-hidden="true" tabindex="-1"></a>    (s : State id R) (σ : Strategy id ℝ) (hσ : σ.Deterministic) (h : Inv κ u L s σ)</span>
+<span id="cb62-36"><a href="#cb62-36" aria-hidden="true" tabindex="-1"></a>    (hs : MassAll κ L s) (d : id.D) (hd : id.action d ∈ R) (x : id.Assignment)</span>
+<span id="cb62-37"><a href="#cb62-37" aria-hidden="true" tabindex="-1"></a>    (ρ : Strategy id ℝ) (hx : reach κ L ρ d x ≠ <span class="dv">0</span>) (a : id.states (id.action d)) :</span>
+<span id="cb62-38"><a href="#cb62-38" aria-hidden="true" tabindex="-1"></a>    ((runWith (Selector.ordered id) plan s σ).<span class="dv">2</span> d).kernel x a =</span>
+<span id="cb62-39"><a href="#cb62-39" aria-hidden="true" tabindex="-1"></a>      <span class="kw">if</span> a = firstArgmax (optimalContinuation κ u L d x) <span class="kw">then</span> <span class="dv">1</span> <span class="kw">else</span> <span class="dv">0</span> := <span class="kw">by</span></span>
+<span id="cb62-40"><a href="#cb62-40" aria-hidden="true" tabindex="-1"></a>  <span class="kw">have</span> hinj := (id.closed_iff<span class="fl">.1</span> hclosed).<span class="fl">2.1</span></span>
+<span id="cb62-41"><a href="#cb62-41" aria-hidden="true" tabindex="-1"></a>  <span class="cf">induction</span> plan <span class="kw">generalizing</span> σ <span class="kw">with</span></span>
+<span id="cb62-42"><a href="#cb62-42" aria-hidden="true" tabindex="-1"></a>  | done =&gt; <span class="cf">simp</span> <span class="kw">at</span> hd</span>
+<span id="cb62-43"><a href="#cb62-43" aria-hidden="true" tabindex="-1"></a>  | chance v hv hc next ih =&gt;</span>
+<span id="cb62-44"><a href="#cb62-44" aria-hidden="true" tabindex="-1"></a>    <span class="cf">exact</span> ih (s.chance v) σ hσ (h.chance v hv hc) (hs.chance v hv hc)</span>
+<span id="cb62-45"><a href="#cb62-45" aria-hidden="true" tabindex="-1"></a>      (Finset.mem_erase<span class="fl">.2</span> ⟨hc d, hd⟩)</span>
+<span id="cb62-46"><a href="#cb62-46" aria-hidden="true" tabindex="-1"></a>  | @decision R&#39; d&#39; hd&#39; hi next ih =&gt;</span>
+<span id="cb62-47"><a href="#cb62-47" aria-hidden="true" tabindex="-1"></a>    <span class="cf">by_cases</span> hdd : d&#39; = d</span>
+<span id="cb62-48"><a href="#cb62-48" aria-hidden="true" tabindex="-1"></a>    · <span class="cf">subst</span> hdd</span>
+<span id="cb62-49"><a href="#cb62-49" aria-hidden="true" tabindex="-1"></a>      <span class="kw">have</span> hR : insert (id.action d&#39;) (id.info d&#39;) = R&#39; := <span class="kw">by</span></span>
+<span id="cb62-50"><a href="#cb62-50" aria-hidden="true" tabindex="-1"></a>        <span class="cf">rw</span> [← hi, Finset.insert_erase hd&#39;]</span>
+<span id="cb62-51"><a href="#cb62-51" aria-hidden="true" tabindex="-1"></a>      <span class="kw">let</span> τ := (runWith (Selector.ordered id) (.decision d&#39; hd&#39; hi next) s σ).<span class="dv">2</span></span>
+<span id="cb62-52"><a href="#cb62-52" aria-hidden="true" tabindex="-1"></a>      <span class="kw">have</span> hτ : ∀ e, id.action e ∉ R&#39; → τ e = σ e := <span class="kw">by</span></span>
+<span id="cb62-53"><a href="#cb62-53" aria-hidden="true" tabindex="-1"></a>        <span class="cf">intro</span> e he</span>
+<span id="cb62-54"><a href="#cb62-54" aria-hidden="true" tabindex="-1"></a>        <span class="cf">refine</span> (runWith_snd_of_notMem _ next (s.decision d&#39;)</span>
+<span id="cb62-55"><a href="#cb62-55" aria-hidden="true" tabindex="-1"></a>          (Function.update σ d&#39; (s.policyWith (Selector.ordered id) d&#39; hi)) e</span>
+<span id="cb62-56"><a href="#cb62-56" aria-hidden="true" tabindex="-1"></a>          (<span class="kw">fun</span> h&#39; =&gt; he (Finset.mem_of_mem_erase h&#39;))).trans ?_</span>
+<span id="cb62-57"><a href="#cb62-57" aria-hidden="true" tabindex="-1"></a>        <span class="cf">exact</span> Function.update_of_ne (<span class="kw">fun</span> h&#39; : e = d&#39; =&gt; he (<span class="kw">by</span> <span class="cf">rw</span> [h&#39;]; <span class="cf">exact</span> hd&#39;)) _ _</span>
+<span id="cb62-58"><a href="#cb62-58" aria-hidden="true" tabindex="-1"></a>      <span class="kw">have</span> hτn : τ.Nonneg :=</span>
+<span id="cb62-59"><a href="#cb62-59" aria-hidden="true" tabindex="-1"></a>        deterministic_nonneg _ (runWith_deterministic _ _ _ _ hσ)</span>
+<span id="cb62-60"><a href="#cb62-60" aria-hidden="true" tabindex="-1"></a>      <span class="kw">have</span> hprob : (collect s.valuations).prob x = reach κ L ρ d&#39; x := <span class="kw">by</span></span>
+<span id="cb62-61"><a href="#cb62-61" aria-hidden="true" tabindex="-1"></a>        <span class="cf">unfold</span> reach</span>
+<span id="cb62-62"><a href="#cb62-62" aria-hidden="true" tabindex="-1"></a>        <span class="cf">rw</span> [hR, hs ρ]</span>
+<span id="cb62-63"><a href="#cb62-63" aria-hidden="true" tabindex="-1"></a>      <span class="kw">have</span> hpos : <span class="dv">0</span> &lt; (collect s.valuations).prob x :=</span>
+<span id="cb62-64"><a href="#cb62-64" aria-hidden="true" tabindex="-1"></a>        lt_of_le_of_ne ((collect s.valuations).nonneg x) (<span class="kw">fun</span> h0 =&gt; hx (hprob.symm.trans h0.symm))</span>
+<span id="cb62-65"><a href="#cb62-65" aria-hidden="true" tabindex="-1"></a>      <span class="cf">rw</span> [← weight_eq_optimalContinuation h d&#39; hd&#39; hi τ hτn hτ x, runWith_policy_at_step,</span>
+<span id="cb62-66"><a href="#cb62-66" aria-hidden="true" tabindex="-1"></a>        ← firstArgmax_score_eq_weight s.valuations (id.action d&#39;) x</span>
+<span id="cb62-67"><a href="#cb62-67" aria-hidden="true" tabindex="-1"></a>          (h.prob_update hind d&#39; hd&#39; hi x) hpos]</span>
+<span id="cb62-68"><a href="#cb62-68" aria-hidden="true" tabindex="-1"></a>      <span class="cf">rfl</span></span>
+<span id="cb62-69"><a href="#cb62-69" aria-hidden="true" tabindex="-1"></a>    · <span class="kw">have</span> hne : id.action d ≠ id.action d&#39; := <span class="kw">fun</span> he =&gt; hdd (hinj he).symm</span>
+<span id="cb62-70"><a href="#cb62-70" aria-hidden="true" tabindex="-1"></a>      <span class="cf">refine</span> ih (s.decision d&#39;) _ ?_ (h.decisionWith hind hclosed (Selector.ordered id) d&#39; hd&#39; hi)</span>
+<span id="cb62-71"><a href="#cb62-71" aria-hidden="true" tabindex="-1"></a>        (hs.decision hind hclosed d&#39; hd&#39; hi) (Finset.mem_erase<span class="fl">.2</span> ⟨hne, hd⟩)</span>
+<span id="cb62-72"><a href="#cb62-72" aria-hidden="true" tabindex="-1"></a>      <span class="cf">intro</span> e</span>
+<span id="cb62-73"><a href="#cb62-73" aria-hidden="true" tabindex="-1"></a>      <span class="cf">by_cases</span> he : e = d&#39;</span>
+<span id="cb62-74"><a href="#cb62-74" aria-hidden="true" tabindex="-1"></a>      · <span class="cf">subst</span> e</span>
+<span id="cb62-75"><a href="#cb62-75" aria-hidden="true" tabindex="-1"></a>        <span class="cf">simp</span> only [Function.update_self]</span>
+<span id="cb62-76"><a href="#cb62-76" aria-hidden="true" tabindex="-1"></a>        <span class="cf">exact</span> ⟨_, <span class="kw">fun</span> y z hyz =&gt; congrArg ((Selector.ordered id).pick d&#39;)</span>
+<span id="cb62-77"><a href="#cb62-77" aria-hidden="true" tabindex="-1"></a>          (bucketScore_local s d&#39; hi y z hyz), rfl⟩</span>
+<span id="cb62-78"><a href="#cb62-78" aria-hidden="true" tabindex="-1"></a>      · <span class="cf">rw</span> [Function.update_of_ne he]</span>
+<span id="cb62-79"><a href="#cb62-79" aria-hidden="true" tabindex="-1"></a>        <span class="cf">exact</span> hσ e</span></code></pre></div>
+<h2 id="solvers-on-an-arbitrary-plan">Solvers on an arbitrary plan</h2>
+<div class="sourceCode" id="cb63"><pre
+class="sourceCode lean"><code class="sourceCode lean"><span id="cb63-1"><a href="#cb63-1" aria-hidden="true" tabindex="-1"></a><span class="do">/-- `solveWith` on an arbitrary plan: any enumeration of the chance blocks, for example the</span></span>
+<span id="cb63-2"><a href="#cb63-2" aria-hidden="true" tabindex="-1"></a><span class="do">one min-fill chooses. -/</span></span>
+<span id="cb63-3"><a href="#cb63-3" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> solvePlanWith (sel : Selector id) (κ : id.Kernel ℝ) (hloc : ∀ m, Local κ m)</span>
+<span id="cb63-4"><a href="#cb63-4" aria-hidden="true" tabindex="-1"></a>    (hnonneg : ∀ m x a, <span class="dv">0</span> ≤ κ m x a) (u : Utility id ℝ) (hu : ∀ j, Utility.Local u j)</span>
+<span id="cb63-5"><a href="#cb63-5" aria-hidden="true" tabindex="-1"></a>    (plan : Plan id Finset.univ) : Solution id :=</span>
+<span id="cb63-6"><a href="#cb63-6" aria-hidden="true" tabindex="-1"></a>  <span class="kw">let</span> result := runWith sel plan (initial κ hloc hnonneg u hu) defaultStrategy</span>
+<span id="cb63-7"><a href="#cb63-7" aria-hidden="true" tabindex="-1"></a>  ⟨(collect result.<span class="fl">1.</span>valuations).util (baseAssignment id), result<span class="fl">.2</span>⟩</span>
+<span id="cb63-8"><a href="#cb63-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb63-9"><a href="#cb63-9" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> solveWith_eq_solvePlanWith (sel : Selector id) (κ : id.Kernel ℝ)</span>
+<span id="cb63-10"><a href="#cb63-10" aria-hidden="true" tabindex="-1"></a>    (hloc : ∀ m, Local κ m) (hnonneg : ∀ m x a, <span class="dv">0</span> ≤ κ m x a) (u : Utility id ℝ)</span>
+<span id="cb63-11"><a href="#cb63-11" aria-hidden="true" tabindex="-1"></a>    (hu : ∀ j, Utility.Local u j) (ord : id.IDOrder) (nf : NoForgettingOrder id) :</span>
+<span id="cb63-12"><a href="#cb63-12" aria-hidden="true" tabindex="-1"></a>    solveWith sel κ hloc hnonneg u hu ord nf =</span>
+<span id="cb63-13"><a href="#cb63-13" aria-hidden="true" tabindex="-1"></a>      solvePlanWith sel κ hloc hnonneg u hu (nf.plan ord.no_self_info) := <span class="cf">rfl</span></span>
+<span id="cb63-14"><a href="#cb63-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb63-15"><a href="#cb63-15" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> solveEvidencePlanWith (sel : Selector id) (κ : id.Kernel ℝ) (hloc : ∀ m, Local κ m)</span>
+<span id="cb63-16"><a href="#cb63-16" aria-hidden="true" tabindex="-1"></a>    (hnonneg : ∀ m x a, <span class="dv">0</span> ≤ κ m x a) (u : Utility id ℝ) (hu : ∀ j, Utility.Local u j)</span>
+<span id="cb63-17"><a href="#cb63-17" aria-hidden="true" tabindex="-1"></a>    (plan : Plan id Finset.univ) (e : Evidence id) : Solution id :=</span>
+<span id="cb63-18"><a href="#cb63-18" aria-hidden="true" tabindex="-1"></a>  <span class="kw">let</span> result := runWith sel plan (initialEvidence κ hloc hnonneg u hu e) defaultStrategy</span>
+<span id="cb63-19"><a href="#cb63-19" aria-hidden="true" tabindex="-1"></a>  ⟨(collect result.<span class="fl">1.</span>valuations).util (baseAssignment id), result<span class="fl">.2</span>⟩</span>
+<span id="cb63-20"><a href="#cb63-20" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb63-21"><a href="#cb63-21" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> solveEvidenceWith_eq_solveEvidencePlanWith (sel : Selector id) (κ : id.Kernel ℝ)</span>
+<span id="cb63-22"><a href="#cb63-22" aria-hidden="true" tabindex="-1"></a>    (hloc : ∀ m, Local κ m) (hnonneg : ∀ m x a, <span class="dv">0</span> ≤ κ m x a) (u : Utility id ℝ)</span>
+<span id="cb63-23"><a href="#cb63-23" aria-hidden="true" tabindex="-1"></a>    (hu : ∀ j, Utility.Local u j) (ord : id.IDOrder) (nf : NoForgettingOrder id)</span>
+<span id="cb63-24"><a href="#cb63-24" aria-hidden="true" tabindex="-1"></a>    (e : Evidence id) :</span>
+<span id="cb63-25"><a href="#cb63-25" aria-hidden="true" tabindex="-1"></a>    solveEvidenceWith sel κ hloc hnonneg u hu ord nf e =</span>
+<span id="cb63-26"><a href="#cb63-26" aria-hidden="true" tabindex="-1"></a>      solveEvidencePlanWith sel κ hloc hnonneg u hu (nf.plan ord.no_self_info) e := <span class="cf">rfl</span></span>
+<span id="cb63-27"><a href="#cb63-27" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb63-28"><a href="#cb63-28" aria-hidden="true" tabindex="-1"></a><span class="do">/-- Julia&#39;s evidence path (slice every factor, skip absent chance variables) on any plan. -/</span></span>
+<span id="cb63-29"><a href="#cb63-29" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> solveConditionedPlan (sel : Selector id) (κ : id.Kernel ℝ) (hloc : ∀ m, Local κ m)</span>
+<span id="cb63-30"><a href="#cb63-30" aria-hidden="true" tabindex="-1"></a>    (hnonneg : ∀ m x a, <span class="dv">0</span> ≤ κ m x a) (u : Utility id ℝ) (hu : ∀ j, Utility.Local u j)</span>
+<span id="cb63-31"><a href="#cb63-31" aria-hidden="true" tabindex="-1"></a>    (plan : Plan id Finset.univ) (O : Finset id.V) (o : id.Assignment) : Solution id :=</span>
+<span id="cb63-32"><a href="#cb63-32" aria-hidden="true" tabindex="-1"></a>  <span class="kw">let</span> result := runSkipWith sel plan (initialConditioned κ hloc hnonneg u hu O o) defaultStrategy</span>
+<span id="cb63-33"><a href="#cb63-33" aria-hidden="true" tabindex="-1"></a>  ⟨(collect result.<span class="fl">1.</span>valuations).util (baseAssignment id), result<span class="fl">.2</span>⟩</span>
+<span id="cb63-34"><a href="#cb63-34" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb63-35"><a href="#cb63-35" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> solveConditioned_eq_solveConditionedPlan (sel : Selector id) (κ : id.Kernel ℝ)</span>
+<span id="cb63-36"><a href="#cb63-36" aria-hidden="true" tabindex="-1"></a>    (hloc : ∀ m, Local κ m) (hnonneg : ∀ m x a, <span class="dv">0</span> ≤ κ m x a) (u : Utility id ℝ)</span>
+<span id="cb63-37"><a href="#cb63-37" aria-hidden="true" tabindex="-1"></a>    (hu : ∀ j, Utility.Local u j) (ord : id.IDOrder) (nf : NoForgettingOrder id)</span>
+<span id="cb63-38"><a href="#cb63-38" aria-hidden="true" tabindex="-1"></a>    (O : Finset id.V) (o : id.Assignment) :</span>
+<span id="cb63-39"><a href="#cb63-39" aria-hidden="true" tabindex="-1"></a>    solveConditioned sel κ hloc hnonneg u hu ord nf O o =</span>
+<span id="cb63-40"><a href="#cb63-40" aria-hidden="true" tabindex="-1"></a>      solveConditionedPlan sel κ hloc hnonneg u hu (nf.plan ord.no_self_info) O o := <span class="cf">rfl</span></span>
+<span id="cb63-41"><a href="#cb63-41" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb63-42"><a href="#cb63-42" aria-hidden="true" tabindex="-1"></a><span class="kw">section</span> Ordered</span>
+<span id="cb63-43"><a href="#cb63-43" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb63-44"><a href="#cb63-44" aria-hidden="true" tabindex="-1"></a><span class="kw">variable</span> [∀ d : id.D, LinearOrder (id.states (id.action d))]</span>
+<span id="cb63-45"><a href="#cb63-45" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb63-46"><a href="#cb63-46" aria-hidden="true" tabindex="-1"></a><span class="do">/-- The ordered solver on any plan chooses, on every row of positive reach, the least</span></span>
+<span id="cb63-47"><a href="#cb63-47" aria-hidden="true" tabindex="-1"></a><span class="do">maximizer of the optimal continuation value (no evidence). -/</span></span>
+<span id="cb63-48"><a href="#cb63-48" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> solvePlanOrdered_optimal (κ : id.Kernel ℝ) (hclosed : id.Closed) (ord : id.IDOrder)</span>
+<span id="cb63-49"><a href="#cb63-49" aria-hidden="true" tabindex="-1"></a>    (hloc : ∀ m, Local κ m) (hnorm : ∀ m, Normalised κ m) (hnonneg : ∀ m x a, <span class="dv">0</span> ≤ κ m x a)</span>
+<span id="cb63-50"><a href="#cb63-50" aria-hidden="true" tabindex="-1"></a>    (u : Utility id ℝ) (hu : ∀ j, Utility.Local u j) (plan : Plan id Finset.univ) (d : id.D)</span>
+<span id="cb63-51"><a href="#cb63-51" aria-hidden="true" tabindex="-1"></a>    (x : id.Assignment) (ρ : Strategy id ℝ) (hx : reach κ (<span class="kw">fun</span> _ =&gt; <span class="dv">1</span>) ρ d x ≠ <span class="dv">0</span>)</span>
+<span id="cb63-52"><a href="#cb63-52" aria-hidden="true" tabindex="-1"></a>    (a : id.states (id.action d)) :</span>
+<span id="cb63-53"><a href="#cb63-53" aria-hidden="true" tabindex="-1"></a>    ((solvePlanWith (Selector.ordered id) κ hloc hnonneg u hu plan).strategy d).kernel x a =</span>
+<span id="cb63-54"><a href="#cb63-54" aria-hidden="true" tabindex="-1"></a>      <span class="kw">if</span> a = firstArgmax (optimalContinuation κ u (<span class="kw">fun</span> _ =&gt; <span class="dv">1</span>) d x) <span class="kw">then</span> <span class="dv">1</span> <span class="kw">else</span> <span class="dv">0</span> :=</span>
+<span id="cb63-55"><a href="#cb63-55" aria-hidden="true" tabindex="-1"></a>  runWith_ordered_optimal (independent_one κ hclosed ord hloc hnorm) hclosed plan _ _</span>
+<span id="cb63-56"><a href="#cb63-56" aria-hidden="true" tabindex="-1"></a>    defaultStrategy_deterministic (Inv.ofCorrect (initial_correct κ hloc hnonneg u hu _))</span>
+<span id="cb63-57"><a href="#cb63-57" aria-hidden="true" tabindex="-1"></a>    (massAll_initial κ hloc hnonneg u hu) d (Finset.mem_univ _) x ρ hx a</span>
+<span id="cb63-58"><a href="#cb63-58" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb63-59"><a href="#cb63-59" aria-hidden="true" tabindex="-1"></a><span class="do">/-- **Plan independence of first-label tables (no evidence).** Any two elimination plans —</span></span>
+<span id="cb63-60"><a href="#cb63-60" aria-hidden="true" tabindex="-1"></a><span class="do">in particular two enumerations of the chance variables inside the strong blocks, such as</span></span>
+<span id="cb63-61"><a href="#cb63-61" aria-hidden="true" tabindex="-1"></a><span class="do">different min-fill choices — give the same first-label policy entry on every information row</span></span>
+<span id="cb63-62"><a href="#cb63-62" aria-hidden="true" tabindex="-1"></a><span class="do">whose reach probability is positive. Reach is the same under every strategy</span></span>
+<span id="cb63-63"><a href="#cb63-63" aria-hidden="true" tabindex="-1"></a><span class="do">(`reach_strategy_independent`), so `ρ` is arbitrary. -/</span></span>
+<span id="cb63-64"><a href="#cb63-64" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> solvePlanOrdered_table_eq (κ : id.Kernel ℝ) (hclosed : id.Closed) (ord : id.IDOrder)</span>
+<span id="cb63-65"><a href="#cb63-65" aria-hidden="true" tabindex="-1"></a>    (hloc : ∀ m, Local κ m) (hnorm : ∀ m, Normalised κ m) (hnonneg : ∀ m x a, <span class="dv">0</span> ≤ κ m x a)</span>
+<span id="cb63-66"><a href="#cb63-66" aria-hidden="true" tabindex="-1"></a>    (u : Utility id ℝ) (hu : ∀ j, Utility.Local u j) (plan₁ plan₂ : Plan id Finset.univ)</span>
+<span id="cb63-67"><a href="#cb63-67" aria-hidden="true" tabindex="-1"></a>    (d : id.D) (x : id.Assignment) (ρ : Strategy id ℝ) (hx : reach κ (<span class="kw">fun</span> _ =&gt; <span class="dv">1</span>) ρ d x ≠ <span class="dv">0</span>) :</span>
+<span id="cb63-68"><a href="#cb63-68" aria-hidden="true" tabindex="-1"></a>    ((solvePlanWith (Selector.ordered id) κ hloc hnonneg u hu plan₁).strategy d).kernel x =</span>
+<span id="cb63-69"><a href="#cb63-69" aria-hidden="true" tabindex="-1"></a>      ((solvePlanWith (Selector.ordered id) κ hloc hnonneg u hu plan₂).strategy d).kernel x := <span class="kw">by</span></span>
+<span id="cb63-70"><a href="#cb63-70" aria-hidden="true" tabindex="-1"></a>  <span class="cf">funext</span> a</span>
+<span id="cb63-71"><a href="#cb63-71" aria-hidden="true" tabindex="-1"></a>  <span class="cf">rw</span> [solvePlanOrdered_optimal κ hclosed ord hloc hnorm hnonneg u hu plan₁ d x ρ hx,</span>
+<span id="cb63-72"><a href="#cb63-72" aria-hidden="true" tabindex="-1"></a>    solvePlanOrdered_optimal κ hclosed ord hloc hnorm hnonneg u hu plan₂ d x ρ hx]</span>
+<span id="cb63-73"><a href="#cb63-73" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb63-74"><a href="#cb63-74" aria-hidden="true" tabindex="-1"></a><span class="do">/-- The headline `solveWith` tables for two perfect-recall orders agree on positive reach. -/</span></span>
+<span id="cb63-75"><a href="#cb63-75" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> solveOrdered_table_plan_independent (κ : id.Kernel ℝ) (hclosed : id.Closed)</span>
+<span id="cb63-76"><a href="#cb63-76" aria-hidden="true" tabindex="-1"></a>    (ord₁ ord₂ : id.IDOrder) (nf₁ nf₂ : NoForgettingOrder id) (hloc : ∀ m, Local κ m)</span>
+<span id="cb63-77"><a href="#cb63-77" aria-hidden="true" tabindex="-1"></a>    (hnorm : ∀ m, Normalised κ m) (hnonneg : ∀ m x a, <span class="dv">0</span> ≤ κ m x a) (u : Utility id ℝ)</span>
+<span id="cb63-78"><a href="#cb63-78" aria-hidden="true" tabindex="-1"></a>    (hu : ∀ j, Utility.Local u j) (d : id.D) (x : id.Assignment) (ρ : Strategy id ℝ)</span>
+<span id="cb63-79"><a href="#cb63-79" aria-hidden="true" tabindex="-1"></a>    (hx : reach κ (<span class="kw">fun</span> _ =&gt; <span class="dv">1</span>) ρ d x ≠ <span class="dv">0</span>) :</span>
+<span id="cb63-80"><a href="#cb63-80" aria-hidden="true" tabindex="-1"></a>    ((solveWith (Selector.ordered id) κ hloc hnonneg u hu ord₁ nf₁).strategy d).kernel x =</span>
+<span id="cb63-81"><a href="#cb63-81" aria-hidden="true" tabindex="-1"></a>      ((solveWith (Selector.ordered id) κ hloc hnonneg u hu ord₂ nf₂).strategy d).kernel x :=</span>
+<span id="cb63-82"><a href="#cb63-82" aria-hidden="true" tabindex="-1"></a>  solvePlanOrdered_table_eq κ hclosed ord₁ hloc hnorm hnonneg u hu _ _ d x ρ hx</span>
+<span id="cb63-83"><a href="#cb63-83" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb63-84"><a href="#cb63-84" aria-hidden="true" tabindex="-1"></a><span class="do">/-- The ordered likelihood-evidence solver on any plan chooses, on every row of positive</span></span>
+<span id="cb63-85"><a href="#cb63-85" aria-hidden="true" tabindex="-1"></a><span class="do">weighted reach, the least maximizer of the optimal weighted continuation value. -/</span></span>
+<span id="cb63-86"><a href="#cb63-86" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> solveEvidencePlanOrdered_optimal (κ : id.Kernel ℝ) (hclosed : id.Closed)</span>
+<span id="cb63-87"><a href="#cb63-87" aria-hidden="true" tabindex="-1"></a>    (ord : id.IDOrder) (hloc : ∀ m, Local κ m) (hnorm : ∀ m, Normalised κ m)</span>
+<span id="cb63-88"><a href="#cb63-88" aria-hidden="true" tabindex="-1"></a>    (hnonneg : ∀ m x a, <span class="dv">0</span> ≤ κ m x a) (u : Utility id ℝ) (hu : ∀ j, Utility.Local u j)</span>
+<span id="cb63-89"><a href="#cb63-89" aria-hidden="true" tabindex="-1"></a>    (e : Evidence id) (plan : Plan id Finset.univ) (d : id.D) (x : id.Assignment)</span>
+<span id="cb63-90"><a href="#cb63-90" aria-hidden="true" tabindex="-1"></a>    (ρ : Strategy id ℝ) (hx : reach κ e.likelihood ρ d x ≠ <span class="dv">0</span>) (a : id.states (id.action d)) :</span>
+<span id="cb63-91"><a href="#cb63-91" aria-hidden="true" tabindex="-1"></a>    ((solveEvidencePlanWith (Selector.ordered id) κ hloc hnonneg u hu plan e).strategy d).kernel</span>
+<span id="cb63-92"><a href="#cb63-92" aria-hidden="true" tabindex="-1"></a>        x a =</span>
+<span id="cb63-93"><a href="#cb63-93" aria-hidden="true" tabindex="-1"></a>      <span class="kw">if</span> a = firstArgmax (optimalContinuation κ u e.likelihood d x) <span class="kw">then</span> <span class="dv">1</span> <span class="kw">else</span> <span class="dv">0</span> :=</span>
+<span id="cb63-94"><a href="#cb63-94" aria-hidden="true" tabindex="-1"></a>  runWith_ordered_optimal (independent_evidence e κ hclosed ord hloc hnorm) hclosed plan _ _</span>
+<span id="cb63-95"><a href="#cb63-95" aria-hidden="true" tabindex="-1"></a>    defaultStrategy_deterministic</span>
+<span id="cb63-96"><a href="#cb63-96" aria-hidden="true" tabindex="-1"></a>    (Inv.ofWeighted (initialEvidence_correct κ hloc hnonneg u hu e _))</span>
+<span id="cb63-97"><a href="#cb63-97" aria-hidden="true" tabindex="-1"></a>    (massAll_initialEvidence κ hloc hnonneg u hu e) d (Finset.mem_univ _) x ρ hx a</span>
+<span id="cb63-98"><a href="#cb63-98" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb63-99"><a href="#cb63-99" aria-hidden="true" tabindex="-1"></a><span class="do">/-- **Plan independence of first-label tables (likelihood evidence).** -/</span></span>
+<span id="cb63-100"><a href="#cb63-100" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> solveEvidencePlanOrdered_table_eq (κ : id.Kernel ℝ) (hclosed : id.Closed)</span>
+<span id="cb63-101"><a href="#cb63-101" aria-hidden="true" tabindex="-1"></a>    (ord : id.IDOrder) (hloc : ∀ m, Local κ m) (hnorm : ∀ m, Normalised κ m)</span>
+<span id="cb63-102"><a href="#cb63-102" aria-hidden="true" tabindex="-1"></a>    (hnonneg : ∀ m x a, <span class="dv">0</span> ≤ κ m x a) (u : Utility id ℝ) (hu : ∀ j, Utility.Local u j)</span>
+<span id="cb63-103"><a href="#cb63-103" aria-hidden="true" tabindex="-1"></a>    (e : Evidence id) (plan₁ plan₂ : Plan id Finset.univ) (d : id.D) (x : id.Assignment)</span>
+<span id="cb63-104"><a href="#cb63-104" aria-hidden="true" tabindex="-1"></a>    (ρ : Strategy id ℝ) (hx : reach κ e.likelihood ρ d x ≠ <span class="dv">0</span>) :</span>
+<span id="cb63-105"><a href="#cb63-105" aria-hidden="true" tabindex="-1"></a>    ((solveEvidencePlanWith (Selector.ordered id) κ hloc hnonneg u hu plan₁ e).strategy</span>
+<span id="cb63-106"><a href="#cb63-106" aria-hidden="true" tabindex="-1"></a>        d).kernel x =</span>
+<span id="cb63-107"><a href="#cb63-107" aria-hidden="true" tabindex="-1"></a>      ((solveEvidencePlanWith (Selector.ordered id) κ hloc hnonneg u hu plan₂ e).strategy</span>
+<span id="cb63-108"><a href="#cb63-108" aria-hidden="true" tabindex="-1"></a>        d).kernel x := <span class="kw">by</span></span>
+<span id="cb63-109"><a href="#cb63-109" aria-hidden="true" tabindex="-1"></a>  <span class="cf">funext</span> a</span>
+<span id="cb63-110"><a href="#cb63-110" aria-hidden="true" tabindex="-1"></a>  <span class="cf">rw</span> [solveEvidencePlanOrdered_optimal κ hclosed ord hloc hnorm hnonneg u hu e plan₁ d x ρ hx,</span>
+<span id="cb63-111"><a href="#cb63-111" aria-hidden="true" tabindex="-1"></a>    solveEvidencePlanOrdered_optimal κ hclosed ord hloc hnorm hnonneg u hu e plan₂ d x ρ hx]</span>
+<span id="cb63-112"><a href="#cb63-112" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb63-113"><a href="#cb63-113" aria-hidden="true" tabindex="-1"></a><span class="do">/-- On any plan, Julia&#39;s sliced evidence path has the likelihood driver&#39;s first-label entry</span></span>
+<span id="cb63-114"><a href="#cb63-114" aria-hidden="true" tabindex="-1"></a><span class="do">at `clamp O o x` whenever that clamped row has positive reach. -/</span></span>
+<span id="cb63-115"><a href="#cb63-115" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> solveConditionedPlan_policy_eq (κ : id.Kernel ℝ) (hclosed : id.Closed)</span>
+<span id="cb63-116"><a href="#cb63-116" aria-hidden="true" tabindex="-1"></a>    (ord : id.IDOrder) (hloc : ∀ m, Local κ m) (hnorm : ∀ m, Normalised κ m)</span>
+<span id="cb63-117"><a href="#cb63-117" aria-hidden="true" tabindex="-1"></a>    (hnonneg : ∀ m x a, <span class="dv">0</span> ≤ κ m x a) (u : Utility id ℝ) (hu : ∀ j, Utility.Local u j)</span>
+<span id="cb63-118"><a href="#cb63-118" aria-hidden="true" tabindex="-1"></a>    (H : HardEvidence id) (plan : Plan id Finset.univ) (d : id.D) (x : id.Assignment)</span>
+<span id="cb63-119"><a href="#cb63-119" aria-hidden="true" tabindex="-1"></a>    (ρ : Strategy id ℝ)</span>
+<span id="cb63-120"><a href="#cb63-120" aria-hidden="true" tabindex="-1"></a>    (hx : reach κ H.toEvidence.likelihood ρ d (clamp H.observed H.value x) ≠ <span class="dv">0</span>) :</span>
+<span id="cb63-121"><a href="#cb63-121" aria-hidden="true" tabindex="-1"></a>    ((solveConditionedPlan (Selector.ordered id) κ hloc hnonneg u hu plan H.observed</span>
+<span id="cb63-122"><a href="#cb63-122" aria-hidden="true" tabindex="-1"></a>        H.value).strategy d).kernel x =</span>
+<span id="cb63-123"><a href="#cb63-123" aria-hidden="true" tabindex="-1"></a>      ((solveEvidencePlanWith (Selector.ordered id) κ hloc hnonneg u hu plan</span>
+<span id="cb63-124"><a href="#cb63-124" aria-hidden="true" tabindex="-1"></a>        H.toEvidence).strategy d).kernel (clamp H.observed H.value x) := <span class="kw">by</span></span>
+<span id="cb63-125"><a href="#cb63-125" aria-hidden="true" tabindex="-1"></a>  <span class="kw">have</span> hind := independent_evidence H.toEvidence κ hclosed ord hloc hnorm</span>
+<span id="cb63-126"><a href="#cb63-126" aria-hidden="true" tabindex="-1"></a>  <span class="cf">refine</span> (conditioned_policy H hind hclosed plan</span>
+<span id="cb63-127"><a href="#cb63-127" aria-hidden="true" tabindex="-1"></a>    (initialConditioned κ hloc hnonneg u hu H.observed H.value)</span>
+<span id="cb63-128"><a href="#cb63-128" aria-hidden="true" tabindex="-1"></a>    (initialEvidence κ hloc hnonneg u hu H.toEvidence) defaultStrategy defaultStrategy</span>
+<span id="cb63-129"><a href="#cb63-129" aria-hidden="true" tabindex="-1"></a>    (initial_coupled κ hclosed hloc hnonneg u hu H)</span>
+<span id="cb63-130"><a href="#cb63-130" aria-hidden="true" tabindex="-1"></a>    (Inv.ofWeighted (initialEvidence_correct κ hloc hnonneg u hu H.toEvidence _))</span>
+<span id="cb63-131"><a href="#cb63-131" aria-hidden="true" tabindex="-1"></a>    (Inv.ofWeighted (initialEvidence_correct κ hloc hnonneg u hu H.toEvidence _))</span>
+<span id="cb63-132"><a href="#cb63-132" aria-hidden="true" tabindex="-1"></a>    d (Finset.mem_univ _) x).<span class="dv">1</span> ?_</span>
+<span id="cb63-133"><a href="#cb63-133" aria-hidden="true" tabindex="-1"></a>  <span class="cf">rwa</span> [reach_strategy_independent hind hclosed plan _</span>
+<span id="cb63-134"><a href="#cb63-134" aria-hidden="true" tabindex="-1"></a>    (massAll_initialEvidence κ hloc hnonneg u hu H.toEvidence) d (Finset.mem_univ _) _ ρ]</span>
+<span id="cb63-135"><a href="#cb63-135" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb63-136"><a href="#cb63-136" aria-hidden="true" tabindex="-1"></a><span class="do">/-- **Plan independence of Julia&#39;s conditioned first-label tables.** With hard evidence on an</span></span>
+<span id="cb63-137"><a href="#cb63-137" aria-hidden="true" tabindex="-1"></a><span class="do">action-free chance-ancestral set, the sliced, variable-skipping driver gives the same entry at</span></span>
+<span id="cb63-138"><a href="#cb63-138" aria-hidden="true" tabindex="-1"></a><span class="do">`x` for any two plans whenever the clamped information row has positive reach. -/</span></span>
+<span id="cb63-139"><a href="#cb63-139" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> solveConditionedPlan_table_eq (κ : id.Kernel ℝ) (hclosed : id.Closed)</span>
+<span id="cb63-140"><a href="#cb63-140" aria-hidden="true" tabindex="-1"></a>    (ord : id.IDOrder) (hloc : ∀ m, Local κ m) (hnorm : ∀ m, Normalised κ m)</span>
+<span id="cb63-141"><a href="#cb63-141" aria-hidden="true" tabindex="-1"></a>    (hnonneg : ∀ m x a, <span class="dv">0</span> ≤ κ m x a) (u : Utility id ℝ) (hu : ∀ j, Utility.Local u j)</span>
+<span id="cb63-142"><a href="#cb63-142" aria-hidden="true" tabindex="-1"></a>    (H : HardEvidence id) (plan₁ plan₂ : Plan id Finset.univ) (d : id.D) (x : id.Assignment)</span>
+<span id="cb63-143"><a href="#cb63-143" aria-hidden="true" tabindex="-1"></a>    (ρ : Strategy id ℝ)</span>
+<span id="cb63-144"><a href="#cb63-144" aria-hidden="true" tabindex="-1"></a>    (hx : reach κ H.toEvidence.likelihood ρ d (clamp H.observed H.value x) ≠ <span class="dv">0</span>) :</span>
+<span id="cb63-145"><a href="#cb63-145" aria-hidden="true" tabindex="-1"></a>    ((solveConditionedPlan (Selector.ordered id) κ hloc hnonneg u hu plan₁ H.observed</span>
+<span id="cb63-146"><a href="#cb63-146" aria-hidden="true" tabindex="-1"></a>        H.value).strategy d).kernel x =</span>
+<span id="cb63-147"><a href="#cb63-147" aria-hidden="true" tabindex="-1"></a>      ((solveConditionedPlan (Selector.ordered id) κ hloc hnonneg u hu plan₂ H.observed</span>
+<span id="cb63-148"><a href="#cb63-148" aria-hidden="true" tabindex="-1"></a>        H.value).strategy d).kernel x := <span class="kw">by</span></span>
+<span id="cb63-149"><a href="#cb63-149" aria-hidden="true" tabindex="-1"></a>  <span class="cf">rw</span> [solveConditionedPlan_policy_eq κ hclosed ord hloc hnorm hnonneg u hu H plan₁ d x ρ hx,</span>
+<span id="cb63-150"><a href="#cb63-150" aria-hidden="true" tabindex="-1"></a>    solveConditionedPlan_policy_eq κ hclosed ord hloc hnorm hnonneg u hu H plan₂ d x ρ hx,</span>
+<span id="cb63-151"><a href="#cb63-151" aria-hidden="true" tabindex="-1"></a>    solveEvidencePlanOrdered_table_eq κ hclosed ord hloc hnorm hnonneg u hu H.toEvidence</span>
+<span id="cb63-152"><a href="#cb63-152" aria-hidden="true" tabindex="-1"></a>      plan₁ plan₂ d _ ρ hx]</span>
+<span id="cb63-153"><a href="#cb63-153" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb63-154"><a href="#cb63-154" aria-hidden="true" tabindex="-1"></a><span class="kw">end</span> Ordered</span>
+<span id="cb63-155"><a href="#cb63-155" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb63-156"><a href="#cb63-156" aria-hidden="true" tabindex="-1"></a><span class="kw">end</span></span>
+<span id="cb63-157"><a href="#cb63-157" aria-hidden="true" tabindex="-1"></a><span class="kw">end</span> InfluenceDiagramsProofs.DVE</span></code></pre></div>
 <!-- InfluenceDiagramsProofs/Roadmap.lean -->
 <h1 id="roadmap-and-exact-scope-of-the-dve-theorem">Roadmap and exact
 scope of the DVE theorem</h1>
-<div class="sourceCode" id="cb59"><pre
-class="sourceCode lean"><code class="sourceCode lean"><span id="cb59-1"><a href="#cb59-1" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> InfluenceDiagramsProofs.Finite.DVE.Conditioning</span></code></pre></div>
+<div class="sourceCode" id="cb64"><pre
+class="sourceCode lean"><code class="sourceCode lean"><span id="cb64-1"><a href="#cb64-1" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> InfluenceDiagramsProofs.Finite.DVE.PlanIndependence</span></code></pre></div>
 <p>The global optimum-existence result is now supplemented by an actual
 bucket solver: <code>DVE.solve_spec</code> proves its deterministic
 policies realize the reported value and attain the existing optimum.
@@ -5636,6 +6025,22 @@ to the likelihood driver’s value),
 and, for the least-state selector,
 <code>solveConditioned_policy_eq</code> (equal tables at <code>x</code>
 and <code>clamp O o x</code> whenever that row has positive reach).</p>
+<p><code>Finite/DVE/PlanIndependence.lean</code> removes the dependence
+of those first-label results on <code>NoForgettingOrder.plan</code>’s
+enumeration of the chance blocks. For <strong>any two plans</strong>
+(any interleaving that <code>Plan</code> accepts, in particular two
+min-fill orders of the chance variables inside the strong blocks),
+<code>solvePlanOrdered_table_eq</code>,
+<code>solveEvidencePlanOrdered_table_eq</code> and
+<code>solveConditionedPlan_table_eq</code> prove equal first-label
+entries on every row of positive reach (for the conditioned driver:
+every row whose clamped row has positive reach). Every plan maximizes a
+decision with the same remaining set, where the weighted valuation is
+the plan-independent <code>optimalContinuation</code> (a supremum over
+nonnegative strategies); the entry is its least maximizer
+(<code>runWith_ordered_optimal</code>), and reach is the same under
+every strategy (<code>reach_strategy_independent</code>). No
+counterexample exists on positive-reach rows.</p>
 <p>This is <strong>not</strong> a byte-for-byte verification of Julia.
 Remaining refinements are:</p>
 <ul>
@@ -5643,7 +6048,9 @@ Remaining refinements are:</p>
 min-fill scheduler. In particular the linear order that
 <code>Selector.ordered</code> takes on each action space is supplied;
 that it is Julia’s axis-label position is not derived from the ACSet or
-from the arrays;</li>
+from the arrays. That Julia’s block schedule is a <code>Plan</code> is
+read off the source, not derived; given that, positive-reach tables do
+not depend on which min-fill order it chose;</li>
 <li>policy tables on zero-probability rows. There no semantic score
 exists, and the entry is fixed by the utility representative. The
 model’s chance step stores utility <code>0</code> wherever the summed
@@ -5651,9 +6058,10 @@ probability is zero, while Julia’s <code>sum_out</code> keeps a utility
 table that does not contain the summed variable; the likelihood and
 sliced representations also differ there, including on rows that
 contradict the evidence. Only weighted valuations, values and
-positive-reach tables are proved to agree. The model’s empty-bucket
-decision step adds a unit valuation that Julia omits; this changes no
-value and no table;</li>
+positive-reach tables are proved to agree. Zero-reach entries are also
+not claimed to be independent of the elimination plan. The model’s
+empty-bucket decision step adds a unit valuation that Julia omits; this
+changes no value and no table;</li>
 <li>Float64/tolerance behavior. Small action-dependent evidence
 probabilities can pass the source’s tolerance guard and yield a wrong
 reported value; they are outside the theorem’s action-independent

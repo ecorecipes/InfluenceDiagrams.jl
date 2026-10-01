@@ -1,4 +1,4 @@
-import InfluenceDiagramsProofs.Finite.DVE.Conditioning
+import InfluenceDiagramsProofs.Finite.DVE.PlanIndependence
 
 /-!
 # Roadmap and exact scope of the DVE theorem
@@ -42,17 +42,31 @@ row. Hence `conditionedMass_eq` (the final mass is the evidence mass),
 selector, `solveConditioned_policy_eq` (equal tables at `x` and `clamp O o x` whenever that row
 has positive reach).
 
+`Finite/DVE/PlanIndependence.lean` removes the dependence of those first-label results on
+`NoForgettingOrder.plan`'s enumeration of the chance blocks. For **any two plans** (any
+interleaving that `Plan` accepts, in particular two min-fill orders of the chance variables
+inside the strong blocks), `solvePlanOrdered_table_eq`, `solveEvidencePlanOrdered_table_eq` and
+`solveConditionedPlan_table_eq` prove equal first-label entries on every row of positive reach
+(for the conditioned driver: every row whose clamped row has positive reach). Every plan maximizes
+a decision with the same remaining set, where the weighted valuation is the plan-independent
+`optimalContinuation` (a supremum over nonnegative strategies); the entry is its least maximizer
+(`runWith_ordered_optimal`), and reach is the same under every strategy
+(`reach_strategy_independent`). No counterexample exists on positive-reach rows.
+
 This is **not** a byte-for-byte verification of Julia. Remaining refinements are:
 
 * ordered arrays, state labels, reference resolution and the concrete min-fill scheduler. In
   particular the linear order that `Selector.ordered` takes on each action space is supplied;
-  that it is Julia's axis-label position is not derived from the ACSet or from the arrays;
+  that it is Julia's axis-label position is not derived from the ACSet or from the arrays.
+  That Julia's block schedule is a `Plan` is read off the source, not derived; given that,
+  positive-reach tables do not depend on which min-fill order it chose;
 * policy tables on zero-probability rows. There no semantic score exists, and the entry is
   fixed by the utility representative. The model's chance step stores utility `0` wherever the
   summed probability is zero, while Julia's `sum_out` keeps a utility table that does not
   contain the summed variable; the likelihood and sliced representations also differ there,
   including on rows that contradict the evidence. Only weighted valuations, values and
-  positive-reach tables are proved to agree. The model's empty-bucket decision step adds a
+  positive-reach tables are proved to agree. Zero-reach entries are also not claimed to be
+  independent of the elimination plan. The model's empty-bucket decision step adds a
   unit valuation that Julia omits; this changes no value and no table;
 * Float64/tolerance behavior. Small action-dependent evidence probabilities can pass the
   source's tolerance guard and yield a wrong reported value; they are outside the theorem's

@@ -92,6 +92,29 @@ assert_no_sorry InfluenceDiagramsProofs.DVE.solveConditioned_semantic
 #print axioms InfluenceDiagramsProofs.DVE.runSkipWith_kernel_clamp
 #print axioms InfluenceDiagramsProofs.DVE.solveConditioned_kernel_clamp
 
+-- First-label tables do not depend on the elimination plan (positive-reach rows).
+assert_no_sorry InfluenceDiagramsProofs.DVE.solvePlanOrdered_table_eq
+assert_no_sorry InfluenceDiagramsProofs.DVE.solveEvidencePlanOrdered_table_eq
+assert_no_sorry InfluenceDiagramsProofs.DVE.solveConditionedPlan_table_eq
+#print axioms InfluenceDiagramsProofs.DVE.MassAll.chance
+#print axioms InfluenceDiagramsProofs.DVE.MassAll.prob_update
+#print axioms InfluenceDiagramsProofs.DVE.MassAll.decision
+#print axioms InfluenceDiagramsProofs.DVE.massAll_initial
+#print axioms InfluenceDiagramsProofs.DVE.massAll_initialEvidence
+#print axioms InfluenceDiagramsProofs.DVE.reach_strategy_independent
+#print axioms InfluenceDiagramsProofs.DVE.weight_eq_optimalContinuation
+#print axioms InfluenceDiagramsProofs.DVE.runWith_ordered_optimal
+#print axioms InfluenceDiagramsProofs.DVE.solveWith_eq_solvePlanWith
+#print axioms InfluenceDiagramsProofs.DVE.solveEvidenceWith_eq_solveEvidencePlanWith
+#print axioms InfluenceDiagramsProofs.DVE.solveConditioned_eq_solveConditionedPlan
+#print axioms InfluenceDiagramsProofs.DVE.solvePlanOrdered_optimal
+#print axioms InfluenceDiagramsProofs.DVE.solvePlanOrdered_table_eq
+#print axioms InfluenceDiagramsProofs.DVE.solveOrdered_table_plan_independent
+#print axioms InfluenceDiagramsProofs.DVE.solveEvidencePlanOrdered_optimal
+#print axioms InfluenceDiagramsProofs.DVE.solveEvidencePlanOrdered_table_eq
+#print axioms InfluenceDiagramsProofs.DVE.solveConditionedPlan_policy_eq
+#print axioms InfluenceDiagramsProofs.DVE.solveConditionedPlan_table_eq
+
 -- Exact multi-decision bucket DVE; the schedule is generated from no-forgetting.
 assert_no_sorry InfluenceDiagramsProofs.DVE.solve_spec
 assert_no_sorry InfluenceDiagramsProofs.DVE.solveEvidence_spec

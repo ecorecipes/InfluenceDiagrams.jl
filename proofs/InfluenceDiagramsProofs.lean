@@ -10,3 +10,4 @@ import InfluenceDiagramsProofs.Finite.DVE.Guard.Boundary
 import InfluenceDiagramsProofs.Finite.OrderedPolicies
 import InfluenceDiagramsProofs.Finite.DVE.Selector
 import InfluenceDiagramsProofs.Finite.DVE.Conditioning
+import InfluenceDiagramsProofs.Finite.DVE.PlanIndependence
