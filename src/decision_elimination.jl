@@ -262,20 +262,28 @@ function decision_elimination(m::InfluenceDiagramModel;
     # diagrams `validate` accepts, which is what `atol = nothing` avoids.
     eff = atol === nothing ? Float64(normalization_atol) : Float64(atol)
     _check_probability_tolerance(eff)
-    stable && return _decision_elimination(m, order, eff, Rational{BigInt})
+    return _run_decision_elimination(m, order, eff, stable)
+end
+
+# The run of `decision_elimination` after its precondition checks. `observer` and `sources`
+# are passed to `_decision_elimination`; the certificate's solution profile uses them.
+function _run_decision_elimination(m::InfluenceDiagramModel, order, eff::Float64,
+                                   stable::Bool; observer=nothing, sources=nothing)
+    stable &&
+        return _decision_elimination(m, order, eff, Rational{BigInt}, observer; sources)
     # Evidence mass (ADR 0014): the binary64 run decides nothing when its mass is not a
     # normal positive number, since a positive probability can underflow. Rerun the same
     # bucket schedule in exact rational arithmetic, where only an exact zero raises
     # `ImpossibleEvidenceError`, and record the fallback in the diagnostics.
     try
-        return _decision_elimination(m, order, eff, Float64)
+        return _decision_elimination(m, order, eff, Float64, observer; sources)
     catch e
         e isa _UnresolvedDecisionMass || rethrow()
     end
     _has_negative_entry(m) &&
         throw(BayesianNetworks.IndeterminatePosteriorError(copy(evidence(m)),
                                                            "the binary64 evidence mass is below the normal range and the model has a tolerated negative entry, which exact arithmetic does not accept"))
-    sol = _decision_elimination(m, order, eff, Rational{BigInt})
+    sol = _decision_elimination(m, order, eff, Rational{BigInt}, observer; sources)
     return DecisionSolution(sol.expected_utility, sol.strategy,
                             merge(sol.diagnostics, (exact_fallback=true,)))
 end
@@ -285,8 +293,11 @@ function _has_negative_entry(m::InfluenceDiagramModel)
     return any(k -> k isa FiniteKernel && any(<(0), k.table), values(kernels(m.model)))
 end
 
+# `sources`, when given, is called as `sources(:chance, name)` and `sources(:utility, name)`
+# and returns the initial factor to use instead of the bound kernel's or utility's
+# (`nothing` keeps the bound one). The DVE certificate passes the exact tables it exports.
 function _decision_elimination(m::InfluenceDiagramModel, order, atol, ::Type{T},
-                               observer=nothing) where {T}
+                               observer=nothing; sources=nothing) where {T}
     stable = T == Rational{BigInt}
     id = syntax(m)
     bm = m.model
@@ -297,7 +308,8 @@ function _decision_elimination(m::InfluenceDiagramModel, order, atol, ::Type{T},
         x = variable_name(id, target(id, mech))
         ps = Symbol[variable_name(id, p) for p in inputs(id, mech)]
         bound_kernel = kernel(bm, x)
-        factor = Factor(bound_kernel, ps, x)
+        given = sources === nothing ? nothing : sources(:chance, x)
+        factor = given === nothing ? Factor(bound_kernel, ps, x) : given
         if stable
             bad = findfirst(value -> !(isfinite(value) && value >= 0), factor.table)
             bad === nothing ||
@@ -314,7 +326,9 @@ function _decision_elimination(m::InfluenceDiagramModel, order, atol, ::Type{T},
         push!(vals, Valuation(condition(probability, ev)))
     end
     for (name, u) in m.utilities
-        f = utility_factor(u, _utility_axes(m, utility_id(id, name)))
+        given = sources === nothing ? nothing : sources(:utility, name)
+        f = given === nothing ? utility_factor(u, _utility_axes(m, utility_id(id, name))) :
+            given
         # In both arithmetics: a NaN or infinite utility has no expected value, and
         # `expected_utility` rejects it too (docs/LEAN-JULIA-DISCREPANCIES-2026-09-30.md, 2).
         all(isfinite, f.table) ||

@@ -143,7 +143,7 @@ function _dve_numeric_table(axes, table, encode, owner)
     return (axes=[_dve_source_id(v, owner) for v in axes], entries=entries)
 end
 
-function _dve_export_budget(id, limit, owner)
+function _dve_export_budget(id, limit, owner; solution::Bool=false)
     limit isa Bool &&
         _dve_export_error(:RESOURCE_LIMIT, "max_entries must be an integer count", owner)
     limit >= 0 ||
@@ -156,6 +156,11 @@ function _dve_export_budget(id, limit, owner)
     end
     for u in utilities(id)
         total += cardinality(utility_scope(id, u))
+    end
+    if solution
+        for d in decisions(id)
+            total += cardinality(decision_information(id, d))
+        end
     end
     total <= limit ||
         _dve_export_error(:RESOURCE_LIMIT,
@@ -195,12 +200,153 @@ function _dve_certificate_order(id, ev, owner)
     return order, ds
 end
 
+# The solution profile (version 2)
+##################################
+
+function _dve_solution_backend(solution, numeric_mode, capture_runtime_bits, owner)
+    solution === false && return nothing
+    backend = solution === true ? DecisionVariableElimination() : solution
+    backend isa DecisionVariableElimination ||
+        _dve_export_error(:UNSUPPORTED_SOLUTION_PROFILE,
+                          "the solution profile records a DecisionVariableElimination run, not $(nameof(typeof(backend)))",
+                          owner)
+    numeric_mode == :rational_exact && !capture_runtime_bits && !backend.stable &&
+        _dve_export_error(:UNSUPPORTED_SOLUTION_PROFILE,
+                          "a binary64 solution reads the Float64 cells, which capture_runtime_bits=false leaves out; use DecisionVariableElimination(stable=true)",
+                          owner)
+    return backend
+end
+
+# A solution number: `{f64}` for a binary64 run, `{q, f64}` for an exact one, where `f64`
+# is the nearest-even rounding of `q`, as for an exported cell.
+function _dve_solution_number(x, owner; at=())
+    x isa Float64 && return (f64=_dve_float_bits(x, owner; at),)
+    x isa Rational{BigInt} ||
+        _dve_export_error(:UNSUPPORTED_SCALAR_TYPE,
+                          "expected a Float64 or exact rational solution value, got $(typeof(x))",
+                          owner; at)
+    n, d = numerator(x), denominator(x)
+    ndigits(abs(n)) + (n < 0 ? 1 : 0) <= 4096 && ndigits(d) <= 4096 ||
+        _dve_export_error(:RESOURCE_LIMIT,
+                          "solution rational components exceed the 4096-character limit",
+                          owner; at)
+    rounded = _nearest_binary64(x)
+    isfinite(rounded) ||
+        _dve_export_error(:UNSUPPORTED_SCALAR_TYPE,
+                          "the exact solution value has no finite binary64 rounding",
+                          owner; at)
+    return (q=(num=string(n), den=string(d)), f64=_dve_float_bits(rounded, owner; at))
+end
+
+# What the run reports at each maximisation: the reduced utility potential of the
+# decision's bucket, or `nothing` when no valuation mentions the action.
+mutable struct _DVESolutionRecorder
+    scores::Dict{Symbol,Any}
+    final::Any
+end
+_DVESolutionRecorder() = _DVESolutionRecorder(Dict{Symbol,Any}(), nothing)
+
+function (recorder::_DVESolutionRecorder)(kind::Symbol, value)
+    if kind == :decision
+        recorder.scores[value.decision] = value.result.ψ
+    elseif kind == :inactive
+        recorder.scores[value.decision] = nothing
+    elseif kind == :final
+        recorder.final = value
+    end
+    return nothing
+end
+
+# The maximal score of the row `coordinate` (one-based, one entry per information slot).
+function _dve_row_score(score, info_axes, coordinate, zero_score, owner)
+    score === nothing && return zero_score
+    names = [axis.name for axis in info_axes]
+    index = map(eachindex(score.vars)) do k
+        j = findfirst(==(score.vars[k]), names)
+        j === nothing &&
+            _dve_export_error(:STRUCTURAL_PRECONDITION,
+                              "the maximised utility potential depends on $(score.vars[k]), which is not observed",
+                              owner)
+        return label_index(score.axes[k], info_axes[j].labels[coordinate[j]])
+    end
+    return score.table[index...]
+end
+
+function _dve_solution(snapshot, backend, data, sources, normalization_tol, owner)
+    id = syntax(snapshot)
+    constancy = backend.atol === nothing ? normalization_tol : backend.atol
+    _check_probability_tolerance(constancy)
+    recorder = _DVESolutionRecorder()
+    sol = _run_decision_elimination(snapshot, backend.order, constancy, backend.stable;
+                                    observer=recorder,
+                                    sources=(kind, name) -> sources[(kind, name)])
+    final = recorder.final
+    exact = eltype(final.ψ.table) == Rational{BigInt}
+    meu = only(final.ψ.table)
+    exact || meu === sol.expected_utility ||
+        _dve_export_error(:STRUCTURAL_PRECONDITION,
+                          "the recorded value is not the run's expected utility", owner)
+    value = _dve_solution_number(meu, owner)
+    value.f64 == _dve_float_bits(sol.expected_utility, owner) ||
+        _dve_export_error(:STRUCTURAL_PRECONDITION,
+                          "the exact value does not round to the run's expected utility",
+                          owner)
+    zero_score = zero(eltype(final.ψ.table))
+    policies_ = Any[]
+    for d in sort(decisions(id))
+        dname = decision_name(id, d)
+        context = (kind=:decision, id=d, name=String(dname))
+        p = sol.strategy[dname]
+        info = decision_information(id, d)
+        a = decision_variable(id, d)
+        # The label order of the Lean label-order theorems: information slots in
+        # `information_position` order, every axis in `state_position` order.
+        p isa DeterministicPolicy &&
+            [axis.name for axis in p.information] == [variable_name(id, v) for v in info] &&
+            all(p.information[j].labels == states(id, info[j]) for j in eachindex(info)) &&
+            p.action.name == variable_name(id, a) && p.action.labels == states(id, a) ||
+            _dve_export_error(:STRUCTURAL_PRECONDITION,
+                              "the policy table axes are not the information slots in state_position order",
+                              context)
+        action_states = BayesianNetworks.state_ids(id, a)
+        score = recorder.scores[dname]
+        entries = Any[]
+        dims = Tuple(nstates(id, v) for v in info)
+        for reversed in CartesianIndices(reverse(dims))
+            coordinate = reverse(Tuple(reversed))
+            at = coordinate .- 1
+            chosen = action_states[label_index(p.action, p.table[coordinate...])]
+            row = _dve_row_score(score, p.information, coordinate, zero_score, context)
+            push!(entries,
+                  (at=collect(Int, at), action=_dve_source_id(chosen, context),
+                   score=_dve_solution_number(row, context; at)))
+        end
+        push!(policies_,
+              (decision=_dve_source_id(d, context), action=_dve_source_id(a, context),
+               axes=[_dve_source_id(v, context) for v in info],
+               scope=[_dve_source_id(variable_id(id, x), context)
+                      for x in sol.diagnostics.policy_scopes[dname]],
+               entries=entries))
+    end
+    return (backend=(name="DecisionVariableElimination",
+                     order=string(nameof(typeof(backend.order))), stable=backend.stable,
+                     atol_f64=backend.atol === nothing ? nothing :
+                              _dve_float_bits(backend.atol, owner),
+                     constancy_atol_f64=_dve_float_bits(constancy, owner)),
+            arithmetic=exact ? "exact_rational" : "binary64", data=String(data),
+            exact_fallback=get(sol.diagnostics, :exact_fallback, false),
+            conditioned_on="evidence.hard", julia_version=string(VERSION),
+            elimination_order=[_dve_source_id(variable_id(id, x), owner)
+                               for x in sol.diagnostics.order],
+            value=value, policies=policies_)
+end
+
 """
     export_dve_certificate(m::InfluenceDiagramModel;
         numeric_mode=:binary64_exact, exact_tables=nothing,
         capture_runtime_bits=true, trace=false, max_entries=1_000_000,
         atol=DEFAULT_ATOL, probability_atol=1e-9,
-        model_name="InfluenceDiagramModel") -> Dict{String,Any}
+        model_name="InfluenceDiagramModel", solution=false) -> Dict{String,Any}
 
 Capture complete model data in the version-1 `ecorecipes.dve-certificate`
 profile. Original source part IDs are decimal strings; semantic slots retain
@@ -230,6 +376,50 @@ exact normalization despite runtime tolerance
 acceptance; the reference consumer reports theorem applicability separately.
 The certificate is model data, not a verified production execution trace or a
 proof of the Julia exporter/compiler. See `docs/src/certificates.md`.
+
+# Recording the solution (version 2)
+
+With the default `solution=false` the result is the version-1 certificate,
+byte for byte. `solution=true` runs `DecisionVariableElimination()`, and
+`solution=backend` runs that `DecisionVariableElimination` backend; either
+emits version 2: the version-1 fields unchanged (except `version` and the
+`-v2` exporter suffix) plus a `"solution"` object recording that run's output.
+
+The run is the production driver of [`decision_elimination`](@ref), with its
+binary64 path and exact-rational fallback, or with `stable=true` its exact
+rational path. It reads the certificate's own cells: the compiled factors and
+materialized utility tables exported above (utility callbacks are not called
+again). A binary64 run and an exact run in `binary64_exact` mode read the
+`f64` words (the exact run their dyadic values; `data = "f64"`). An exact run
+in `rational_exact` mode reads the rational companions (`data = "q"`). The run
+conditions on the hard evidence rows of `evidence` and on nothing else; the
+model's current strategy is ignored. Its normalization tolerance is
+`runtime_tolerances.kernel_normalization_f64`, its constancy tolerance is the
+backend's `atol`, or that normalization tolerance when `atol` is `nothing`.
+
+The `solution` object holds the `backend` (order strategy name, `stable`,
+`atol_f64`, `constancy_atol_f64`), the `arithmetic` (`"binary64"` or
+`"exact_rational"`), `data`, `exact_fallback`, `conditioned_on =
+"evidence.hard"`, `julia_version`, the `elimination_order` the run actually
+used (variable IDs), the `value`, and one `policies` row per decision in
+decision-ID order. A policy row names the `decision`, its `action` variable,
+the information variables as `axes` in `information_position` order and the
+variables its table really depends on as `scope`. Its `entries` cover every
+information configuration, with zero-based `at` coordinates in each axis's
+`state_position` order, lexicographic with the rightmost fastest; each entry
+gives the chosen `action` as a state ID and the row's maximal `score`, the
+run's bucket utility maximized over the action (zero when no valuation
+mentions the action). A binary64 run writes numbers as `{f64}`, an exact run as
+`{q, f64}` with `f64` the nearest-even rounding of `q`.
+
+The solution is the output of one run, not a trusted optimality flag: it
+claims only that this Julia run returned these tables and this value. Whether
+they are optimal for the certificate's model is for a checker to decide. A
+binary64 run's tables can differ from the exact ones near ties. Backends other
+than `DecisionVariableElimination`, and a binary64 run on a `rational_exact`
+certificate without `capture_runtime_bits`, whose `f64` cells it would need,
+raise `DVEExportError` with code `:UNSUPPORTED_SOLUTION_PROFILE`. Every policy
+row counts against `max_entries`. Solver failures keep their own exceptions.
 """
 function export_dve_certificate(m::InfluenceDiagramModel;
                                 numeric_mode::Symbol=:binary64_exact,
@@ -239,16 +429,22 @@ function export_dve_certificate(m::InfluenceDiagramModel;
                                 max_entries::Integer=1_000_000,
                                 atol::Real=BayesianNetworks.DEFAULT_ATOL,
                                 probability_atol::Real=1e-9,
-                                model_name::AbstractString="InfluenceDiagramModel")
+                                model_name::AbstractString="InfluenceDiagramModel",
+                                solution::Union{Bool,DecisionBackend}=false)
     owner = (kind=:model, id=nothing, name=String(model_name))
     trace && _dve_export_error(:UNSUPPORTED_TRACE_PROFILE,
-                               "version 1 contains model data, not traces", owner)
+                               "versions 1 and 2 contain model data and a result, not traces",
+                               owner)
     numeric_mode in (:binary64_exact, :rational_exact) ||
         _dve_export_error(:UNSUPPORTED_NUMERIC_MODE,
                           "unknown numeric_mode $(repr(numeric_mode))", owner)
     numeric_mode == :binary64_exact && !capture_runtime_bits &&
         _dve_export_error(:UNSUPPORTED_NUMERIC_MODE,
                           "binary64_exact requires captured bits", owner)
+    backend = _dve_solution_backend(solution, numeric_mode, capture_runtime_bits, owner)
+    data = backend !== nothing && backend.stable && numeric_mode == :rational_exact ? :q :
+           :f64
+    run_inputs = Dict{Tuple{Symbol,Symbol},Factor}()
     normalization_tol, decision_tol = Float64(atol), Float64(probability_atol)
     isfinite(atol) && atol >= 0 && isfinite(normalization_tol) && normalization_tol >= 0 ||
         _dve_export_error(:STRUCTURAL_PRECONDITION,
@@ -258,7 +454,7 @@ function export_dve_certificate(m::InfluenceDiagramModel;
         _dve_export_error(:STRUCTURAL_PRECONDITION,
                           "decision tolerance must be finite and in [0,1)", owner)
     validate(syntax(m); closed=true, unique_names=true)
-    _dve_export_budget(syntax(m), max_entries, owner)
+    _dve_export_budget(syntax(m), max_entries, owner; solution=backend !== nothing)
     companions = _dve_companions(numeric_mode, exact_tables, owner)
     used = Set{Tuple{Symbol,Int,Tuple}}()
     bm = BayesModel(m.model; syntax=deepcopy(syntax(m)), spaces=deepcopy(spaces(m)),
@@ -314,6 +510,20 @@ function export_dve_certificate(m::InfluenceDiagramModel;
                                   context; at)
             return encode(x, raw_at)
         end
+        if backend !== nothing
+            run_inputs[(:chance, variable_name(id, target_id))] = if data == :q
+                exact_cell = function (I)
+                    raw_at = Tuple((Tuple(I) .- 1)[positions[v]] for v in raw_axes)
+                    return _dve_exact_value(companions[(:cpt, mid, raw_at)], context,
+                                            raw_at)
+                end
+                Factor(factor.vars, factor.axes,
+                       Rational{BigInt}[exact_cell(I)
+                                        for I in CartesianIndices(factor.table)])
+            else
+                factor
+            end
+        end
         push!(mechs,
               (id=_dve_source_id(mid, context), name=context.name,
                target=_dve_source_id(target_id, context),
@@ -335,8 +545,18 @@ function export_dve_certificate(m::InfluenceDiagramModel;
     us = Any[]
     for uid in sort(utilities(id))
         context = (kind=:utility, id=uid, name=String(utility_name(id, uid)))
-        table = copy(utility_table(utility(snapshot, utility_name(id, uid)),
-                                   _utility_axes(snapshot, uid)))
+        utility_axes = _utility_axes(snapshot, uid)
+        table = copy(utility_table(utility(snapshot, utility_name(id, uid)), utility_axes))
+        if backend !== nothing
+            exact_table = data == :q ?
+                          Rational{BigInt}[_dve_exact_value(companions[(:utility, uid,
+                                                                        Tuple(I) .- 1)],
+                                                            context, Tuple(I) .- 1)
+                                           for I in CartesianIndices(table)] : table
+            run_inputs[(:utility, utility_name(id, uid))] = Factor(collect(FiniteAxis,
+                                                                           utility_axes),
+                                                                   exact_table)
+        end
         encode = (x, at) -> _dve_number(x, (:utility, uid, at), numeric_mode,
                                         capture_runtime_bits, companions, used, context)
         push!(us,
@@ -354,26 +574,35 @@ function export_dve_certificate(m::InfluenceDiagramModel;
              state_index=label_index(axis(id, v),
                                      evidence(snapshot)[variable_name(id, v)]) - 1)
             for v in sort([variable_id(id, name) for name in keys(evidence(snapshot))])]
-    return Dict{String,Any}("format" => "ecorecipes.dve-certificate", "version" => 1,
-                            "provenance" => (implementation_manifest_sha256=_DVE_CERTIFICATE_SOURCE,
-                                             model_name=String(model_name),
-                                             exporter="InfluenceDiagrams.jl/$(pkgversion(@__MODULE__))/export_dve_certificate-v1",
-                                             origin="runtime",
-                                             exact_source=numeric_mode == :binary64_exact ?
-                                                          "none" :
-                                                          "caller_companion"),
-                            "numeric" => (mode=String(numeric_mode),
-                                          runtime_bits=capture_runtime_bits,
-                                          normalization="none"),
-                            "runtime_tolerances" => (kernel_normalization_f64=_dve_float_bits(normalization_tol,
-                                                                                              owner),
-                                                     decision_probability_f64=_dve_float_bits(decision_tol,
-                                                                                              owner)),
-                            "reference_pool" => pool, "variables" => vars,
-                            "topological_order" => [_dve_source_id(v, owner) for v in order],
-                            "decision_order" => [_dve_source_id(d, owner) for d in ds],
-                            "mechanisms" => mechs, "decisions" => decs,
-                            "precedence" => prec,
-                            "utilities" => us,
-                            "evidence" => (hard=hard, likelihood=nothing))
+    version = backend === nothing ? 1 : 2
+    certificate = Dict{String,Any}("format" => "ecorecipes.dve-certificate",
+                                   "version" => version,
+                                   "provenance" => (implementation_manifest_sha256=_DVE_CERTIFICATE_SOURCE,
+                                                    model_name=String(model_name),
+                                                    exporter="InfluenceDiagrams.jl/$(pkgversion(@__MODULE__))/export_dve_certificate-v$(version)",
+                                                    origin="runtime",
+                                                    exact_source=numeric_mode ==
+                                                                 :binary64_exact ?
+                                                                 "none" :
+                                                                 "caller_companion"),
+                                   "numeric" => (mode=String(numeric_mode),
+                                                 runtime_bits=capture_runtime_bits,
+                                                 normalization="none"),
+                                   "runtime_tolerances" => (kernel_normalization_f64=_dve_float_bits(normalization_tol,
+                                                                                                     owner),
+                                                            decision_probability_f64=_dve_float_bits(decision_tol,
+                                                                                                     owner)),
+                                   "reference_pool" => pool, "variables" => vars,
+                                   "topological_order" => [_dve_source_id(v, owner)
+                                                           for v in order],
+                                   "decision_order" => [_dve_source_id(d, owner)
+                                                        for d in ds],
+                                   "mechanisms" => mechs, "decisions" => decs,
+                                   "precedence" => prec,
+                                   "utilities" => us,
+                                   "evidence" => (hard=hard, likelihood=nothing))
+    backend === nothing && return certificate
+    certificate["solution"] = _dve_solution(snapshot, backend, data, run_inputs,
+                                            normalization_tol, owner)
+    return certificate
 end
