@@ -115,6 +115,57 @@ assert_no_sorry InfluenceDiagramsProofs.DVE.solveConditionedPlan_table_eq
 #print axioms InfluenceDiagramsProofs.DVE.solveConditionedPlan_policy_eq
 #print axioms InfluenceDiagramsProofs.DVE.solveConditionedPlan_table_eq
 
+-- Julia's sum-out utility representative on zero-probability rows (`keep`).
+assert_no_sorry InfluenceDiagramsProofs.DVE.solveRepPlan_agrees
+assert_no_sorry InfluenceDiagramsProofs.DVE.solveRepPlanWith_spec
+assert_no_sorry InfluenceDiagramsProofs.DVE.solveRepPlanWith_kernel_eq
+assert_no_sorry InfluenceDiagramsProofs.DVE.solveRepPlanOrdered_table
+#print axioms InfluenceDiagramsProofs.DVE.Valuation.sumOutKeep_false
+#print axioms InfluenceDiagramsProofs.DVE.Valuation.sumOutKeep_util_of_const
+#print axioms InfluenceDiagramsProofs.DVE.Valuation.sumOutKeep_weight
+#print axioms InfluenceDiagramsProofs.DVE.Valuation.Agrees.util_eq
+#print axioms InfluenceDiagramsProofs.DVE.Valuation.agrees_collect
+#print axioms InfluenceDiagramsProofs.DVE.Valuation.agrees_sumOut
+#print axioms InfluenceDiagramsProofs.DVE.Valuation.agrees_maxOut
+#print axioms InfluenceDiagramsProofs.DVE.Valuation.agrees_chanceStep
+#print axioms InfluenceDiagramsProofs.DVE.Valuation.agrees_decisionStep
+#print axioms InfluenceDiagramsProofs.DVE.Valuation.chanceStepKeep_collect
+#print axioms InfluenceDiagramsProofs.DVE.runRepWith_state
+#print axioms InfluenceDiagramsProofs.DVE.runRepWith_false
+#print axioms InfluenceDiagramsProofs.DVE.runRepWith_deterministic
+#print axioms InfluenceDiagramsProofs.DVE.Inv.chanceKeep
+#print axioms InfluenceDiagramsProofs.DVE.runRepWith_inv
+#print axioms InfluenceDiagramsProofs.DVE.decisionScoreRep_local
+#print axioms InfluenceDiagramsProofs.DVE.runRepWith_kernel
+#print axioms InfluenceDiagramsProofs.DVE.runRep_agrees
+#print axioms InfluenceDiagramsProofs.DVE.bucketScore_agree
+#print axioms InfluenceDiagramsProofs.DVE.decisionScoreRep_eq
+#print axioms InfluenceDiagramsProofs.DVE.solveRepPlanWith_false
+#print axioms InfluenceDiagramsProofs.DVE.solveRepPlan_agrees
+#print axioms InfluenceDiagramsProofs.DVE.solveRepPlanWith_spec
+#print axioms InfluenceDiagramsProofs.DVE.solveRepPlanWith_value
+#print axioms InfluenceDiagramsProofs.DVE.solveRepPlanScore_eq
+#print axioms InfluenceDiagramsProofs.DVE.solveRepPlanWith_kernel_eq
+#print axioms InfluenceDiagramsProofs.DVE.solveRepPlanOrdered_table
+#print axioms InfluenceDiagramsProofs.DVE.solveRepPlanOrdered_optimal
+
+-- Action labels in checked state-position order (records -> action order -> selector).
+assert_no_sorry InfluenceDiagramsProofs.Records.Diagram.solveRecords_table
+assert_no_sorry InfluenceDiagramsProofs.Records.Diagram.solveRepRecords_table
+assert_no_sorry InfluenceDiagramsProofs.Records.Diagram.solveRepRecords_optimal
+#print axioms InfluenceDiagramsProofs.firstArgmax_least_position
+#print axioms InfluenceDiagramsProofs.eq_firstArgmax_of_least_position
+#print axioms InfluenceDiagramsProofs.Records.Diagram.check_iff
+#print axioms InfluenceDiagramsProofs.Records.Diagram.stateRecord_var
+#print axioms InfluenceDiagramsProofs.Records.Diagram.stateRecord_position
+#print axioms InfluenceDiagramsProofs.Records.Diagram.stateRecord_of_mem
+#print axioms InfluenceDiagramsProofs.Records.Diagram.statePosition_injective
+#print axioms InfluenceDiagramsProofs.Records.Diagram.stateLabel_injective
+#print axioms InfluenceDiagramsProofs.Records.Diagram.actionOrder_le_iff
+#print axioms InfluenceDiagramsProofs.Records.Diagram.solveRecords_table
+#print axioms InfluenceDiagramsProofs.Records.Diagram.solveRepRecords_table
+#print axioms InfluenceDiagramsProofs.Records.Diagram.solveRepRecords_optimal
+
 -- Exact multi-decision bucket DVE; the schedule is generated from no-forgetting.
 assert_no_sorry InfluenceDiagramsProofs.DVE.solve_spec
 assert_no_sorry InfluenceDiagramsProofs.DVE.solveEvidence_spec

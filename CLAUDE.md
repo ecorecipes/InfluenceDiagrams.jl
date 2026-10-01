@@ -82,9 +82,17 @@ ordered but neither knows the other's action: that is a forgetting diagram, and 
   proves equal evidence mass, value and positive-probability first-label tables versus
   the likelihood factor. `Finite/DVE/PlanIndependence.lean` proves those positive-probability
   first-label tables (plain, likelihood evidence and sliced evidence) identical for any two
-  elimination plans, so the min-fill order inside a strong block cannot change them. Zero-probability rows, the link from the supplied order to
-  Julia's labels, and Float64 rounding (near-ties that rounding creates or breaks) stay
-  outside the proofs; signed zeros now tie as reals and non-finite utilities are rejected.
+  elimination plans, so the min-fill order inside a strong block cannot change them.
+  `Finite/DVE/Representative.lean` models `sum_out` keeping a utility that does not mention
+  the summed variable on zero-probability rows (`keep`, every choice): values, masses and
+  positive-probability entries are the model's (`solveRepPlanWith_kernel_eq`) and every row
+  is `orderedTable` of the run's own score (`solveRepPlanOrdered_table`); not combined with
+  sliced evidence. `Finite/DVE/LabelOrder.lean` compiles checked raw records (bounded unique
+  state positions) to a diagram whose action order is `state_position`, and proves the entry
+  is the least-position maximizer (`solveRecords_table`, `solveRepRecords_optimal`). Not
+  proved: decoding the ACSet or DVE certificate into those records, that Julia's action axis
+  follows `state_position` (a test pins it), and Float64 rounding (near-ties that rounding
+  creates or breaks); signed zeros now tie as reals and non-finite utilities are rejected.
   Follow the proof README's build, audit and rendering rules when extending this layer.
 
 ## Invariants that must not be broken

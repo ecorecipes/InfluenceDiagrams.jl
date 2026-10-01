@@ -84,9 +84,11 @@ What the policy tables are (docs/LEAN-JULIA-DISCREPANCIES-2026-09-30.md):
   only by that tolerance, which is outside the proved contract; an exactly normalised model
   passes with exact equality.
 - **Zero-probability rows.** On an information row of probability zero every action is
-  optimal and the returned entry is a representative, not a proved choice. (Julia keeps the
-  utility table there where the Lean model stores zero; values and positive-probability
-  rows agree.)
+  optimal. Julia's `sum_out` keeps a utility table there where the Lean model stores zero;
+  without evidence, the Lean development proves that this changes no value and no entry on
+  a row of positive probability (`solveRepPlanWith_kernel_eq`), and that the whole table is
+  the first-label table of Julia's own scores (`solveRepPlanOrdered_table`), which on
+  zero-probability rows may differ from the model's.
 """
 struct DecisionVariableElimination{O<:EliminationStrategy} <: DecisionBackend
     order::O

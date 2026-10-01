@@ -61,7 +61,9 @@ Module order (`MD_FILES` in the `Makefile`, the import order of `InfluenceDiagra
 12. `Finite/DVE/Selector.lean` — the driver parameterised by its selector; first-label table identity
 13. `Finite/DVE/Conditioning.lean` — explicit (sliced) evidence conditioning versus the likelihood factor
 14. `Finite/DVE/PlanIndependence.lean` — positive-reach first-label tables are independent of the elimination plan
-15. `Roadmap.lean` — remaining literal-implementation refinements; no unproved declarations
+15. `Finite/DVE/Representative.lean` — Julia's `sum_out` utility representative on zero-probability rows
+16. `Finite/DVE/LabelOrder.lean` — checked records order each action space by `state_position`
+17. `Roadmap.lean` — remaining literal-implementation refinements; no unproved declarations
 
 ## What is formalised
 
@@ -84,6 +86,8 @@ inherited `FinBayesNet.nonemptyS` fields ensure that every action space is nonem
 | `Finite/DVE/Selector.lean` | `runWith sel` is the bucket driver with an arbitrary maximizing `Selector`; `runWith_classical` shows `run` is its classical instance and `runWith_state` that valuations do not depend on the selector. `Inv.decisionOf` needs a maximizer only on rows of positive probability. `solveWith_spec`, `solveGuardedWith_spec`, `solveEvidenceWith_spec`, `solveEvidenceGuardedWith_eq`: the guarantees of `solve_spec`, `solveGuarded_spec` and the evidence theorems for every selector. For `Selector.ordered` (least state in a supplied order): `solveOrdered_table` (every row is `orderedTable` of the bucket-utility score `solveScore`) and `solveOrdered_semantic` / `solveEvidenceOrdered_semantic` (on rows with `reach ≠ 0`, the least maximizer of `continuation`). |
 | `Finite/DVE/Conditioning.lean` | `Valuation.condition` slices both potentials at `clamp O o`; `runSkipWith` skips absent chance variables. For `HardEvidence` the invariant `Coupled` (equal probability and weighted utility at `x` and `clamp O o x` on every row) holds initially and after every step. `conditionedMass_eq`, `solveConditioned_spec`, `solveConditionedChecked_eq`, `solveConditioned_policy_eq`, `solveConditioned_semantic`, `solveConditioned_kernel_clamp`. |
 | `Finite/DVE/PlanIndependence.lean` | `MassAll` (the probability potential is the reach marginal under every strategy) is preserved by every step, so `reach_strategy_independent`. `optimalContinuation` is the supremum of `continuation` over nonnegative strategies; `weight_eq_optimalContinuation` identifies it with the weighted valuation at the decision step of any plan, and `runWith_ordered_optimal` makes the first-label entry its least maximizer on rows of positive reach. `solvePlanWith`, `solveEvidencePlanWith`, `solveConditionedPlan` run on an arbitrary `Plan id Finset.univ`; `solvePlanOrdered_table_eq`, `solveEvidencePlanOrdered_table_eq`, `solveConditionedPlan_table_eq` and `solveOrdered_table_plan_independent`. |
+| `Finite/DVE/Representative.lean` | `sumOutKeep keep` is Julia's chance step: on rows of zero summed probability it stores the bucket utility (`keep = true`) or `0` (`keep = false`, the model: `sumOutKeep_false`); `sumOutKeep_util_of_const` makes `keep = true` literally Julia's `ψ′ = ψ` when the utility does not mention the summed variable. `runRepWith sel keep` is the driver with that step. `Agrees` (scope, probability, weighted utility) is preserved by every step under the exact guard (`agrees_chanceStep`, `agrees_decisionStep`, `runRep_agrees`). `solveRepPlan_agrees`, `solveRepPlanWith_spec` (realized optimum), `solveRepPlanWith_value`, `solveRepPlanScore_eq` and `solveRepPlanWith_kernel_eq` (positive reach), `solveRepPlanOrdered_table` (every row) and `solveRepPlanOrdered_optimal`, for every `keep`, selector and plan. |
+| `Finite/DVE/LabelOrder.lean` | `positionOrder`, `firstArgmax_least_position`, `eq_firstArgmax_of_least_position`. `Records.Diagram` (raw rows reusing the BN `Raw.StateRow`), `Valid` / `check_iff`, `compile` (state spaces `Fin (stateCount v)`), `stateRecord` with `stateRecord_position` (from `Raw.positionEquiv`), `actionOrder` with `actionOrder_le_iff`, `selector`; `solveRecords_table`, `solveRepRecords_table`, `solveRepRecords_optimal`: the entry is the maximizer of least checked `state_position`. |
 | `Roadmap.lean` | Remaining literal-Julia refinements; no unproved declarations. |
 
 `Audit.lean` prints the axioms of every main theorem (and of the definitions `Policy.ofFun`,
@@ -98,7 +102,8 @@ The source scanner permits kernel-checked `decide +kernel` but rejects native pr
 
 `Finite/OrderedPolicies.lean` constructs the least maximizing local action in a supplied finite
 linear order and proves the exact first-state tie property. On raw compiled state spaces
-`Fin n`, this is the checked `state_position` order. A finite table over only the information
+`Fin n`, this is the checked `state_position` order; `Finite/DVE/LabelOrder.lean` derives that
+order from checked records (see below). A finite table over only the information
 variables reconstructs the same admissible local policy. A strict `2ε` score gap proves that
 uniform score errors bounded by `ε` cannot change the selected action.
 
@@ -129,7 +134,7 @@ identifies the entry on every row with `reach ≠ 0` (`reach_nonneg`: equivalent
 the least maximizer of `continuation`, the unnormalized expected utility of acting there and
 then following the returned later policies. That score mentions no bucket or representative.
 On zero-probability rows no semantic score exists, and the entry depends on the utility
-representatives of the model.
+representatives of the model; Julia's representative is treated in the next sections.
 
 ### Explicit evidence conditioning
 
@@ -177,6 +182,57 @@ bucket representatives, which may depend on the elimination order; they are not 
 independent. That Julia's
 `_block_order` schedule is a `Plan` (every chance variable of the block eliminated before the
 decision, with exactly its information set remaining) is read off the source, not derived.
+
+### Julia's utility representative on zero-probability rows
+
+Julia's `sum_out` keeps the utility potential `ψ` unchanged when the summed variable is not in
+its scope, also on rows where the summed probability is zero; the model's `sumOut` stores `0`
+there. `Finite/DVE/Representative.lean` parameterises the chance step by `keep : id.V → Bool`:
+`sumOutKeep false` is `sumOut` (`sumOutKeep_false`), and `sumOutKeep true` stores the bucket
+utility on zero rows, which is literally Julia's `ψ′ = ψ` when that utility does not depend on the
+summed variable (`sumOutKeep_util_of_const`). A plan sums each chance variable at most once, so
+every sequence of Julia branch decisions is one `keep`; all results hold for every `keep`, and
+which one Julia's run uses is read off the source.
+
+`Agrees` relates two valuations with equal scope, probability potential and weighted utility
+(their utilities then agree wherever the probability is nonzero, `Agrees.util_eq`). Chance steps
+preserve it (`agrees_chanceStep`); decision steps preserve it given the exact all-row bucket guard
+(`agrees_decisionStep`), which always holds (`all_guards_complete`). Hence, on any plan,
+`solveRepPlan_agrees` (the two final valuation lists agree pairwise), `solveRepPlanWith_spec` (for
+every selector the returned deterministic strategy realizes the reported value, the global
+optimum), `solveRepPlanWith_value` (the model's value), `solveRepPlanScore_eq` (on rows of
+positive reach the decision scores are the model's) and `solveRepPlanWith_kernel_eq` (so are the
+policy entries, for every selector). Julia's representative therefore cannot change a returned
+entry on a reachable row. On every row, zero-reach rows included, `solveRepPlanOrdered_table`
+proves that the first-label policy is `orderedTable` of the run's own score
+`solveRepPlanScore`; that score may differ from the model's only on zero-reach rows, so the
+whole table is determined by the data and the plan. `solveRepPlanOrdered_optimal` combines
+this with plan independence. Julia's hard-evidence path (`runSkipWith`) combined with `keep` is
+not modelled.
+
+### Action labels in checked state-position order
+
+`Selector.ordered` accepts any order. `Finite/DVE/LabelOrder.lean` derives it from records:
+`Records.Diagram` holds raw influence-diagram rows with decoded finite IDs (state rows are the BN
+`Raw.StateRow`: variable, `position`, label). `Valid` (decidable; `check_iff`) checks only what
+the order needs: every variable has a state, positions are bounded and unique per variable
+(`Raw.Positioned`), labels are unique per variable. `compile` builds the `FinInfluenceDiagram`
+whose state space for `v` is `Fin (stateCount v)`, and `stateRecord` is the record at each
+position (`Raw.positionEquiv`, a bijection derived from the checks; `stateRecord_position`).
+`actionOrder` orders each action space by the checked `position` of its records
+(`positionOrder`; `actionOrder_le_iff`: this is `Fin`'s order) and `selector` is
+`Selector.ordered` with it. By `firstArgmax_least_position`, `solveRecords_table` (the model's
+driver, every row, `solveScore`), `solveRepRecords_table` (Julia's representative, any plan, every
+row, its own score) and `solveRepRecords_optimal` (Julia's representative, any plan, rows of
+positive reach, `optimalContinuation`) prove that the returned entry is the maximizer of least
+checked `state_position`.
+
+Not proved: that Julia's DVE certificate (whose `variables[].states` rows carry exactly `id`,
+`position` and `label`) or the ACSet decodes into these records (there is no Lean consumer of the
+certificate); the closedness, order and no-forgetting hypotheses of the compiled diagram (they
+stay hypotheses); that Julia's action axis lists `states(id, v)` in `state_position` order (a
+Julia test pins it; the array layout is the `FiniteKernels` `Layout/` result); and Julia's
+execution itself.
 
 `make audit` also rejects missing/ambiguous results, any other axiom and
 proof escape hatches in this project's sources and its own BayesianNetworks proof
@@ -245,10 +301,12 @@ checked before instantiating the generic solver theorem.
 **Refinement boundaries remain.** The finite-function solver has common sufficient scopes
 rather than separate ordered probability/utility arrays. The original `run` uses a fixed
 classical tie selector; the first-label table identity is proved for `Selector.ordered` with a
-supplied order, and that order is not derived from Julia's labels. Tables on zero-probability
-rows depend on utility representatives: the model stores `0` where a chance step's summed
-probability is zero, while Julia's `sum_out` keeps a utility table that does not mention the
-summed variable.
+supplied order, and `LabelOrder.lean` derives that order from checked records, not from Julia's
+arrays or a decoded certificate. Tables on zero-probability rows depend on utility
+representatives: the model stores `0` where a chance step's summed probability is zero, while
+Julia's `sum_out` keeps a utility table that does not mention the summed variable;
+`Representative.lean` proves that this changes no value, mass or positive-reach entry and that
+Julia's whole table is `orderedTable` of its own score, without hard evidence.
 The exact all-row probability guard is now proved complete, including unreachable bucket rows:
 see `all_guards_complete`, `all_guards_complete_evidence`, `checkedRun_generated_eq` and
 `checkedRun_generated_evidence_eq`. Explicit conditioning is proved

@@ -1,4 +1,4 @@
-import InfluenceDiagramsProofs.Finite.DVE.PlanIndependence
+import InfluenceDiagramsProofs.Finite.DVE.LabelOrder
 
 /-!
 # Roadmap and exact scope of the DVE theorem
@@ -53,21 +53,44 @@ a decision with the same remaining set, where the weighted valuation is the plan
 (`runWith_ordered_optimal`), and reach is the same under every strategy
 (`reach_strategy_independent`). No counterexample exists on positive-reach rows.
 
+`Finite/DVE/Representative.lean` models Julia's chance step on zero-probability rows: when the
+summed variable is not in the utility potential's scope, Julia's `sum_out` keeps the utility
+unchanged where the model stores `0`. `sumOutKeep keep` covers both (`keep = false` is the model,
+`sumOutKeep_false`; `keep = true` is literally Julia's `ψ′ = ψ` whenever the bucket utility does not
+depend on the summed variable, `sumOutKeep_util_of_const`), and every theorem holds for every
+`keep : id.V → Bool`. On any plan the two runs agree valuation by valuation in scope,
+probability potential and weighted utility (`solveRepPlan_agrees`); the returned strategy
+realizes the global optimum and the value is the model's (`solveRepPlanWith_spec`,
+`solveRepPlanWith_value`); on every row of positive reach the scores and, for every selector,
+the policy entries are the model's (`solveRepPlanScore_eq`, `solveRepPlanWith_kernel_eq`); and on
+every row, reachable or not, the first-label table is `orderedTable` of the run's own score
+(`solveRepPlanOrdered_table`). Julia's representative therefore cannot change a returned table
+entry on a reachable row.
+
+`Finite/DVE/LabelOrder.lean` derives the selector's order from checked records instead of
+supplying it. `Records.Diagram` holds raw rows (state rows with `var`, `position`, `name`);
+`Valid` checks bounded unique positions, nonempty spaces and unique labels; `compile` gives a
+`FinInfluenceDiagram` with state spaces `Fin (stateCount v)`, and `actionOrder` orders each action
+space by checked `position` (`actionOrder_le_iff`). With `Records.Diagram.selector`,
+`solveRecords_table`, `solveRepRecords_table` and `solveRepRecords_optimal` prove that the returned
+entry is the maximizer of least checked `state_position` (every row of the model's and Julia's
+representative's score; every positive-reach row of `optimalContinuation`).
+
 This is **not** a byte-for-byte verification of Julia. Remaining refinements are:
 
-* ordered arrays, state labels, reference resolution and the concrete min-fill scheduler. In
-  particular the linear order that `Selector.ordered` takes on each action space is supplied;
-  that it is Julia's axis-label position is not derived from the ACSet or from the arrays.
-  That Julia's block schedule is a `Plan` is read off the source, not derived; given that,
-  positive-reach tables do not depend on which min-fill order it chose;
-* policy tables on zero-probability rows. There no semantic score exists, and the entry is
-  fixed by the utility representative. The model's chance step stores utility `0` wherever the
-  summed probability is zero, while Julia's `sum_out` keeps a utility table that does not
-  contain the summed variable; the likelihood and sliced representations also differ there,
-  including on rows that contradict the evidence. Only weighted valuations, values and
-  positive-reach tables are proved to agree. Zero-reach entries are also not claimed to be
-  independent of the elimination plan. The model's empty-bucket decision step adds a
-  unit valuation that Julia omits; this changes no value and no table;
+* the record-to-Julia link. `Records.Diagram` is not produced from the ACSet or from the DVE
+  certificate by a proved decoder (the certificate exports exactly these state rows; no Lean
+  consumer reads it), and `Valid` checks only the state rows: closedness, the order and
+  no-forgetting of the compiled diagram stay hypotheses. That Julia's action axis lists the
+  states in `state_position` order is pinned by a Julia test, and the array layout is the
+  `FiniteKernels` `Layout/` result; Julia's execution itself is not proved. That Julia's block
+  schedule is a `Plan`, and which `keep` its run uses, are read off the source, not derived;
+* zero-probability rows beyond the above. There no semantic score exists, so a zero-reach
+  entry is fixed by the representatives and is not claimed independent of the elimination
+  plan. Julia's hard-evidence path (sliced factors, absent variables skipped) is proved only
+  against the model's representative (`Conditioning.lean`); combined with Julia's `keep`
+  representative it is not modelled. The model's empty-bucket decision step adds a unit
+  valuation that Julia omits; this changes no value and no table;
 * Float64/tolerance behavior. Small action-dependent evidence probabilities can pass the
   source's tolerance guard and yield a wrong reported value; they are outside the theorem's
   action-independent evidence contract. Float64 rounding can create or break ties that the

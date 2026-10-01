@@ -11,3 +11,5 @@ import InfluenceDiagramsProofs.Finite.OrderedPolicies
 import InfluenceDiagramsProofs.Finite.DVE.Selector
 import InfluenceDiagramsProofs.Finite.DVE.Conditioning
 import InfluenceDiagramsProofs.Finite.DVE.PlanIndependence
+import InfluenceDiagramsProofs.Finite.DVE.Representative
+import InfluenceDiagramsProofs.Finite.DVE.LabelOrder

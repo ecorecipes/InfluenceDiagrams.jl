@@ -229,6 +229,42 @@ value</a></li>
 id="toc-solvers-on-an-arbitrary-plan">Solvers on an arbitrary
 plan</a></li>
 </ul></li>
+<li><a href="#julias-utility-representative-on-zero-probability-rows"
+id="toc-julias-utility-representative-on-zero-probability-rows">Julia’s
+utility representative on zero-probability rows</a>
+<ul>
+<li><a href="#julias-sum-out" id="toc-julias-sum-out">Julia’s
+sum-out</a></li>
+<li><a href="#agreement-of-probabilities-and-weighted-utilities"
+id="toc-agreement-of-probabilities-and-weighted-utilities">Agreement of
+probabilities and weighted utilities</a></li>
+<li><a href="#the-driver-with-julias-chance-step"
+id="toc-the-driver-with-julias-chance-step">The driver with Julia’s
+chance step</a></li>
+<li><a href="#the-invariant-survives-julias-chance-step"
+id="toc-the-invariant-survives-julias-chance-step">The invariant
+survives Julia’s chance step</a></li>
+<li><a href="#scores-and-tables" id="toc-scores-and-tables">Scores and
+tables</a></li>
+<li><a href="#the-coupled-runs" id="toc-the-coupled-runs">The coupled
+runs</a></li>
+<li><a href="#solvers-on-an-arbitrary-plan-1"
+id="toc-solvers-on-an-arbitrary-plan-1">Solvers on an arbitrary
+plan</a></li>
+</ul></li>
+<li><a href="#action-labels-in-checked-state-position-order"
+id="toc-action-labels-in-checked-state-position-order">Action labels in
+checked state-position order</a>
+<ul>
+<li><a href="#least-position-maximizers"
+id="toc-least-position-maximizers">Least-position maximizers</a></li>
+<li><a href="#checked-influence-diagram-records"
+id="toc-checked-influence-diagram-records">Checked influence-diagram
+records</a></li>
+<li><a href="#the-returned-tables-in-state-position-terms"
+id="toc-the-returned-tables-in-state-position-terms">The returned tables
+in state-position terms</a></li>
+</ul></li>
 <li><a href="#roadmap-and-exact-scope-of-the-dve-theorem"
 id="toc-roadmap-and-exact-scope-of-the-dve-theorem">Roadmap and exact
 scope of the DVE theorem</a></li>
@@ -5967,11 +6003,1024 @@ class="sourceCode lean"><code class="sourceCode lean"><span id="cb63-1"><a href=
 <span id="cb63-155"><a href="#cb63-155" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb63-156"><a href="#cb63-156" aria-hidden="true" tabindex="-1"></a><span class="kw">end</span></span>
 <span id="cb63-157"><a href="#cb63-157" aria-hidden="true" tabindex="-1"></a><span class="kw">end</span> InfluenceDiagramsProofs.DVE</span></code></pre></div>
+<!-- InfluenceDiagramsProofs/Finite/DVE/Representative.lean -->
+<h1 id="julias-utility-representative-on-zero-probability-rows">Julia’s
+utility representative on zero-probability rows</h1>
+<div class="sourceCode" id="cb64"><pre
+class="sourceCode lean"><code class="sourceCode lean"><span id="cb64-1"><a href="#cb64-1" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> InfluenceDiagramsProofs.Finite.DVE.PlanIndependence</span></code></pre></div>
+<p>The model’s chance step <code>Valuation.sumOut</code> stores the
+utility <code>ratio (Σ φψ) (Σ φ)</code>, which is <code>0</code>
+wherever the summed probability <code>Σ φ</code> is zero. Julia’s
+<code>sum_out</code>
+(<code>InfluenceDiagrams.jl/src/valuation.jl</code>) does that only when
+the summed variable is in the scope of the utility potential
+<code>ψ</code>; otherwise it keeps <code>ψ′ = ψ</code> unchanged, also
+on rows where <code>Σ φ</code> is zero. Julia’s valuations carry a
+utility scope that the model’s do not, so this module parameterises the
+chance step by a Boolean <code>keep</code> per summed variable:</p>
+<ul>
+<li><code>Valuation.sumOutKeep false</code> is the model’s
+<code>sumOut</code> (<code>sumOutKeep_false</code>);</li>
+<li><code>Valuation.sumOutKeep true</code> stores the bucket utility
+itself on the rows where <code>Σ φ = 0</code>, and is literally Julia’s
+<code>ψ′ = ψ</code> whenever the bucket utility does not depend on the
+summed variable (<code>sumOutKeep_util_of_const</code>), which is what
+Julia’s branch condition <code>x ∉ ψ.vars</code> guarantees.</li>
+</ul>
+<p>A plan eliminates every chance variable at most once, so any sequence
+of Julia branch decisions along a run is one function
+<code>keep : id.V → Bool</code>; every result below holds for
+<strong>every</strong> <code>keep</code>. Which <code>keep</code>
+Julia’s run uses (<code>a ∉ ψ.vars</code> at the step that sums
+<code>a</code>) is read off the source, not derived.</p>
+<p><code>runRepWith sel keep</code> is the bucket driver of
+<code>runWith</code> with this chance step. The results:</p>
+<ul>
+<li><strong>Agreement where it matters.</strong> <code>Agrees</code>
+(same scope, same probability potential, same weighted utility
+<code>φψ</code>) is preserved by every chance step
+(<code>agrees_chanceStep</code>) and, given the exact bucket guard,
+every decision step (<code>agrees_decisionStep</code>). The guard holds
+on every row (<code>all_guards_complete</code>), so the model’s and
+Julia’s runs agree valuation by valuation on any plan
+(<code>runRep_agrees</code>). Hence the probability potentials and
+masses are identical, the utilities differ only where the probability is
+zero, and the value is the same.</li>
+<li><strong>Realized optimality.</strong>
+<code>solveRepPlanWith_spec</code>: for every selector, every
+<code>keep</code> and every plan, the returned deterministic strategy
+realizes the reported value, which is the global optimum.</li>
+<li><strong>Positive-reach tables.</strong>
+<code>solveRepPlanScore_eq</code> /
+<code>solveRepPlanWith_kernel_eq</code>: on every row of positive reach
+the decision scores, hence the policy entries of any selector, equal the
+model’s. So Julia’s representative cannot change a returned table entry
+on a reachable row; with <code>Selector.ordered</code> the entry is the
+least maximizer of <code>optimalContinuation</code>
+(<code>solveRepPlanOrdered_optimal</code>).</li>
+<li><strong>Every row.</strong> <code>solveRepPlanOrdered_table</code>:
+the ordered solver’s policy is exactly <code>orderedTable</code> of its
+own score <code>solveRepPlanScore</code> on every information row,
+reachable or not. On zero-reach rows that score may differ from the
+model’s; the table is still a function of the score, so it is determined
+by the data and the elimination plan.</li>
+</ul>
+<p>Evidence: these theorems cover the no-evidence driver on any plan.
+Julia’s hard-evidence path (sliced factors, absent variables skipped:
+<code>runSkipWith</code>) combined with this representative is not
+modelled here.</p>
+<div class="sourceCode" id="cb65"><pre
+class="sourceCode lean"><code class="sourceCode lean"><span id="cb65-1"><a href="#cb65-1" aria-hidden="true" tabindex="-1"></a><span class="kw">set_option</span> autoImplicit false</span>
+<span id="cb65-2"><a href="#cb65-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb65-3"><a href="#cb65-3" aria-hidden="true" tabindex="-1"></a><span class="kw">namespace</span> InfluenceDiagramsProofs.DVE</span>
+<span id="cb65-4"><a href="#cb65-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb65-5"><a href="#cb65-5" aria-hidden="true" tabindex="-1"></a><span class="kw">open</span> BayesianNetworksProofs BayesianNetworksProofs.FinBayesNet FinInfluenceDiagram Valuation</span>
+<span id="cb65-6"><a href="#cb65-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb65-7"><a href="#cb65-7" aria-hidden="true" tabindex="-1"></a><span class="kw">noncomputable</span> <span class="kw">section</span></span></code></pre></div>
+<h2 id="julias-sum-out">Julia’s sum-out</h2>
+<div class="sourceCode" id="cb66"><pre
+class="sourceCode lean"><code class="sourceCode lean"><span id="cb66-1"><a href="#cb66-1" aria-hidden="true" tabindex="-1"></a><span class="kw">namespace</span> Valuation</span>
+<span id="cb66-2"><a href="#cb66-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb66-3"><a href="#cb66-3" aria-hidden="true" tabindex="-1"></a><span class="kw">variable</span> {bn : FinBayesNet}</span>
+<span id="cb66-4"><a href="#cb66-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb66-5"><a href="#cb66-5" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> ext&#39; {v w : Valuation bn} (hs : v.scope = w.scope) (hp : v.prob = w.prob)</span>
+<span id="cb66-6"><a href="#cb66-6" aria-hidden="true" tabindex="-1"></a>    (hu : v.util = w.util) : v = w := <span class="kw">by</span></span>
+<span id="cb66-7"><a href="#cb66-7" aria-hidden="true" tabindex="-1"></a>  <span class="cf">cases</span> v</span>
+<span id="cb66-8"><a href="#cb66-8" aria-hidden="true" tabindex="-1"></a>  <span class="cf">cases</span> w</span>
+<span id="cb66-9"><a href="#cb66-9" aria-hidden="true" tabindex="-1"></a>  <span class="cf">cases</span> hs</span>
+<span id="cb66-10"><a href="#cb66-10" aria-hidden="true" tabindex="-1"></a>  <span class="cf">cases</span> hp</span>
+<span id="cb66-11"><a href="#cb66-11" aria-hidden="true" tabindex="-1"></a>  <span class="cf">cases</span> hu</span>
+<span id="cb66-12"><a href="#cb66-12" aria-hidden="true" tabindex="-1"></a>  <span class="cf">rfl</span></span>
+<span id="cb66-13"><a href="#cb66-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb66-14"><a href="#cb66-14" aria-hidden="true" tabindex="-1"></a><span class="do">/-- Sum-elimination with the utility representative chosen by `keep`. Where the summed</span></span>
+<span id="cb66-15"><a href="#cb66-15" aria-hidden="true" tabindex="-1"></a><span class="do">probability is positive the stored utility is the model&#39;s ratio. Where it is zero, `keep = false`</span></span>
+<span id="cb66-16"><a href="#cb66-16" aria-hidden="true" tabindex="-1"></a><span class="do">stores `0` (the model) and `keep = true` stores the bucket utility read at a fixed state of</span></span>
+<span id="cb66-17"><a href="#cb66-17" aria-hidden="true" tabindex="-1"></a><span class="do">`a` (Julia&#39;s `ψ′ = ψ` when `ψ` does not mention `a`). -/</span></span>
+<span id="cb66-18"><a href="#cb66-18" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> sumOutKeep (keep : Bool) (a : bn.V) (v : Valuation bn) : Valuation bn <span class="kw">where</span></span>
+<span id="cb66-19"><a href="#cb66-19" aria-hidden="true" tabindex="-1"></a>  scope := v.scope.erase a</span>
+<span id="cb66-20"><a href="#cb66-20" aria-hidden="true" tabindex="-1"></a>  prob := (sumOut a v).prob</span>
+<span id="cb66-21"><a href="#cb66-21" aria-hidden="true" tabindex="-1"></a>  util x := <span class="kw">if</span> keep = true ∧ (sumOut a v).prob x = <span class="dv">0</span> <span class="kw">then</span></span>
+<span id="cb66-22"><a href="#cb66-22" aria-hidden="true" tabindex="-1"></a>      v.util (Function.update x a (Classical.choice (bn.nonemptyS a)))</span>
+<span id="cb66-23"><a href="#cb66-23" aria-hidden="true" tabindex="-1"></a>    <span class="kw">else</span> (sumOut a v).util x</span>
+<span id="cb66-24"><a href="#cb66-24" aria-hidden="true" tabindex="-1"></a>  prob_local := (sumOut a v).prob_local</span>
+<span id="cb66-25"><a href="#cb66-25" aria-hidden="true" tabindex="-1"></a>  util_local x y h := <span class="kw">by</span></span>
+<span id="cb66-26"><a href="#cb66-26" aria-hidden="true" tabindex="-1"></a>    <span class="kw">have</span> hp : (sumOut a v).prob x = (sumOut a v).prob y := (sumOut a v).prob_local x y h</span>
+<span id="cb66-27"><a href="#cb66-27" aria-hidden="true" tabindex="-1"></a>    <span class="kw">have</span> hu : v.util (Function.update x a (Classical.choice (bn.nonemptyS a))) =</span>
+<span id="cb66-28"><a href="#cb66-28" aria-hidden="true" tabindex="-1"></a>        v.util (Function.update y a (Classical.choice (bn.nonemptyS a))) :=</span>
+<span id="cb66-29"><a href="#cb66-29" aria-hidden="true" tabindex="-1"></a>      v.util_local _ _ (update_agree h _)</span>
+<span id="cb66-30"><a href="#cb66-30" aria-hidden="true" tabindex="-1"></a>    <span class="kw">have</span> hr : (sumOut a v).util x = (sumOut a v).util y := (sumOut a v).util_local x y h</span>
+<span id="cb66-31"><a href="#cb66-31" aria-hidden="true" tabindex="-1"></a>    <span class="cf">simp</span> only [hp, hu, hr]</span>
+<span id="cb66-32"><a href="#cb66-32" aria-hidden="true" tabindex="-1"></a>  nonneg := (sumOut a v).nonneg</span>
+<span id="cb66-33"><a href="#cb66-33" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb66-34"><a href="#cb66-34" aria-hidden="true" tabindex="-1"></a><span class="do">/-- The model is the `keep = false` instance. -/</span></span>
+<span id="cb66-35"><a href="#cb66-35" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> sumOutKeep_false (a : bn.V) (v : Valuation bn) : sumOutKeep false a v = sumOut a v :=</span>
+<span id="cb66-36"><a href="#cb66-36" aria-hidden="true" tabindex="-1"></a>  ext&#39; <span class="cf">rfl</span> <span class="cf">rfl</span> (<span class="cf">funext</span> <span class="kw">fun</span> x =&gt; <span class="kw">by</span> <span class="cf">simp</span> [sumOutKeep])</span>
+<span id="cb66-37"><a href="#cb66-37" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb66-38"><a href="#cb66-38" aria-hidden="true" tabindex="-1"></a><span class="do">/-- **Julia&#39;s branch.** If the bucket utility does not depend on the summed variable, the</span></span>
+<span id="cb66-39"><a href="#cb66-39" aria-hidden="true" tabindex="-1"></a><span class="do">`keep = true` representative is that utility on every row, zero-probability rows included:</span></span>
+<span id="cb66-40"><a href="#cb66-40" aria-hidden="true" tabindex="-1"></a><span class="do">Julia&#39;s `ψ′ = v.ψ`. -/</span></span>
+<span id="cb66-41"><a href="#cb66-41" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> sumOutKeep_util_of_const (a : bn.V) (v : Valuation bn)</span>
+<span id="cb66-42"><a href="#cb66-42" aria-hidden="true" tabindex="-1"></a>    (hc : ∀ x b, v.util (Function.update x a b) = v.util x) (x : bn.Assignment) :</span>
+<span id="cb66-43"><a href="#cb66-43" aria-hidden="true" tabindex="-1"></a>    (sumOutKeep true a v).util x = v.util x := <span class="kw">by</span></span>
+<span id="cb66-44"><a href="#cb66-44" aria-hidden="true" tabindex="-1"></a>  change (<span class="kw">if</span> true = true ∧ (sumOut a v).prob x = <span class="dv">0</span> <span class="kw">then</span></span>
+<span id="cb66-45"><a href="#cb66-45" aria-hidden="true" tabindex="-1"></a>      v.util (Function.update x a (Classical.choice (bn.nonemptyS a)))</span>
+<span id="cb66-46"><a href="#cb66-46" aria-hidden="true" tabindex="-1"></a>    <span class="kw">else</span> (sumOut a v).util x) = v.util x</span>
+<span id="cb66-47"><a href="#cb66-47" aria-hidden="true" tabindex="-1"></a>  <span class="cf">by_cases</span> hz : (sumOut a v).prob x = <span class="dv">0</span></span>
+<span id="cb66-48"><a href="#cb66-48" aria-hidden="true" tabindex="-1"></a>  · <span class="cf">rw</span> [if_pos ⟨rfl, hz⟩, hc]</span>
+<span id="cb66-49"><a href="#cb66-49" aria-hidden="true" tabindex="-1"></a>  · <span class="cf">rw</span> [if_neg (<span class="kw">fun</span> h =&gt; hz h<span class="fl">.2</span>)]</span>
+<span id="cb66-50"><a href="#cb66-50" aria-hidden="true" tabindex="-1"></a>    change ratio (∑ b, v.weight (Function.update x a b))</span>
+<span id="cb66-51"><a href="#cb66-51" aria-hidden="true" tabindex="-1"></a>      (∑ b, v.prob (Function.update x a b)) = v.util x</span>
+<span id="cb66-52"><a href="#cb66-52" aria-hidden="true" tabindex="-1"></a>    <span class="kw">have</span> hz&#39; : ∑ b, v.prob (Function.update x a b) ≠ <span class="dv">0</span> := hz</span>
+<span id="cb66-53"><a href="#cb66-53" aria-hidden="true" tabindex="-1"></a>    <span class="kw">have</span> hs : ∑ b, v.weight (Function.update x a b) =</span>
+<span id="cb66-54"><a href="#cb66-54" aria-hidden="true" tabindex="-1"></a>        (∑ b, v.prob (Function.update x a b)) * v.util x := <span class="kw">by</span></span>
+<span id="cb66-55"><a href="#cb66-55" aria-hidden="true" tabindex="-1"></a>      <span class="cf">rw</span> [Finset.sum_mul]</span>
+<span id="cb66-56"><a href="#cb66-56" aria-hidden="true" tabindex="-1"></a>      <span class="cf">exact</span> Finset.sum_congr <span class="cf">rfl</span> <span class="kw">fun</span> b _ =&gt; <span class="kw">by</span> <span class="cf">rw</span> [weight, hc]</span>
+<span id="cb66-57"><a href="#cb66-57" aria-hidden="true" tabindex="-1"></a>    <span class="cf">rw</span> [ratio, if_neg hz&#39;, hs, mul_div_cancel_left₀ _ hz&#39;]</span>
+<span id="cb66-58"><a href="#cb66-58" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb66-59"><a href="#cb66-59" aria-hidden="true" tabindex="-1"></a><span class="do">/-- The weighted utility of either representative is the summed weighted utility, on every</span></span>
+<span id="cb66-60"><a href="#cb66-60" aria-hidden="true" tabindex="-1"></a><span class="do">row. -/</span></span>
+<span id="cb66-61"><a href="#cb66-61" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> sumOutKeep_weight (keep : Bool) (a : bn.V) (v : Valuation bn) (x : bn.Assignment) :</span>
+<span id="cb66-62"><a href="#cb66-62" aria-hidden="true" tabindex="-1"></a>    (sumOutKeep keep a v).weight x = ∑ b, v.weight (Function.update x a b) := <span class="kw">by</span></span>
+<span id="cb66-63"><a href="#cb66-63" aria-hidden="true" tabindex="-1"></a>  <span class="cf">rw</span> [← sumOut_weight]</span>
+<span id="cb66-64"><a href="#cb66-64" aria-hidden="true" tabindex="-1"></a>  change (sumOut a v).prob x * (<span class="kw">if</span> keep = true ∧ (sumOut a v).prob x = <span class="dv">0</span> <span class="kw">then</span></span>
+<span id="cb66-65"><a href="#cb66-65" aria-hidden="true" tabindex="-1"></a>      v.util (Function.update x a (Classical.choice (bn.nonemptyS a)))</span>
+<span id="cb66-66"><a href="#cb66-66" aria-hidden="true" tabindex="-1"></a>    <span class="kw">else</span> (sumOut a v).util x) = (sumOut a v).prob x * (sumOut a v).util x</span>
+<span id="cb66-67"><a href="#cb66-67" aria-hidden="true" tabindex="-1"></a>  <span class="cf">split_ifs</span> <span class="kw">with</span> h</span>
+<span id="cb66-68"><a href="#cb66-68" aria-hidden="true" tabindex="-1"></a>  · <span class="cf">rw</span> [h<span class="fl">.2</span>, zero_mul, zero_mul]</span>
+<span id="cb66-69"><a href="#cb66-69" aria-hidden="true" tabindex="-1"></a>  · <span class="cf">rfl</span></span>
+<span id="cb66-70"><a href="#cb66-70" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb66-71"><a href="#cb66-71" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> chanceStepKeep (keep : Bool) (a : bn.V) (vs : List (Valuation bn)) : List (Valuation bn) :=</span>
+<span id="cb66-72"><a href="#cb66-72" aria-hidden="true" tabindex="-1"></a>  sumOutKeep keep a (collect (bucket a vs)) :: outside a vs</span></code></pre></div>
+<h2 id="agreement-of-probabilities-and-weighted-utilities">Agreement of
+probabilities and weighted utilities</h2>
+<div class="sourceCode" id="cb67"><pre
+class="sourceCode lean"><code class="sourceCode lean"><span id="cb67-1"><a href="#cb67-1" aria-hidden="true" tabindex="-1"></a><span class="do">/-- Two valuations with the same scope, probability potential and weighted utility. Their</span></span>
+<span id="cb67-2"><a href="#cb67-2" aria-hidden="true" tabindex="-1"></a><span class="do">utilities agree wherever the probability is nonzero (`Agrees.util_eq`). -/</span></span>
+<span id="cb67-3"><a href="#cb67-3" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> Agrees (v w : Valuation bn) : <span class="kw">Prop</span> :=</span>
+<span id="cb67-4"><a href="#cb67-4" aria-hidden="true" tabindex="-1"></a>  v.scope = w.scope ∧ v.prob = w.prob ∧ v.weight = w.weight</span>
+<span id="cb67-5"><a href="#cb67-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb67-6"><a href="#cb67-6" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> Agrees.refl (v : Valuation bn) : Agrees v v := ⟨rfl, <span class="cf">rfl</span>, rfl⟩</span>
+<span id="cb67-7"><a href="#cb67-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb67-8"><a href="#cb67-8" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> Agrees.util_eq {v w : Valuation bn} (h : Agrees v w) {x : bn.Assignment}</span>
+<span id="cb67-9"><a href="#cb67-9" aria-hidden="true" tabindex="-1"></a>    (hx : v.prob x ≠ <span class="dv">0</span>) : v.util x = w.util x := <span class="kw">by</span></span>
+<span id="cb67-10"><a href="#cb67-10" aria-hidden="true" tabindex="-1"></a>  <span class="kw">have</span> hw := congrFun h.<span class="fl">2.2</span> x</span>
+<span id="cb67-11"><a href="#cb67-11" aria-hidden="true" tabindex="-1"></a>  <span class="kw">have</span> hp := congrFun h.<span class="fl">2.1</span> x</span>
+<span id="cb67-12"><a href="#cb67-12" aria-hidden="true" tabindex="-1"></a>  <span class="cf">unfold</span> weight <span class="kw">at</span> hw</span>
+<span id="cb67-13"><a href="#cb67-13" aria-hidden="true" tabindex="-1"></a>  <span class="cf">rw</span> [← hp] <span class="kw">at</span> hw</span>
+<span id="cb67-14"><a href="#cb67-14" aria-hidden="true" tabindex="-1"></a>  <span class="cf">exact</span> mul_left_cancel₀ hx hw</span>
+<span id="cb67-15"><a href="#cb67-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb67-16"><a href="#cb67-16" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> agrees_refl_list (vs : List (Valuation bn)) : List.Forall₂ Agrees vs vs :=</span>
+<span id="cb67-17"><a href="#cb67-17" aria-hidden="true" tabindex="-1"></a>  List.forall₂_same<span class="fl">.2</span> <span class="kw">fun</span> v _ =&gt; Agrees.refl v</span>
+<span id="cb67-18"><a href="#cb67-18" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb67-19"><a href="#cb67-19" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> agrees_filter {vs ws : List (Valuation bn)} (h : List.Forall₂ Agrees vs ws)</span>
+<span id="cb67-20"><a href="#cb67-20" aria-hidden="true" tabindex="-1"></a>    (p : Finset bn.V → Bool) :</span>
+<span id="cb67-21"><a href="#cb67-21" aria-hidden="true" tabindex="-1"></a>    List.Forall₂ Agrees (vs.filter <span class="kw">fun</span> v =&gt; p v.scope) (ws.filter <span class="kw">fun</span> w =&gt; p w.scope) := <span class="kw">by</span></span>
+<span id="cb67-22"><a href="#cb67-22" aria-hidden="true" tabindex="-1"></a>  <span class="cf">induction</span> h <span class="kw">with</span></span>
+<span id="cb67-23"><a href="#cb67-23" aria-hidden="true" tabindex="-1"></a>  | nil =&gt; <span class="cf">exact</span> List.Forall₂.nil</span>
+<span id="cb67-24"><a href="#cb67-24" aria-hidden="true" tabindex="-1"></a>  | @cons v w vs ws hvw _ ih =&gt;</span>
+<span id="cb67-25"><a href="#cb67-25" aria-hidden="true" tabindex="-1"></a>    <span class="cf">rw</span> [List.filter_cons, List.filter_cons, hvw<span class="fl">.1</span>]</span>
+<span id="cb67-26"><a href="#cb67-26" aria-hidden="true" tabindex="-1"></a>    split</span>
+<span id="cb67-27"><a href="#cb67-27" aria-hidden="true" tabindex="-1"></a>    · <span class="cf">exact</span> List.Forall₂.cons hvw ih</span>
+<span id="cb67-28"><a href="#cb67-28" aria-hidden="true" tabindex="-1"></a>    · <span class="cf">exact</span> ih</span>
+<span id="cb67-29"><a href="#cb67-29" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb67-30"><a href="#cb67-30" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> agrees_bucket {vs ws : List (Valuation bn)} (h : List.Forall₂ Agrees vs ws) (a : bn.V) :</span>
+<span id="cb67-31"><a href="#cb67-31" aria-hidden="true" tabindex="-1"></a>    List.Forall₂ Agrees (bucket a vs) (bucket a ws) :=</span>
+<span id="cb67-32"><a href="#cb67-32" aria-hidden="true" tabindex="-1"></a>  agrees_filter h <span class="kw">fun</span> S =&gt; <span class="cf">decide</span> (a ∈ S)</span>
+<span id="cb67-33"><a href="#cb67-33" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb67-34"><a href="#cb67-34" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> agrees_outside {vs ws : List (Valuation bn)} (h : List.Forall₂ Agrees vs ws) (a : bn.V) :</span>
+<span id="cb67-35"><a href="#cb67-35" aria-hidden="true" tabindex="-1"></a>    List.Forall₂ Agrees (outside a vs) (outside a ws) :=</span>
+<span id="cb67-36"><a href="#cb67-36" aria-hidden="true" tabindex="-1"></a>  agrees_filter h <span class="kw">fun</span> S =&gt; <span class="cf">decide</span> (a ∉ S)</span>
+<span id="cb67-37"><a href="#cb67-37" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb67-38"><a href="#cb67-38" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> agrees_collect {vs ws : List (Valuation bn)} (h : List.Forall₂ Agrees vs ws) :</span>
+<span id="cb67-39"><a href="#cb67-39" aria-hidden="true" tabindex="-1"></a>    Agrees (collect vs) (collect ws) := <span class="kw">by</span></span>
+<span id="cb67-40"><a href="#cb67-40" aria-hidden="true" tabindex="-1"></a>  <span class="cf">induction</span> h <span class="kw">with</span></span>
+<span id="cb67-41"><a href="#cb67-41" aria-hidden="true" tabindex="-1"></a>  | nil =&gt; <span class="cf">exact</span> Agrees.refl _</span>
+<span id="cb67-42"><a href="#cb67-42" aria-hidden="true" tabindex="-1"></a>  | @cons v w vs ws hvw _ ih =&gt;</span>
+<span id="cb67-43"><a href="#cb67-43" aria-hidden="true" tabindex="-1"></a>    <span class="cf">refine</span> ⟨?_, ?_, ?_⟩</span>
+<span id="cb67-44"><a href="#cb67-44" aria-hidden="true" tabindex="-1"></a>    · change v.scope ∪ (collect vs).scope = w.scope ∪ (collect ws).scope</span>
+<span id="cb67-45"><a href="#cb67-45" aria-hidden="true" tabindex="-1"></a>      <span class="cf">rw</span> [hvw<span class="fl">.1</span>, ih<span class="fl">.1</span>]</span>
+<span id="cb67-46"><a href="#cb67-46" aria-hidden="true" tabindex="-1"></a>    · <span class="cf">funext</span> x</span>
+<span id="cb67-47"><a href="#cb67-47" aria-hidden="true" tabindex="-1"></a>      change v.prob x * (collect vs).prob x = w.prob x * (collect ws).prob x</span>
+<span id="cb67-48"><a href="#cb67-48" aria-hidden="true" tabindex="-1"></a>      <span class="cf">rw</span> [congrFun hvw.<span class="fl">2.1</span> x, congrFun ih.<span class="fl">2.1</span> x]</span>
+<span id="cb67-49"><a href="#cb67-49" aria-hidden="true" tabindex="-1"></a>    · <span class="cf">funext</span> x</span>
+<span id="cb67-50"><a href="#cb67-50" aria-hidden="true" tabindex="-1"></a>      <span class="kw">have</span> e1 := congrFun hvw.<span class="fl">2.2</span> x</span>
+<span id="cb67-51"><a href="#cb67-51" aria-hidden="true" tabindex="-1"></a>      <span class="kw">have</span> e2 := congrFun ih.<span class="fl">2.2</span> x</span>
+<span id="cb67-52"><a href="#cb67-52" aria-hidden="true" tabindex="-1"></a>      <span class="kw">have</span> p1 := congrFun hvw.<span class="fl">2.1</span> x</span>
+<span id="cb67-53"><a href="#cb67-53" aria-hidden="true" tabindex="-1"></a>      <span class="kw">have</span> p2 := congrFun ih.<span class="fl">2.1</span> x</span>
+<span id="cb67-54"><a href="#cb67-54" aria-hidden="true" tabindex="-1"></a>      <span class="cf">unfold</span> weight <span class="kw">at</span> e1 e2</span>
+<span id="cb67-55"><a href="#cb67-55" aria-hidden="true" tabindex="-1"></a>      change (v.prob x * (collect vs).prob x) * (v.util x + (collect vs).util x) =</span>
+<span id="cb67-56"><a href="#cb67-56" aria-hidden="true" tabindex="-1"></a>        (w.prob x * (collect ws).prob x) * (w.util x + (collect ws).util x)</span>
+<span id="cb67-57"><a href="#cb67-57" aria-hidden="true" tabindex="-1"></a>      <span class="kw">calc</span></span>
+<span id="cb67-58"><a href="#cb67-58" aria-hidden="true" tabindex="-1"></a>        _ = (collect vs).prob x * (v.prob x * v.util x) +</span>
+<span id="cb67-59"><a href="#cb67-59" aria-hidden="true" tabindex="-1"></a>            v.prob x * ((collect vs).prob x * (collect vs).util x) := <span class="kw">by</span> <span class="cf">ring</span></span>
+<span id="cb67-60"><a href="#cb67-60" aria-hidden="true" tabindex="-1"></a>        _ = (collect ws).prob x * (w.prob x * w.util x) +</span>
+<span id="cb67-61"><a href="#cb67-61" aria-hidden="true" tabindex="-1"></a>            w.prob x * ((collect ws).prob x * (collect ws).util x) := <span class="kw">by</span> <span class="cf">rw</span> [e1, e2, p1, p2]</span>
+<span id="cb67-62"><a href="#cb67-62" aria-hidden="true" tabindex="-1"></a>        _ = _ := <span class="kw">by</span> <span class="cf">ring</span></span>
+<span id="cb67-63"><a href="#cb67-63" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb67-64"><a href="#cb67-64" aria-hidden="true" tabindex="-1"></a><span class="do">/-- The model&#39;s sum-out and either representative agree. -/</span></span>
+<span id="cb67-65"><a href="#cb67-65" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> agrees_sumOut {v w : Valuation bn} (h : Agrees v w) (keep : Bool) (a : bn.V) :</span>
+<span id="cb67-66"><a href="#cb67-66" aria-hidden="true" tabindex="-1"></a>    Agrees (sumOut a v) (sumOutKeep keep a w) := <span class="kw">by</span></span>
+<span id="cb67-67"><a href="#cb67-67" aria-hidden="true" tabindex="-1"></a>  <span class="cf">refine</span> ⟨?_, ?_, ?_⟩</span>
+<span id="cb67-68"><a href="#cb67-68" aria-hidden="true" tabindex="-1"></a>  · change v.scope.erase a = w.scope.erase a</span>
+<span id="cb67-69"><a href="#cb67-69" aria-hidden="true" tabindex="-1"></a>    <span class="cf">rw</span> [h<span class="fl">.1</span>]</span>
+<span id="cb67-70"><a href="#cb67-70" aria-hidden="true" tabindex="-1"></a>  · <span class="cf">funext</span> x</span>
+<span id="cb67-71"><a href="#cb67-71" aria-hidden="true" tabindex="-1"></a>    change ∑ b, v.prob (Function.update x a b) = ∑ b, w.prob (Function.update x a b)</span>
+<span id="cb67-72"><a href="#cb67-72" aria-hidden="true" tabindex="-1"></a>    <span class="cf">rw</span> [h.<span class="fl">2.1</span>]</span>
+<span id="cb67-73"><a href="#cb67-73" aria-hidden="true" tabindex="-1"></a>  · <span class="cf">funext</span> x</span>
+<span id="cb67-74"><a href="#cb67-74" aria-hidden="true" tabindex="-1"></a>    <span class="cf">rw</span> [sumOut_weight, sumOutKeep_weight, h.<span class="fl">2.2</span>]</span>
+<span id="cb67-75"><a href="#cb67-75" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb67-76"><a href="#cb67-76" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> agrees_maxOut {v w : Valuation bn} (h : Agrees v w) (a : bn.V)</span>
+<span id="cb67-77"><a href="#cb67-77" aria-hidden="true" tabindex="-1"></a>    (hc : ∀ x b, v.prob (Function.update x a b) = v.prob x) :</span>
+<span id="cb67-78"><a href="#cb67-78" aria-hidden="true" tabindex="-1"></a>    Agrees (maxOut a v) (maxOut a w) := <span class="kw">by</span></span>
+<span id="cb67-79"><a href="#cb67-79" aria-hidden="true" tabindex="-1"></a>  <span class="kw">have</span> hpc : ∀ x, probabilityChoice a v x = probabilityChoice a w x := <span class="kw">by</span></span>
+<span id="cb67-80"><a href="#cb67-80" aria-hidden="true" tabindex="-1"></a>    <span class="cf">intro</span> x</span>
+<span id="cb67-81"><a href="#cb67-81" aria-hidden="true" tabindex="-1"></a>    <span class="cf">unfold</span> probabilityChoice</span>
+<span id="cb67-82"><a href="#cb67-82" aria-hidden="true" tabindex="-1"></a>    <span class="cf">rw</span> [h.<span class="fl">2.1</span>]</span>
+<span id="cb67-83"><a href="#cb67-83" aria-hidden="true" tabindex="-1"></a>  <span class="cf">refine</span> ⟨?_, ?_, ?_⟩</span>
+<span id="cb67-84"><a href="#cb67-84" aria-hidden="true" tabindex="-1"></a>  · change v.scope.erase a = w.scope.erase a</span>
+<span id="cb67-85"><a href="#cb67-85" aria-hidden="true" tabindex="-1"></a>    <span class="cf">rw</span> [h<span class="fl">.1</span>]</span>
+<span id="cb67-86"><a href="#cb67-86" aria-hidden="true" tabindex="-1"></a>  · <span class="cf">funext</span> x</span>
+<span id="cb67-87"><a href="#cb67-87" aria-hidden="true" tabindex="-1"></a>    change v.prob (Function.update x a (probabilityChoice a v x)) =</span>
+<span id="cb67-88"><a href="#cb67-88" aria-hidden="true" tabindex="-1"></a>      w.prob (Function.update x a (probabilityChoice a w x))</span>
+<span id="cb67-89"><a href="#cb67-89" aria-hidden="true" tabindex="-1"></a>    <span class="cf">rw</span> [hpc, h.<span class="fl">2.1</span>]</span>
+<span id="cb67-90"><a href="#cb67-90" aria-hidden="true" tabindex="-1"></a>  · <span class="cf">funext</span> x</span>
+<span id="cb67-91"><a href="#cb67-91" aria-hidden="true" tabindex="-1"></a>    change v.prob (Function.update x a (probabilityChoice a v x)) *</span>
+<span id="cb67-92"><a href="#cb67-92" aria-hidden="true" tabindex="-1"></a>        v.util (Function.update x a (choice a v x)) =</span>
+<span id="cb67-93"><a href="#cb67-93" aria-hidden="true" tabindex="-1"></a>      w.prob (Function.update x a (probabilityChoice a w x)) *</span>
+<span id="cb67-94"><a href="#cb67-94" aria-hidden="true" tabindex="-1"></a>        w.util (Function.update x a (choice a w x))</span>
+<span id="cb67-95"><a href="#cb67-95" aria-hidden="true" tabindex="-1"></a>    <span class="cf">rw</span> [← hpc, ← h.<span class="fl">2.1</span>, hc]</span>
+<span id="cb67-96"><a href="#cb67-96" aria-hidden="true" tabindex="-1"></a>    <span class="cf">by_cases</span> hz : v.prob x = <span class="dv">0</span></span>
+<span id="cb67-97"><a href="#cb67-97" aria-hidden="true" tabindex="-1"></a>    · <span class="cf">rw</span> [hz, zero_mul, zero_mul]</span>
+<span id="cb67-98"><a href="#cb67-98" aria-hidden="true" tabindex="-1"></a>    · <span class="kw">have</span> hu : ∀ b, v.util (Function.update x a b) = w.util (Function.update x a b) :=</span>
+<span id="cb67-99"><a href="#cb67-99" aria-hidden="true" tabindex="-1"></a>        <span class="kw">fun</span> b =&gt; h.util_eq (<span class="kw">by</span> <span class="cf">rw</span> [hc]; <span class="cf">exact</span> hz)</span>
+<span id="cb67-100"><a href="#cb67-100" aria-hidden="true" tabindex="-1"></a>      <span class="kw">have</span> hch : choice a v x = choice a w x := <span class="kw">by</span></span>
+<span id="cb67-101"><a href="#cb67-101" aria-hidden="true" tabindex="-1"></a>        <span class="cf">unfold</span> choice</span>
+<span id="cb67-102"><a href="#cb67-102" aria-hidden="true" tabindex="-1"></a>        <span class="cf">congr</span> <span class="dv">1</span></span>
+<span id="cb67-103"><a href="#cb67-103" aria-hidden="true" tabindex="-1"></a>        <span class="cf">funext</span> b</span>
+<span id="cb67-104"><a href="#cb67-104" aria-hidden="true" tabindex="-1"></a>        <span class="cf">exact</span> hu b</span>
+<span id="cb67-105"><a href="#cb67-105" aria-hidden="true" tabindex="-1"></a>      <span class="cf">rw</span> [hch, hu]</span>
+<span id="cb67-106"><a href="#cb67-106" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb67-107"><a href="#cb67-107" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> agrees_chanceStep {vs ws : List (Valuation bn)} (h : List.Forall₂ Agrees vs ws)</span>
+<span id="cb67-108"><a href="#cb67-108" aria-hidden="true" tabindex="-1"></a>    (keep : Bool) (a : bn.V) :</span>
+<span id="cb67-109"><a href="#cb67-109" aria-hidden="true" tabindex="-1"></a>    List.Forall₂ Agrees (chanceStep a vs) (chanceStepKeep keep a ws) :=</span>
+<span id="cb67-110"><a href="#cb67-110" aria-hidden="true" tabindex="-1"></a>  List.Forall₂.cons (agrees_sumOut (agrees_collect (agrees_bucket h a)) keep a)</span>
+<span id="cb67-111"><a href="#cb67-111" aria-hidden="true" tabindex="-1"></a>    (agrees_outside h a)</span>
+<span id="cb67-112"><a href="#cb67-112" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb67-113"><a href="#cb67-113" aria-hidden="true" tabindex="-1"></a><span class="do">/-- A decision step preserves agreement when the bucket probability does not depend on the</span></span>
+<span id="cb67-114"><a href="#cb67-114" aria-hidden="true" tabindex="-1"></a><span class="do">action on any row: the exact all-row guard. -/</span></span>
+<span id="cb67-115"><a href="#cb67-115" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> agrees_decisionStep {vs ws : List (Valuation bn)} (h : List.Forall₂ Agrees vs ws)</span>
+<span id="cb67-116"><a href="#cb67-116" aria-hidden="true" tabindex="-1"></a>    (a : bn.V)</span>
+<span id="cb67-117"><a href="#cb67-117" aria-hidden="true" tabindex="-1"></a>    (hc : ∀ x b, (collect (bucket a vs)).prob (Function.update x a b) =</span>
+<span id="cb67-118"><a href="#cb67-118" aria-hidden="true" tabindex="-1"></a>      (collect (bucket a vs)).prob x) :</span>
+<span id="cb67-119"><a href="#cb67-119" aria-hidden="true" tabindex="-1"></a>    List.Forall₂ Agrees (decisionStep a vs) (decisionStep a ws) :=</span>
+<span id="cb67-120"><a href="#cb67-120" aria-hidden="true" tabindex="-1"></a>  List.Forall₂.cons (agrees_maxOut (agrees_collect (agrees_bucket h a)) a hc)</span>
+<span id="cb67-121"><a href="#cb67-121" aria-hidden="true" tabindex="-1"></a>    (agrees_outside h a)</span>
+<span id="cb67-122"><a href="#cb67-122" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb67-123"><a href="#cb67-123" aria-hidden="true" tabindex="-1"></a><span class="do">/-- The two chance steps have the same probability potential and weighted utility. -/</span></span>
+<span id="cb67-124"><a href="#cb67-124" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> chanceStepKeep_collect (keep : Bool) (a : bn.V) (vs : List (Valuation bn)) :</span>
+<span id="cb67-125"><a href="#cb67-125" aria-hidden="true" tabindex="-1"></a>    (collect (chanceStepKeep keep a vs)).prob = (collect (chanceStep a vs)).prob ∧</span>
+<span id="cb67-126"><a href="#cb67-126" aria-hidden="true" tabindex="-1"></a>      (collect (chanceStepKeep keep a vs)).weight = (collect (chanceStep a vs)).weight := <span class="kw">by</span></span>
+<span id="cb67-127"><a href="#cb67-127" aria-hidden="true" tabindex="-1"></a>  <span class="kw">have</span> h := agrees_collect (agrees_chanceStep (agrees_refl_list vs) keep a)</span>
+<span id="cb67-128"><a href="#cb67-128" aria-hidden="true" tabindex="-1"></a>  <span class="cf">exact</span> ⟨h.<span class="dv">2</span>.<span class="fl">1.</span>symm, h.<span class="dv">2</span>.<span class="fl">2.</span>symm⟩</span>
+<span id="cb67-129"><a href="#cb67-129" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb67-130"><a href="#cb67-130" aria-hidden="true" tabindex="-1"></a><span class="kw">end</span> Valuation</span>
+<span id="cb67-131"><a href="#cb67-131" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb67-132"><a href="#cb67-132" aria-hidden="true" tabindex="-1"></a><span class="kw">variable</span> {id : FinInfluenceDiagram}</span></code></pre></div>
+<h2 id="the-driver-with-julias-chance-step">The driver with Julia’s
+chance step</h2>
+<div class="sourceCode" id="cb68"><pre
+class="sourceCode lean"><code class="sourceCode lean"><span id="cb68-1"><a href="#cb68-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> State.chanceKeep {R : Finset id.V} (keep : id.V → Bool) (v : id.V) (s : State id R) :</span>
+<span id="cb68-2"><a href="#cb68-2" aria-hidden="true" tabindex="-1"></a>    State id (R.erase v) <span class="kw">where</span></span>
+<span id="cb68-3"><a href="#cb68-3" aria-hidden="true" tabindex="-1"></a>  valuations := chanceStepKeep (keep v) v s.valuations</span>
+<span id="cb68-4"><a href="#cb68-4" aria-hidden="true" tabindex="-1"></a>  supported := (step_scope v s.valuations (sumOutKeep (keep v) v) (<span class="kw">fun</span> _ =&gt; <span class="cf">rfl</span>)).trans</span>
+<span id="cb68-5"><a href="#cb68-5" aria-hidden="true" tabindex="-1"></a>    (Finset.erase_subset_erase v s.supported)</span>
+<span id="cb68-6"><a href="#cb68-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb68-7"><a href="#cb68-7" aria-hidden="true" tabindex="-1"></a><span class="do">/-- The bucket driver of `runWith` with the chance step `sumOutKeep (keep v)`. -/</span></span>
+<span id="cb68-8"><a href="#cb68-8" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> runRepWith (sel : Selector id) (keep : id.V → Bool) {R : Finset id.V} (plan : Plan id R)</span>
+<span id="cb68-9"><a href="#cb68-9" aria-hidden="true" tabindex="-1"></a>    (s : State id R) (σ : Strategy id ℝ) : State id ∅ × Strategy id ℝ :=</span>
+<span id="cb68-10"><a href="#cb68-10" aria-hidden="true" tabindex="-1"></a>  <span class="kw">match</span> plan <span class="kw">with</span></span>
+<span id="cb68-11"><a href="#cb68-11" aria-hidden="true" tabindex="-1"></a>  | .done =&gt; (s, σ)</span>
+<span id="cb68-12"><a href="#cb68-12" aria-hidden="true" tabindex="-1"></a>  | .chance v _ _ next =&gt; runRepWith sel keep next (s.chanceKeep keep v) σ</span>
+<span id="cb68-13"><a href="#cb68-13" aria-hidden="true" tabindex="-1"></a>  | .decision d _ hi next =&gt;</span>
+<span id="cb68-14"><a href="#cb68-14" aria-hidden="true" tabindex="-1"></a>    runRepWith sel keep next (s.decision d) (Function.update σ d (s.policyWith sel d hi))</span>
+<span id="cb68-15"><a href="#cb68-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb68-16"><a href="#cb68-16" aria-hidden="true" tabindex="-1"></a><span class="do">/-- The valuations of `runRepWith`; no selector or strategy enters them. -/</span></span>
+<span id="cb68-17"><a href="#cb68-17" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> runRepState (keep : id.V → Bool) {R : Finset id.V} (plan : Plan id R) (s : State id R) :</span>
+<span id="cb68-18"><a href="#cb68-18" aria-hidden="true" tabindex="-1"></a>    State id ∅ :=</span>
+<span id="cb68-19"><a href="#cb68-19" aria-hidden="true" tabindex="-1"></a>  <span class="kw">match</span> plan <span class="kw">with</span></span>
+<span id="cb68-20"><a href="#cb68-20" aria-hidden="true" tabindex="-1"></a>  | .done =&gt; s</span>
+<span id="cb68-21"><a href="#cb68-21" aria-hidden="true" tabindex="-1"></a>  | .chance v _ _ next =&gt; runRepState keep next (s.chanceKeep keep v)</span>
+<span id="cb68-22"><a href="#cb68-22" aria-hidden="true" tabindex="-1"></a>  | .decision d _ _ next =&gt; runRepState keep next (s.decision d)</span>
+<span id="cb68-23"><a href="#cb68-23" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb68-24"><a href="#cb68-24" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> runRepWith_state (sel : Selector id) (keep : id.V → Bool) {R : Finset id.V}</span>
+<span id="cb68-25"><a href="#cb68-25" aria-hidden="true" tabindex="-1"></a>    (plan : Plan id R) (s : State id R) (σ : Strategy id ℝ) :</span>
+<span id="cb68-26"><a href="#cb68-26" aria-hidden="true" tabindex="-1"></a>    (runRepWith sel keep plan s σ).<span class="dv">1</span> = runRepState keep plan s := <span class="kw">by</span></span>
+<span id="cb68-27"><a href="#cb68-27" aria-hidden="true" tabindex="-1"></a>  <span class="cf">induction</span> plan <span class="kw">generalizing</span> σ <span class="kw">with</span></span>
+<span id="cb68-28"><a href="#cb68-28" aria-hidden="true" tabindex="-1"></a>  | done =&gt; <span class="cf">rfl</span></span>
+<span id="cb68-29"><a href="#cb68-29" aria-hidden="true" tabindex="-1"></a>  | chance v _ _ next ih =&gt; <span class="cf">exact</span> ih (s.chanceKeep keep v) σ</span>
+<span id="cb68-30"><a href="#cb68-30" aria-hidden="true" tabindex="-1"></a>  | decision d _ hi next ih =&gt;</span>
+<span id="cb68-31"><a href="#cb68-31" aria-hidden="true" tabindex="-1"></a>    <span class="cf">exact</span> ih (s.decision d) (Function.update σ d (s.policyWith sel d hi))</span>
+<span id="cb68-32"><a href="#cb68-32" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb68-33"><a href="#cb68-33" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> State.chanceKeep_false {R : Finset id.V} (v : id.V) (s : State id R) :</span>
+<span id="cb68-34"><a href="#cb68-34" aria-hidden="true" tabindex="-1"></a>    s.chanceKeep (<span class="kw">fun</span> _ =&gt; false) v = s.chance v := <span class="kw">by</span></span>
+<span id="cb68-35"><a href="#cb68-35" aria-hidden="true" tabindex="-1"></a>  <span class="cf">cases</span> s <span class="kw">with</span></span>
+<span id="cb68-36"><a href="#cb68-36" aria-hidden="true" tabindex="-1"></a>  | mk vs hs =&gt;</span>
+<span id="cb68-37"><a href="#cb68-37" aria-hidden="true" tabindex="-1"></a>    <span class="cf">simp</span> only [State.chanceKeep, State.chance, chanceStepKeep, chanceStep, sumOutKeep_false]</span>
+<span id="cb68-38"><a href="#cb68-38" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb68-39"><a href="#cb68-39" aria-hidden="true" tabindex="-1"></a><span class="do">/-- With `keep = false` everywhere the driver is the model&#39;s `runWith`. -/</span></span>
+<span id="cb68-40"><a href="#cb68-40" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> runRepWith_false (sel : Selector id) {R : Finset id.V} (plan : Plan id R)</span>
+<span id="cb68-41"><a href="#cb68-41" aria-hidden="true" tabindex="-1"></a>    (s : State id R) (σ : Strategy id ℝ) :</span>
+<span id="cb68-42"><a href="#cb68-42" aria-hidden="true" tabindex="-1"></a>    runRepWith sel (<span class="kw">fun</span> _ =&gt; false) plan s σ = runWith sel plan s σ := <span class="kw">by</span></span>
+<span id="cb68-43"><a href="#cb68-43" aria-hidden="true" tabindex="-1"></a>  <span class="cf">induction</span> plan <span class="kw">generalizing</span> σ <span class="kw">with</span></span>
+<span id="cb68-44"><a href="#cb68-44" aria-hidden="true" tabindex="-1"></a>  | done =&gt; <span class="cf">rfl</span></span>
+<span id="cb68-45"><a href="#cb68-45" aria-hidden="true" tabindex="-1"></a>  | chance v _ _ next ih =&gt;</span>
+<span id="cb68-46"><a href="#cb68-46" aria-hidden="true" tabindex="-1"></a>    <span class="kw">show</span> runRepWith sel _ next (s.chanceKeep _ v) σ = runWith sel next (s.chance v) σ</span>
+<span id="cb68-47"><a href="#cb68-47" aria-hidden="true" tabindex="-1"></a>    <span class="cf">rw</span> [State.chanceKeep_false]</span>
+<span id="cb68-48"><a href="#cb68-48" aria-hidden="true" tabindex="-1"></a>    <span class="cf">exact</span> ih (s.chance v) σ</span>
+<span id="cb68-49"><a href="#cb68-49" aria-hidden="true" tabindex="-1"></a>  | decision d _ hi next ih =&gt;</span>
+<span id="cb68-50"><a href="#cb68-50" aria-hidden="true" tabindex="-1"></a>    <span class="cf">exact</span> ih (s.decision d) (Function.update σ d (s.policyWith sel d hi))</span>
+<span id="cb68-51"><a href="#cb68-51" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb68-52"><a href="#cb68-52" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> runRepWith_snd_of_notMem (sel : Selector id) (keep : id.V → Bool) {R : Finset id.V}</span>
+<span id="cb68-53"><a href="#cb68-53" aria-hidden="true" tabindex="-1"></a>    (plan : Plan id R) (s : State id R) (σ : Strategy id ℝ) (e : id.D)</span>
+<span id="cb68-54"><a href="#cb68-54" aria-hidden="true" tabindex="-1"></a>    (he : id.action e ∉ R) : (runRepWith sel keep plan s σ).<span class="dv">2</span> e = σ e := <span class="kw">by</span></span>
+<span id="cb68-55"><a href="#cb68-55" aria-hidden="true" tabindex="-1"></a>  <span class="cf">induction</span> plan <span class="kw">generalizing</span> σ <span class="kw">with</span></span>
+<span id="cb68-56"><a href="#cb68-56" aria-hidden="true" tabindex="-1"></a>  | done =&gt; <span class="cf">rfl</span></span>
+<span id="cb68-57"><a href="#cb68-57" aria-hidden="true" tabindex="-1"></a>  | chance v _ _ next ih =&gt;</span>
+<span id="cb68-58"><a href="#cb68-58" aria-hidden="true" tabindex="-1"></a>    <span class="cf">exact</span> ih (s.chanceKeep keep v) σ (<span class="kw">fun</span> h =&gt; he (Finset.mem_of_mem_erase h))</span>
+<span id="cb68-59"><a href="#cb68-59" aria-hidden="true" tabindex="-1"></a>  | decision d hd hi next ih =&gt;</span>
+<span id="cb68-60"><a href="#cb68-60" aria-hidden="true" tabindex="-1"></a>    <span class="cf">refine</span> (ih (s.decision d) (Function.update σ d (s.policyWith sel d hi))</span>
+<span id="cb68-61"><a href="#cb68-61" aria-hidden="true" tabindex="-1"></a>      (<span class="kw">fun</span> h =&gt; he (Finset.mem_of_mem_erase h))).trans ?_</span>
+<span id="cb68-62"><a href="#cb68-62" aria-hidden="true" tabindex="-1"></a>    <span class="cf">exact</span> Function.update_of_ne (<span class="kw">fun</span> h : e = d =&gt; he (<span class="kw">by</span> <span class="cf">rw</span> [h]; <span class="cf">exact</span> hd)) _ _</span>
+<span id="cb68-63"><a href="#cb68-63" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb68-64"><a href="#cb68-64" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> runRepWith_policy_at_step (sel : Selector id) (keep : id.V → Bool) {R : Finset id.V}</span>
+<span id="cb68-65"><a href="#cb68-65" aria-hidden="true" tabindex="-1"></a>    (d : id.D) (hd : id.action d ∈ R) (hi : R.erase (id.action d) = id.info d)</span>
+<span id="cb68-66"><a href="#cb68-66" aria-hidden="true" tabindex="-1"></a>    (next : Plan id (R.erase (id.action d))) (s : State id R) (σ : Strategy id ℝ) :</span>
+<span id="cb68-67"><a href="#cb68-67" aria-hidden="true" tabindex="-1"></a>    (runRepWith sel keep (.decision d hd hi next) s σ).<span class="dv">2</span> d = s.policyWith sel d hi := <span class="kw">by</span></span>
+<span id="cb68-68"><a href="#cb68-68" aria-hidden="true" tabindex="-1"></a>  <span class="cf">refine</span> (runRepWith_snd_of_notMem sel keep next (s.decision d)</span>
+<span id="cb68-69"><a href="#cb68-69" aria-hidden="true" tabindex="-1"></a>    (Function.update σ d (s.policyWith sel d hi)) d (Finset.notMem_erase _ _)).trans ?_</span>
+<span id="cb68-70"><a href="#cb68-70" aria-hidden="true" tabindex="-1"></a>  <span class="cf">exact</span> Function.update_self _ _ _</span>
+<span id="cb68-71"><a href="#cb68-71" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb68-72"><a href="#cb68-72" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> runRepWith_deterministic (sel : Selector id) (keep : id.V → Bool) {R : Finset id.V}</span>
+<span id="cb68-73"><a href="#cb68-73" aria-hidden="true" tabindex="-1"></a>    (plan : Plan id R) (s : State id R) (σ : Strategy id ℝ) (hσ : σ.Deterministic) :</span>
+<span id="cb68-74"><a href="#cb68-74" aria-hidden="true" tabindex="-1"></a>    (runRepWith sel keep plan s σ).<span class="fl">2.</span>Deterministic := <span class="kw">by</span></span>
+<span id="cb68-75"><a href="#cb68-75" aria-hidden="true" tabindex="-1"></a>  <span class="cf">induction</span> plan <span class="kw">generalizing</span> σ <span class="kw">with</span></span>
+<span id="cb68-76"><a href="#cb68-76" aria-hidden="true" tabindex="-1"></a>  | done =&gt; <span class="cf">exact</span> hσ</span>
+<span id="cb68-77"><a href="#cb68-77" aria-hidden="true" tabindex="-1"></a>  | chance v _ _ next ih =&gt; <span class="cf">exact</span> ih (s.chanceKeep keep v) σ hσ</span>
+<span id="cb68-78"><a href="#cb68-78" aria-hidden="true" tabindex="-1"></a>  | decision d _ hi next ih =&gt;</span>
+<span id="cb68-79"><a href="#cb68-79" aria-hidden="true" tabindex="-1"></a>    <span class="cf">apply</span> ih (s.decision d) (Function.update σ d (s.policyWith sel d hi))</span>
+<span id="cb68-80"><a href="#cb68-80" aria-hidden="true" tabindex="-1"></a>    <span class="cf">intro</span> e</span>
+<span id="cb68-81"><a href="#cb68-81" aria-hidden="true" tabindex="-1"></a>    <span class="cf">by_cases</span> h : e = d</span>
+<span id="cb68-82"><a href="#cb68-82" aria-hidden="true" tabindex="-1"></a>    · <span class="cf">subst</span> e</span>
+<span id="cb68-83"><a href="#cb68-83" aria-hidden="true" tabindex="-1"></a>      <span class="cf">simp</span> only [Function.update_self]</span>
+<span id="cb68-84"><a href="#cb68-84" aria-hidden="true" tabindex="-1"></a>      <span class="cf">exact</span> ⟨_, <span class="kw">fun</span> x y h =&gt; congrArg (sel.pick d) (bucketScore_local s d hi x y h), rfl⟩</span>
+<span id="cb68-85"><a href="#cb68-85" aria-hidden="true" tabindex="-1"></a>    · <span class="cf">rw</span> [Function.update_of_ne h]</span>
+<span id="cb68-86"><a href="#cb68-86" aria-hidden="true" tabindex="-1"></a>      <span class="cf">exact</span> hσ e</span></code></pre></div>
+<h2 id="the-invariant-survives-julias-chance-step">The invariant
+survives Julia’s chance step</h2>
+<div class="sourceCode" id="cb69"><pre
+class="sourceCode lean"><code class="sourceCode lean"><span id="cb69-1"><a href="#cb69-1" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> Inv.chanceKeep {κ : id.Kernel ℝ} {u : Utility id ℝ} {L : id.Assignment → ℝ}</span>
+<span id="cb69-2"><a href="#cb69-2" aria-hidden="true" tabindex="-1"></a>    {R : Finset id.V} {s : State id R} {σ : Strategy id ℝ} (h : Inv κ u L s σ)</span>
+<span id="cb69-3"><a href="#cb69-3" aria-hidden="true" tabindex="-1"></a>    (keep : id.V → Bool) (v : id.V) (hv : v ∈ R) (hc : ∀ d, id.action d ≠ v) :</span>
+<span id="cb69-4"><a href="#cb69-4" aria-hidden="true" tabindex="-1"></a>    Inv κ u L (s.chanceKeep keep v) σ := <span class="kw">by</span></span>
+<span id="cb69-5"><a href="#cb69-5" aria-hidden="true" tabindex="-1"></a>  <span class="kw">have</span> hm := h.chance v hv hc</span>
+<span id="cb69-6"><a href="#cb69-6" aria-hidden="true" tabindex="-1"></a>  <span class="cf">obtain</span> ⟨hp, hw⟩ := chanceStepKeep_collect (keep v) v s.valuations</span>
+<span id="cb69-7"><a href="#cb69-7" aria-hidden="true" tabindex="-1"></a>  <span class="cf">refine</span> ⟨fun x =&gt; ?_, <span class="kw">fun</span> x =&gt; ?_, <span class="kw">fun</span> τ hτ x =&gt; ?_⟩</span>
+<span id="cb69-8"><a href="#cb69-8" aria-hidden="true" tabindex="-1"></a>  · change (collect (chanceStepKeep (keep v) v s.valuations)).prob x = _</span>
+<span id="cb69-9"><a href="#cb69-9" aria-hidden="true" tabindex="-1"></a>    <span class="cf">rw</span> [hp]</span>
+<span id="cb69-10"><a href="#cb69-10" aria-hidden="true" tabindex="-1"></a>    <span class="cf">exact</span> hm.mass x</span>
+<span id="cb69-11"><a href="#cb69-11" aria-hidden="true" tabindex="-1"></a>  · change (collect (chanceStepKeep (keep v) v s.valuations)).weight x = _</span>
+<span id="cb69-12"><a href="#cb69-12" aria-hidden="true" tabindex="-1"></a>    <span class="cf">rw</span> [hw]</span>
+<span id="cb69-13"><a href="#cb69-13" aria-hidden="true" tabindex="-1"></a>    <span class="cf">exact</span> hm.realizes x</span>
+<span id="cb69-14"><a href="#cb69-14" aria-hidden="true" tabindex="-1"></a>  · change _ ≤ (collect (chanceStepKeep (keep v) v s.valuations)).weight x</span>
+<span id="cb69-15"><a href="#cb69-15" aria-hidden="true" tabindex="-1"></a>    <span class="cf">rw</span> [hw]</span>
+<span id="cb69-16"><a href="#cb69-16" aria-hidden="true" tabindex="-1"></a>    <span class="cf">exact</span> hm.dominates τ hτ x</span>
+<span id="cb69-17"><a href="#cb69-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb69-18"><a href="#cb69-18" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> runRepWith_inv (sel : Selector id) (keep : id.V → Bool) {κ : id.Kernel ℝ}</span>
+<span id="cb69-19"><a href="#cb69-19" aria-hidden="true" tabindex="-1"></a>    {u : Utility id ℝ} {L : id.Assignment → ℝ} (hind : Independent κ L) (hclosed : id.Closed)</span>
+<span id="cb69-20"><a href="#cb69-20" aria-hidden="true" tabindex="-1"></a>    {R : Finset id.V} (plan : Plan id R) (s : State id R) (σ : Strategy id ℝ)</span>
+<span id="cb69-21"><a href="#cb69-21" aria-hidden="true" tabindex="-1"></a>    (h : Inv κ u L s σ) :</span>
+<span id="cb69-22"><a href="#cb69-22" aria-hidden="true" tabindex="-1"></a>    Inv κ u L (runRepWith sel keep plan s σ).<span class="dv">1</span> (runRepWith sel keep plan s σ).<span class="dv">2</span> := <span class="kw">by</span></span>
+<span id="cb69-23"><a href="#cb69-23" aria-hidden="true" tabindex="-1"></a>  <span class="cf">induction</span> plan <span class="kw">generalizing</span> σ <span class="kw">with</span></span>
+<span id="cb69-24"><a href="#cb69-24" aria-hidden="true" tabindex="-1"></a>  | done =&gt; <span class="cf">exact</span> h</span>
+<span id="cb69-25"><a href="#cb69-25" aria-hidden="true" tabindex="-1"></a>  | chance v hv hc next ih =&gt; <span class="cf">exact</span> ih (s.chanceKeep keep v) σ (h.chanceKeep keep v hv hc)</span>
+<span id="cb69-26"><a href="#cb69-26" aria-hidden="true" tabindex="-1"></a>  | decision d hd hi next ih =&gt;</span>
+<span id="cb69-27"><a href="#cb69-27" aria-hidden="true" tabindex="-1"></a>    <span class="cf">exact</span> ih (s.decision d) _ (h.decisionWith hind hclosed sel d hd hi)</span></code></pre></div>
+<h2 id="scores-and-tables">Scores and tables</h2>
+<div class="sourceCode" id="cb70"><pre
+class="sourceCode lean"><code class="sourceCode lean"><span id="cb70-1"><a href="#cb70-1" aria-hidden="true" tabindex="-1"></a><span class="do">/-- The bucket-utility score of `d` when `runRepWith` eliminates its action. -/</span></span>
+<span id="cb70-2"><a href="#cb70-2" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> decisionScoreRep (keep : id.V → Bool) {R : Finset id.V} (plan : Plan id R)</span>
+<span id="cb70-3"><a href="#cb70-3" aria-hidden="true" tabindex="-1"></a>    (s : State id R) (d : id.D) : id.Assignment → id.states (id.action d) → ℝ :=</span>
+<span id="cb70-4"><a href="#cb70-4" aria-hidden="true" tabindex="-1"></a>  <span class="kw">match</span> plan <span class="kw">with</span></span>
+<span id="cb70-5"><a href="#cb70-5" aria-hidden="true" tabindex="-1"></a>  | .done =&gt; <span class="kw">fun</span> _ _ =&gt; <span class="dv">0</span></span>
+<span id="cb70-6"><a href="#cb70-6" aria-hidden="true" tabindex="-1"></a>  | .chance v _ _ next =&gt; decisionScoreRep keep next (s.chanceKeep keep v) d</span>
+<span id="cb70-7"><a href="#cb70-7" aria-hidden="true" tabindex="-1"></a>  | .decision d&#39; _ _ next =&gt;</span>
+<span id="cb70-8"><a href="#cb70-8" aria-hidden="true" tabindex="-1"></a>    <span class="kw">if</span> d&#39; = d <span class="kw">then</span> bucketScore s.valuations (id.action d)</span>
+<span id="cb70-9"><a href="#cb70-9" aria-hidden="true" tabindex="-1"></a>    <span class="kw">else</span> decisionScoreRep keep next (s.decision d&#39;) d</span>
+<span id="cb70-10"><a href="#cb70-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb70-11"><a href="#cb70-11" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> decisionScoreRep_local (keep : id.V → Bool) (hinj : Function.Injective id.action)</span>
+<span id="cb70-12"><a href="#cb70-12" aria-hidden="true" tabindex="-1"></a>    {R : Finset id.V} (plan : Plan id R) (s : State id R) (d : id.D) (hd : id.action d ∈ R) :</span>
+<span id="cb70-13"><a href="#cb70-13" aria-hidden="true" tabindex="-1"></a>    LocalOn (id.info d) (decisionScoreRep keep plan s d) := <span class="kw">by</span></span>
+<span id="cb70-14"><a href="#cb70-14" aria-hidden="true" tabindex="-1"></a>  <span class="cf">induction</span> plan <span class="kw">with</span></span>
+<span id="cb70-15"><a href="#cb70-15" aria-hidden="true" tabindex="-1"></a>  | done =&gt; <span class="cf">simp</span> <span class="kw">at</span> hd</span>
+<span id="cb70-16"><a href="#cb70-16" aria-hidden="true" tabindex="-1"></a>  | chance v _ hc next ih =&gt;</span>
+<span id="cb70-17"><a href="#cb70-17" aria-hidden="true" tabindex="-1"></a>    <span class="cf">exact</span> ih (s.chanceKeep keep v) (Finset.mem_erase<span class="fl">.2</span> ⟨hc d, hd⟩)</span>
+<span id="cb70-18"><a href="#cb70-18" aria-hidden="true" tabindex="-1"></a>  | decision d&#39; hd&#39; hi next ih =&gt;</span>
+<span id="cb70-19"><a href="#cb70-19" aria-hidden="true" tabindex="-1"></a>    <span class="cf">by_cases</span> hdd : d&#39; = d</span>
+<span id="cb70-20"><a href="#cb70-20" aria-hidden="true" tabindex="-1"></a>    · <span class="cf">subst</span> hdd</span>
+<span id="cb70-21"><a href="#cb70-21" aria-hidden="true" tabindex="-1"></a>      <span class="cf">intro</span> x y h</span>
+<span id="cb70-22"><a href="#cb70-22" aria-hidden="true" tabindex="-1"></a>      <span class="kw">show</span> (<span class="kw">if</span> d&#39; = d&#39; <span class="kw">then</span> bucketScore s.valuations (id.action d&#39;)</span>
+<span id="cb70-23"><a href="#cb70-23" aria-hidden="true" tabindex="-1"></a>          <span class="kw">else</span> decisionScoreRep keep next (s.decision d&#39;) d&#39;) x =</span>
+<span id="cb70-24"><a href="#cb70-24" aria-hidden="true" tabindex="-1"></a>        (<span class="kw">if</span> d&#39; = d&#39; <span class="kw">then</span> bucketScore s.valuations (id.action d&#39;)</span>
+<span id="cb70-25"><a href="#cb70-25" aria-hidden="true" tabindex="-1"></a>          <span class="kw">else</span> decisionScoreRep keep next (s.decision d&#39;) d&#39;) y</span>
+<span id="cb70-26"><a href="#cb70-26" aria-hidden="true" tabindex="-1"></a>      <span class="cf">rw</span> [if_pos <span class="cf">rfl</span>]</span>
+<span id="cb70-27"><a href="#cb70-27" aria-hidden="true" tabindex="-1"></a>      <span class="cf">exact</span> bucketScore_local s d&#39; hi x y h</span>
+<span id="cb70-28"><a href="#cb70-28" aria-hidden="true" tabindex="-1"></a>    · <span class="cf">intro</span> x y h</span>
+<span id="cb70-29"><a href="#cb70-29" aria-hidden="true" tabindex="-1"></a>      <span class="kw">show</span> (<span class="kw">if</span> d&#39; = d <span class="kw">then</span> bucketScore s.valuations (id.action d)</span>
+<span id="cb70-30"><a href="#cb70-30" aria-hidden="true" tabindex="-1"></a>          <span class="kw">else</span> decisionScoreRep keep next (s.decision d&#39;) d) x =</span>
+<span id="cb70-31"><a href="#cb70-31" aria-hidden="true" tabindex="-1"></a>        (<span class="kw">if</span> d&#39; = d <span class="kw">then</span> bucketScore s.valuations (id.action d)</span>
+<span id="cb70-32"><a href="#cb70-32" aria-hidden="true" tabindex="-1"></a>          <span class="kw">else</span> decisionScoreRep keep next (s.decision d&#39;) d) y</span>
+<span id="cb70-33"><a href="#cb70-33" aria-hidden="true" tabindex="-1"></a>      <span class="cf">rw</span> [if_neg hdd]</span>
+<span id="cb70-34"><a href="#cb70-34" aria-hidden="true" tabindex="-1"></a>      <span class="cf">exact</span> ih (s.decision d&#39;) (Finset.mem_erase<span class="fl">.2</span> ⟨fun he =&gt; hdd (hinj he).symm, hd⟩) x y h</span>
+<span id="cb70-35"><a href="#cb70-35" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb70-36"><a href="#cb70-36" aria-hidden="true" tabindex="-1"></a><span class="do">/-- Every returned policy row is the selector&#39;s choice on the recorded score. -/</span></span>
+<span id="cb70-37"><a href="#cb70-37" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> runRepWith_kernel (sel : Selector id) (keep : id.V → Bool)</span>
+<span id="cb70-38"><a href="#cb70-38" aria-hidden="true" tabindex="-1"></a>    (hinj : Function.Injective id.action) {R : Finset id.V} (plan : Plan id R) (s : State id R)</span>
+<span id="cb70-39"><a href="#cb70-39" aria-hidden="true" tabindex="-1"></a>    (σ : Strategy id ℝ) (d : id.D) (hd : id.action d ∈ R) (x : id.Assignment)</span>
+<span id="cb70-40"><a href="#cb70-40" aria-hidden="true" tabindex="-1"></a>    (a : id.states (id.action d)) :</span>
+<span id="cb70-41"><a href="#cb70-41" aria-hidden="true" tabindex="-1"></a>    ((runRepWith sel keep plan s σ).<span class="dv">2</span> d).kernel x a =</span>
+<span id="cb70-42"><a href="#cb70-42" aria-hidden="true" tabindex="-1"></a>      <span class="kw">if</span> a = sel.pick d (decisionScoreRep keep plan s d x) <span class="kw">then</span> <span class="dv">1</span> <span class="kw">else</span> <span class="dv">0</span> := <span class="kw">by</span></span>
+<span id="cb70-43"><a href="#cb70-43" aria-hidden="true" tabindex="-1"></a>  <span class="cf">induction</span> plan <span class="kw">generalizing</span> σ <span class="kw">with</span></span>
+<span id="cb70-44"><a href="#cb70-44" aria-hidden="true" tabindex="-1"></a>  | done =&gt; <span class="cf">simp</span> <span class="kw">at</span> hd</span>
+<span id="cb70-45"><a href="#cb70-45" aria-hidden="true" tabindex="-1"></a>  | chance v _ hc next ih =&gt;</span>
+<span id="cb70-46"><a href="#cb70-46" aria-hidden="true" tabindex="-1"></a>    <span class="cf">exact</span> ih (s.chanceKeep keep v) σ (Finset.mem_erase<span class="fl">.2</span> ⟨hc d, hd⟩)</span>
+<span id="cb70-47"><a href="#cb70-47" aria-hidden="true" tabindex="-1"></a>  | decision d&#39; hd&#39; hi next ih =&gt;</span>
+<span id="cb70-48"><a href="#cb70-48" aria-hidden="true" tabindex="-1"></a>    <span class="cf">by_cases</span> hdd : d&#39; = d</span>
+<span id="cb70-49"><a href="#cb70-49" aria-hidden="true" tabindex="-1"></a>    · <span class="cf">subst</span> hdd</span>
+<span id="cb70-50"><a href="#cb70-50" aria-hidden="true" tabindex="-1"></a>      <span class="cf">rw</span> [runRepWith_policy_at_step]</span>
+<span id="cb70-51"><a href="#cb70-51" aria-hidden="true" tabindex="-1"></a>      <span class="kw">show</span> (<span class="kw">if</span> a = sel.pick d&#39; (bucketScore s.valuations (id.action d&#39;) x) <span class="kw">then</span> (<span class="dv">1</span> : ℝ) <span class="kw">else</span> <span class="dv">0</span>) =</span>
+<span id="cb70-52"><a href="#cb70-52" aria-hidden="true" tabindex="-1"></a>        <span class="kw">if</span> a = sel.pick d&#39; ((<span class="kw">if</span> d&#39; = d&#39; <span class="kw">then</span> bucketScore s.valuations (id.action d&#39;)</span>
+<span id="cb70-53"><a href="#cb70-53" aria-hidden="true" tabindex="-1"></a>          <span class="kw">else</span> decisionScoreRep keep next (s.decision d&#39;) d&#39;) x) <span class="kw">then</span> <span class="dv">1</span> <span class="kw">else</span> <span class="dv">0</span></span>
+<span id="cb70-54"><a href="#cb70-54" aria-hidden="true" tabindex="-1"></a>      <span class="cf">rw</span> [if_pos <span class="cf">rfl</span>]</span>
+<span id="cb70-55"><a href="#cb70-55" aria-hidden="true" tabindex="-1"></a>    · <span class="kw">have</span> hne : id.action d ≠ id.action d&#39; := <span class="kw">fun</span> he =&gt; hdd (hinj he).symm</span>
+<span id="cb70-56"><a href="#cb70-56" aria-hidden="true" tabindex="-1"></a>      <span class="cf">refine</span> (ih (s.decision d&#39;) (Function.update σ d&#39; (s.policyWith sel d&#39; hi))</span>
+<span id="cb70-57"><a href="#cb70-57" aria-hidden="true" tabindex="-1"></a>        (Finset.mem_erase<span class="fl">.2</span> ⟨hne, hd⟩)).trans ?_</span>
+<span id="cb70-58"><a href="#cb70-58" aria-hidden="true" tabindex="-1"></a>      <span class="kw">show</span> (<span class="kw">if</span> a = sel.pick d (decisionScoreRep keep next (s.decision d&#39;) d x) <span class="kw">then</span> (<span class="dv">1</span> : ℝ)</span>
+<span id="cb70-59"><a href="#cb70-59" aria-hidden="true" tabindex="-1"></a>          <span class="kw">else</span> <span class="dv">0</span>) =</span>
+<span id="cb70-60"><a href="#cb70-60" aria-hidden="true" tabindex="-1"></a>        <span class="kw">if</span> a = sel.pick d ((<span class="kw">if</span> d&#39; = d <span class="kw">then</span> bucketScore s.valuations (id.action d)</span>
+<span id="cb70-61"><a href="#cb70-61" aria-hidden="true" tabindex="-1"></a>          <span class="kw">else</span> decisionScoreRep keep next (s.decision d&#39;) d) x) <span class="kw">then</span> <span class="dv">1</span> <span class="kw">else</span> <span class="dv">0</span></span>
+<span id="cb70-62"><a href="#cb70-62" aria-hidden="true" tabindex="-1"></a>      <span class="cf">rw</span> [if_neg hdd]</span></code></pre></div>
+<h2 id="the-coupled-runs">The coupled runs</h2>
+<div class="sourceCode" id="cb71"><pre
+class="sourceCode lean"><code class="sourceCode lean"><span id="cb71-1"><a href="#cb71-1" aria-hidden="true" tabindex="-1"></a><span class="do">/-- **The model&#39;s and Julia&#39;s runs agree valuation by valuation** on any plan, given the exact</span></span>
+<span id="cb71-2"><a href="#cb71-2" aria-hidden="true" tabindex="-1"></a><span class="do">bucket guards of the model&#39;s run (which always hold, `all_guards_complete`). -/</span></span>
+<span id="cb71-3"><a href="#cb71-3" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> runRep_agrees (keep : id.V → Bool) {R : Finset id.V} (plan : Plan id R)</span>
+<span id="cb71-4"><a href="#cb71-4" aria-hidden="true" tabindex="-1"></a>    (s s&#39; : State id R) (h : List.Forall₂ Agrees s.valuations s&#39;.valuations)</span>
+<span id="cb71-5"><a href="#cb71-5" aria-hidden="true" tabindex="-1"></a>    (hg : AllGuards plan s.valuations) :</span>
+<span id="cb71-6"><a href="#cb71-6" aria-hidden="true" tabindex="-1"></a>    List.Forall₂ Agrees (runState plan s).valuations (runRepState keep plan s&#39;).valuations := <span class="kw">by</span></span>
+<span id="cb71-7"><a href="#cb71-7" aria-hidden="true" tabindex="-1"></a>  <span class="cf">induction</span> plan <span class="kw">with</span></span>
+<span id="cb71-8"><a href="#cb71-8" aria-hidden="true" tabindex="-1"></a>  | done =&gt; <span class="cf">exact</span> h</span>
+<span id="cb71-9"><a href="#cb71-9" aria-hidden="true" tabindex="-1"></a>  | chance v _ _ next ih =&gt;</span>
+<span id="cb71-10"><a href="#cb71-10" aria-hidden="true" tabindex="-1"></a>    <span class="cf">exact</span> ih (s.chance v) (s&#39;.chanceKeep keep v) (agrees_chanceStep h (keep v) v) hg</span>
+<span id="cb71-11"><a href="#cb71-11" aria-hidden="true" tabindex="-1"></a>  | decision d _ _ next ih =&gt;</span>
+<span id="cb71-12"><a href="#cb71-12" aria-hidden="true" tabindex="-1"></a>    <span class="cf">exact</span> ih (s.decision d) (s&#39;.decision d) (agrees_decisionStep h (id.action d) hg<span class="fl">.1</span>) hg<span class="fl">.2</span></span>
+<span id="cb71-13"><a href="#cb71-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb71-14"><a href="#cb71-14" aria-hidden="true" tabindex="-1"></a><span class="do">/-- On a row of positive probability the bucket scores of agreeing states coincide. -/</span></span>
+<span id="cb71-15"><a href="#cb71-15" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> bucketScore_agree {R : Finset id.V} {s s&#39; : State id R}</span>
+<span id="cb71-16"><a href="#cb71-16" aria-hidden="true" tabindex="-1"></a>    (h : List.Forall₂ Agrees s.valuations s&#39;.valuations) (a : id.V) (x : id.Assignment)</span>
+<span id="cb71-17"><a href="#cb71-17" aria-hidden="true" tabindex="-1"></a>    (hp : ∀ b, (collect s.valuations).prob (Function.update x a b) =</span>
+<span id="cb71-18"><a href="#cb71-18" aria-hidden="true" tabindex="-1"></a>      (collect s.valuations).prob x)</span>
+<span id="cb71-19"><a href="#cb71-19" aria-hidden="true" tabindex="-1"></a>    (hx : (collect s.valuations).prob x ≠ <span class="dv">0</span>) :</span>
+<span id="cb71-20"><a href="#cb71-20" aria-hidden="true" tabindex="-1"></a>    bucketScore s&#39;.valuations a x = bucketScore s.valuations a x := <span class="kw">by</span></span>
+<span id="cb71-21"><a href="#cb71-21" aria-hidden="true" tabindex="-1"></a>  <span class="cf">funext</span> b</span>
+<span id="cb71-22"><a href="#cb71-22" aria-hidden="true" tabindex="-1"></a>  <span class="kw">have</span> hb := agrees_collect (agrees_bucket h a)</span>
+<span id="cb71-23"><a href="#cb71-23" aria-hidden="true" tabindex="-1"></a>  <span class="kw">have</span> hpos : (collect (bucket a s.valuations)).prob (Function.update x a b) ≠ <span class="dv">0</span> := <span class="kw">by</span></span>
+<span id="cb71-24"><a href="#cb71-24" aria-hidden="true" tabindex="-1"></a>    <span class="cf">intro</span> h0</span>
+<span id="cb71-25"><a href="#cb71-25" aria-hidden="true" tabindex="-1"></a>    <span class="cf">apply</span> hx</span>
+<span id="cb71-26"><a href="#cb71-26" aria-hidden="true" tabindex="-1"></a>    <span class="cf">rw</span> [← hp b, (collect_partition a s.valuations _).<span class="dv">1</span>, h0, zero_mul]</span>
+<span id="cb71-27"><a href="#cb71-27" aria-hidden="true" tabindex="-1"></a>  <span class="cf">exact</span> (hb.util_eq hpos).symm</span>
+<span id="cb71-28"><a href="#cb71-28" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb71-29"><a href="#cb71-29" aria-hidden="true" tabindex="-1"></a><span class="do">/-- **Positive-reach scores agree.** At every row of positive reach the decision score of</span></span>
+<span id="cb71-30"><a href="#cb71-30" aria-hidden="true" tabindex="-1"></a><span class="do">Julia&#39;s run equals the model&#39;s. -/</span></span>
+<span id="cb71-31"><a href="#cb71-31" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> decisionScoreRep_eq (keep : id.V → Bool) {κ : id.Kernel ℝ} {L : id.Assignment → ℝ}</span>
+<span id="cb71-32"><a href="#cb71-32" aria-hidden="true" tabindex="-1"></a>    (hind : Independent κ L) (hclosed : id.Closed) {R : Finset id.V} (plan : Plan id R)</span>
+<span id="cb71-33"><a href="#cb71-33" aria-hidden="true" tabindex="-1"></a>    (s s&#39; : State id R) (h : List.Forall₂ Agrees s.valuations s&#39;.valuations)</span>
+<span id="cb71-34"><a href="#cb71-34" aria-hidden="true" tabindex="-1"></a>    (hg : AllGuards plan s.valuations) (hs : MassAll κ L s) (d : id.D) (hd : id.action d ∈ R)</span>
+<span id="cb71-35"><a href="#cb71-35" aria-hidden="true" tabindex="-1"></a>    (x : id.Assignment) (ρ : Strategy id ℝ) (hx : reach κ L ρ d x ≠ <span class="dv">0</span>) :</span>
+<span id="cb71-36"><a href="#cb71-36" aria-hidden="true" tabindex="-1"></a>    decisionScoreRep keep plan s&#39; d x = decisionScore plan s d x := <span class="kw">by</span></span>
+<span id="cb71-37"><a href="#cb71-37" aria-hidden="true" tabindex="-1"></a>  <span class="kw">have</span> hinj := (id.closed_iff<span class="fl">.1</span> hclosed).<span class="fl">2.1</span></span>
+<span id="cb71-38"><a href="#cb71-38" aria-hidden="true" tabindex="-1"></a>  <span class="cf">induction</span> plan <span class="kw">with</span></span>
+<span id="cb71-39"><a href="#cb71-39" aria-hidden="true" tabindex="-1"></a>  | done =&gt; <span class="cf">simp</span> <span class="kw">at</span> hd</span>
+<span id="cb71-40"><a href="#cb71-40" aria-hidden="true" tabindex="-1"></a>  | chance v hv hc next ih =&gt;</span>
+<span id="cb71-41"><a href="#cb71-41" aria-hidden="true" tabindex="-1"></a>    <span class="cf">exact</span> ih (s.chance v) (s&#39;.chanceKeep keep v) (agrees_chanceStep h (keep v) v) hg</span>
+<span id="cb71-42"><a href="#cb71-42" aria-hidden="true" tabindex="-1"></a>      (hs.chance v hv hc) (Finset.mem_erase<span class="fl">.2</span> ⟨hc d, hd⟩)</span>
+<span id="cb71-43"><a href="#cb71-43" aria-hidden="true" tabindex="-1"></a>  | @decision R&#39; d&#39; hd&#39; hi next ih =&gt;</span>
+<span id="cb71-44"><a href="#cb71-44" aria-hidden="true" tabindex="-1"></a>    <span class="cf">by_cases</span> hdd : d&#39; = d</span>
+<span id="cb71-45"><a href="#cb71-45" aria-hidden="true" tabindex="-1"></a>    · <span class="cf">subst</span> hdd</span>
+<span id="cb71-46"><a href="#cb71-46" aria-hidden="true" tabindex="-1"></a>      <span class="kw">have</span> hR : insert (id.action d&#39;) (id.info d&#39;) = R&#39; := <span class="kw">by</span></span>
+<span id="cb71-47"><a href="#cb71-47" aria-hidden="true" tabindex="-1"></a>        <span class="cf">rw</span> [← hi, Finset.insert_erase hd&#39;]</span>
+<span id="cb71-48"><a href="#cb71-48" aria-hidden="true" tabindex="-1"></a>      <span class="kw">have</span> hprob : (collect s.valuations).prob x = reach κ L ρ d&#39; x := <span class="kw">by</span></span>
+<span id="cb71-49"><a href="#cb71-49" aria-hidden="true" tabindex="-1"></a>        <span class="cf">unfold</span> reach</span>
+<span id="cb71-50"><a href="#cb71-50" aria-hidden="true" tabindex="-1"></a>        <span class="cf">rw</span> [hR, hs ρ]</span>
+<span id="cb71-51"><a href="#cb71-51" aria-hidden="true" tabindex="-1"></a>      <span class="kw">show</span> (<span class="kw">if</span> d&#39; = d&#39; <span class="kw">then</span> bucketScore s&#39;.valuations (id.action d&#39;)</span>
+<span id="cb71-52"><a href="#cb71-52" aria-hidden="true" tabindex="-1"></a>          <span class="kw">else</span> decisionScoreRep keep next (s&#39;.decision d&#39;) d&#39;) x =</span>
+<span id="cb71-53"><a href="#cb71-53" aria-hidden="true" tabindex="-1"></a>        (<span class="kw">if</span> d&#39; = d&#39; <span class="kw">then</span> bucketScore s.valuations (id.action d&#39;)</span>
+<span id="cb71-54"><a href="#cb71-54" aria-hidden="true" tabindex="-1"></a>          <span class="kw">else</span> decisionScore next (s.decision d&#39;) d&#39;) x</span>
+<span id="cb71-55"><a href="#cb71-55" aria-hidden="true" tabindex="-1"></a>      <span class="cf">rw</span> [if_pos <span class="cf">rfl</span>, if_pos <span class="cf">rfl</span>]</span>
+<span id="cb71-56"><a href="#cb71-56" aria-hidden="true" tabindex="-1"></a>      <span class="cf">exact</span> bucketScore_agree h (id.action d&#39;) x (hs.prob_update hind d&#39; hd&#39; hi x)</span>
+<span id="cb71-57"><a href="#cb71-57" aria-hidden="true" tabindex="-1"></a>        (<span class="kw">fun</span> h0 =&gt; hx (hprob.symm.trans h0))</span>
+<span id="cb71-58"><a href="#cb71-58" aria-hidden="true" tabindex="-1"></a>    · <span class="kw">have</span> hne : id.action d ≠ id.action d&#39; := <span class="kw">fun</span> he =&gt; hdd (hinj he).symm</span>
+<span id="cb71-59"><a href="#cb71-59" aria-hidden="true" tabindex="-1"></a>      <span class="kw">show</span> (<span class="kw">if</span> d&#39; = d <span class="kw">then</span> bucketScore s&#39;.valuations (id.action d)</span>
+<span id="cb71-60"><a href="#cb71-60" aria-hidden="true" tabindex="-1"></a>          <span class="kw">else</span> decisionScoreRep keep next (s&#39;.decision d&#39;) d) x =</span>
+<span id="cb71-61"><a href="#cb71-61" aria-hidden="true" tabindex="-1"></a>        (<span class="kw">if</span> d&#39; = d <span class="kw">then</span> bucketScore s.valuations (id.action d)</span>
+<span id="cb71-62"><a href="#cb71-62" aria-hidden="true" tabindex="-1"></a>          <span class="kw">else</span> decisionScore next (s.decision d&#39;) d) x</span>
+<span id="cb71-63"><a href="#cb71-63" aria-hidden="true" tabindex="-1"></a>      <span class="cf">rw</span> [if_neg hdd, if_neg hdd]</span>
+<span id="cb71-64"><a href="#cb71-64" aria-hidden="true" tabindex="-1"></a>      <span class="cf">exact</span> ih (s.decision d&#39;) (s&#39;.decision d&#39;) (agrees_decisionStep h (id.action d&#39;) hg<span class="fl">.1</span>) hg<span class="fl">.2</span></span>
+<span id="cb71-65"><a href="#cb71-65" aria-hidden="true" tabindex="-1"></a>        (hs.decision hind hclosed d&#39; hd&#39; hi) (Finset.mem_erase<span class="fl">.2</span> ⟨hne, hd⟩)</span></code></pre></div>
+<h2 id="solvers-on-an-arbitrary-plan-1">Solvers on an arbitrary
+plan</h2>
+<div class="sourceCode" id="cb72"><pre
+class="sourceCode lean"><code class="sourceCode lean"><span id="cb72-1"><a href="#cb72-1" aria-hidden="true" tabindex="-1"></a><span class="do">/-- The solver with Julia&#39;s chance step, on any plan (for example Julia&#39;s min-fill schedule). -/</span></span>
+<span id="cb72-2"><a href="#cb72-2" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> solveRepPlanWith (sel : Selector id) (keep : id.V → Bool) (κ : id.Kernel ℝ)</span>
+<span id="cb72-3"><a href="#cb72-3" aria-hidden="true" tabindex="-1"></a>    (hloc : ∀ m, Local κ m) (hnonneg : ∀ m x a, <span class="dv">0</span> ≤ κ m x a) (u : Utility id ℝ)</span>
+<span id="cb72-4"><a href="#cb72-4" aria-hidden="true" tabindex="-1"></a>    (hu : ∀ j, Utility.Local u j) (plan : Plan id Finset.univ) : Solution id :=</span>
+<span id="cb72-5"><a href="#cb72-5" aria-hidden="true" tabindex="-1"></a>  <span class="kw">let</span> result := runRepWith sel keep plan (initial κ hloc hnonneg u hu) defaultStrategy</span>
+<span id="cb72-6"><a href="#cb72-6" aria-hidden="true" tabindex="-1"></a>  ⟨(collect result.<span class="fl">1.</span>valuations).util (baseAssignment id), result<span class="fl">.2</span>⟩</span>
+<span id="cb72-7"><a href="#cb72-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb72-8"><a href="#cb72-8" aria-hidden="true" tabindex="-1"></a><span class="do">/-- The score row that `solveRepPlanWith` maximizes for `d`. -/</span></span>
+<span id="cb72-9"><a href="#cb72-9" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> solveRepPlanScore (keep : id.V → Bool) (κ : id.Kernel ℝ) (hloc : ∀ m, Local κ m)</span>
+<span id="cb72-10"><a href="#cb72-10" aria-hidden="true" tabindex="-1"></a>    (hnonneg : ∀ m x a, <span class="dv">0</span> ≤ κ m x a) (u : Utility id ℝ) (hu : ∀ j, Utility.Local u j)</span>
+<span id="cb72-11"><a href="#cb72-11" aria-hidden="true" tabindex="-1"></a>    (plan : Plan id Finset.univ) (d : id.D) : id.Assignment → id.states (id.action d) → ℝ :=</span>
+<span id="cb72-12"><a href="#cb72-12" aria-hidden="true" tabindex="-1"></a>  decisionScoreRep keep plan (initial κ hloc hnonneg u hu) d</span>
+<span id="cb72-13"><a href="#cb72-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb72-14"><a href="#cb72-14" aria-hidden="true" tabindex="-1"></a><span class="do">/-- The model&#39;s score row for `d` on the same plan. -/</span></span>
+<span id="cb72-15"><a href="#cb72-15" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> solvePlanScore (κ : id.Kernel ℝ) (hloc : ∀ m, Local κ m) (hnonneg : ∀ m x a, <span class="dv">0</span> ≤ κ m x a)</span>
+<span id="cb72-16"><a href="#cb72-16" aria-hidden="true" tabindex="-1"></a>    (u : Utility id ℝ) (hu : ∀ j, Utility.Local u j) (plan : Plan id Finset.univ) (d : id.D) :</span>
+<span id="cb72-17"><a href="#cb72-17" aria-hidden="true" tabindex="-1"></a>    id.Assignment → id.states (id.action d) → ℝ :=</span>
+<span id="cb72-18"><a href="#cb72-18" aria-hidden="true" tabindex="-1"></a>  decisionScore plan (initial κ hloc hnonneg u hu) d</span>
+<span id="cb72-19"><a href="#cb72-19" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb72-20"><a href="#cb72-20" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> solveRepPlanWith_false (sel : Selector id) (κ : id.Kernel ℝ) (hloc : ∀ m, Local κ m)</span>
+<span id="cb72-21"><a href="#cb72-21" aria-hidden="true" tabindex="-1"></a>    (hnonneg : ∀ m x a, <span class="dv">0</span> ≤ κ m x a) (u : Utility id ℝ) (hu : ∀ j, Utility.Local u j)</span>
+<span id="cb72-22"><a href="#cb72-22" aria-hidden="true" tabindex="-1"></a>    (plan : Plan id Finset.univ) :</span>
+<span id="cb72-23"><a href="#cb72-23" aria-hidden="true" tabindex="-1"></a>    solveRepPlanWith sel (<span class="kw">fun</span> _ =&gt; false) κ hloc hnonneg u hu plan =</span>
+<span id="cb72-24"><a href="#cb72-24" aria-hidden="true" tabindex="-1"></a>      solvePlanWith sel κ hloc hnonneg u hu plan := <span class="kw">by</span></span>
+<span id="cb72-25"><a href="#cb72-25" aria-hidden="true" tabindex="-1"></a>  <span class="cf">unfold</span> solveRepPlanWith solvePlanWith</span>
+<span id="cb72-26"><a href="#cb72-26" aria-hidden="true" tabindex="-1"></a>  <span class="cf">rw</span> [runRepWith_false]</span>
+<span id="cb72-27"><a href="#cb72-27" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb72-28"><a href="#cb72-28" aria-hidden="true" tabindex="-1"></a><span class="do">/-- **Julia&#39;s representative: the final valuations agree with the model&#39;s.** On any plan,</span></span>
+<span id="cb72-29"><a href="#cb72-29" aria-hidden="true" tabindex="-1"></a><span class="do">valuation by valuation: equal scopes, equal probability potentials and equal weighted</span></span>
+<span id="cb72-30"><a href="#cb72-30" aria-hidden="true" tabindex="-1"></a><span class="do">utilities. -/</span></span>
+<span id="cb72-31"><a href="#cb72-31" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> solveRepPlan_agrees (keep : id.V → Bool) (κ : id.Kernel ℝ) (hclosed : id.Closed)</span>
+<span id="cb72-32"><a href="#cb72-32" aria-hidden="true" tabindex="-1"></a>    (ord : id.IDOrder) (hloc : ∀ m, Local κ m) (hnorm : ∀ m, Normalised κ m)</span>
+<span id="cb72-33"><a href="#cb72-33" aria-hidden="true" tabindex="-1"></a>    (hnonneg : ∀ m x a, <span class="dv">0</span> ≤ κ m x a) (u : Utility id ℝ) (hu : ∀ j, Utility.Local u j)</span>
+<span id="cb72-34"><a href="#cb72-34" aria-hidden="true" tabindex="-1"></a>    (plan : Plan id Finset.univ) :</span>
+<span id="cb72-35"><a href="#cb72-35" aria-hidden="true" tabindex="-1"></a>    List.Forall₂ Agrees (runState plan (initial κ hloc hnonneg u hu)).valuations</span>
+<span id="cb72-36"><a href="#cb72-36" aria-hidden="true" tabindex="-1"></a>      (runRepState keep plan (initial κ hloc hnonneg u hu)).valuations :=</span>
+<span id="cb72-37"><a href="#cb72-37" aria-hidden="true" tabindex="-1"></a>  runRep_agrees keep plan _ _ (agrees_refl_list _)</span>
+<span id="cb72-38"><a href="#cb72-38" aria-hidden="true" tabindex="-1"></a>    (all_guards_complete κ hclosed ord hloc hnorm hnonneg u hu plan)</span>
+<span id="cb72-39"><a href="#cb72-39" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb72-40"><a href="#cb72-40" aria-hidden="true" tabindex="-1"></a><span class="do">/-- **Julia&#39;s representative is still exact.** For every selector, every `keep` and every</span></span>
+<span id="cb72-41"><a href="#cb72-41" aria-hidden="true" tabindex="-1"></a><span class="do">plan, the returned deterministic strategy realizes the reported value, which is the global</span></span>
+<span id="cb72-42"><a href="#cb72-42" aria-hidden="true" tabindex="-1"></a><span class="do">optimum, and the value equals the model&#39;s. -/</span></span>
+<span id="cb72-43"><a href="#cb72-43" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> solveRepPlanWith_spec (sel : Selector id) (keep : id.V → Bool) (κ : id.Kernel ℝ)</span>
+<span id="cb72-44"><a href="#cb72-44" aria-hidden="true" tabindex="-1"></a>    (hclosed : id.Closed) (ord : id.IDOrder) (hloc : ∀ m, Local κ m)</span>
+<span id="cb72-45"><a href="#cb72-45" aria-hidden="true" tabindex="-1"></a>    (hnorm : ∀ m, Normalised κ m) (hnonneg : ∀ m x a, <span class="dv">0</span> ≤ κ m x a) (u : Utility id ℝ)</span>
+<span id="cb72-46"><a href="#cb72-46" aria-hidden="true" tabindex="-1"></a>    (hu : ∀ j, Utility.Local u j) (plan : Plan id Finset.univ) :</span>
+<span id="cb72-47"><a href="#cb72-47" aria-hidden="true" tabindex="-1"></a>    <span class="kw">let</span> sol := solveRepPlanWith sel keep κ hloc hnonneg u hu plan</span>
+<span id="cb72-48"><a href="#cb72-48" aria-hidden="true" tabindex="-1"></a>    sol.strategy.Deterministic ∧ expectedUtility κ sol.strategy u = sol.value ∧</span>
+<span id="cb72-49"><a href="#cb72-49" aria-hidden="true" tabindex="-1"></a>      sol.value = optimalValue κ u := <span class="kw">by</span></span>
+<span id="cb72-50"><a href="#cb72-50" aria-hidden="true" tabindex="-1"></a>  <span class="cf">intro</span> sol</span>
+<span id="cb72-51"><a href="#cb72-51" aria-hidden="true" tabindex="-1"></a>  <span class="kw">let</span> result := runRepWith sel keep plan (initial κ hloc hnonneg u hu) (defaultStrategy (id := id))</span>
+<span id="cb72-52"><a href="#cb72-52" aria-hidden="true" tabindex="-1"></a>  <span class="kw">have</span> hc : Inv κ u (<span class="kw">fun</span> _ =&gt; <span class="dv">1</span>) result<span class="fl">.1</span> result<span class="fl">.2</span> :=</span>
+<span id="cb72-53"><a href="#cb72-53" aria-hidden="true" tabindex="-1"></a>    runRepWith_inv sel keep (independent_one κ hclosed ord hloc hnorm) hclosed _ _ _</span>
+<span id="cb72-54"><a href="#cb72-54" aria-hidden="true" tabindex="-1"></a>      (Inv.ofCorrect (initial_correct κ hloc hnonneg u hu _))</span>
+<span id="cb72-55"><a href="#cb72-55" aria-hidden="true" tabindex="-1"></a>  <span class="kw">have</span> hp : (collect result.<span class="fl">1.</span>valuations).prob (baseAssignment id) = <span class="dv">1</span> := <span class="kw">by</span></span>
+<span id="cb72-56"><a href="#cb72-56" aria-hidden="true" tabindex="-1"></a>    <span class="cf">rw</span> [hc.mass, Finset.compl_empty, freeJoint_univ, marg_univ]</span>
+<span id="cb72-57"><a href="#cb72-57" aria-hidden="true" tabindex="-1"></a>    <span class="cf">simpa</span> only [mul_one] <span class="kw">using</span> sum_joint_instantiate_eq_one κ result<span class="fl">.2</span> hclosed ord hloc hnorm</span>
+<span id="cb72-58"><a href="#cb72-58" aria-hidden="true" tabindex="-1"></a>  <span class="kw">have</span> hr : expectedUtility κ result<span class="fl">.2</span> u =</span>
+<span id="cb72-59"><a href="#cb72-59" aria-hidden="true" tabindex="-1"></a>      (collect result.<span class="fl">1.</span>valuations).util (baseAssignment id) := <span class="kw">by</span></span>
+<span id="cb72-60"><a href="#cb72-60" aria-hidden="true" tabindex="-1"></a>    <span class="kw">have</span> h := hc.realizes (baseAssignment id)</span>
+<span id="cb72-61"><a href="#cb72-61" aria-hidden="true" tabindex="-1"></a>    <span class="cf">rw</span> [weight, hp, one_mul, Finset.compl_empty, freeJoint_univ, marg_univ] <span class="kw">at</span> h</span>
+<span id="cb72-62"><a href="#cb72-62" aria-hidden="true" tabindex="-1"></a>    <span class="cf">simp</span> only [one_mul] <span class="kw">at</span> h</span>
+<span id="cb72-63"><a href="#cb72-63" aria-hidden="true" tabindex="-1"></a>    <span class="cf">exact</span> h.symm</span>
+<span id="cb72-64"><a href="#cb72-64" aria-hidden="true" tabindex="-1"></a>  <span class="kw">have</span> hd : result.<span class="fl">2.</span>Deterministic :=</span>
+<span id="cb72-65"><a href="#cb72-65" aria-hidden="true" tabindex="-1"></a>    runRepWith_deterministic sel keep _ _ _ defaultStrategy_deterministic</span>
+<span id="cb72-66"><a href="#cb72-66" aria-hidden="true" tabindex="-1"></a>  <span class="kw">have</span> ho : ∀ σ : Strategy id ℝ, σ.Nonneg →</span>
+<span id="cb72-67"><a href="#cb72-67" aria-hidden="true" tabindex="-1"></a>      expectedUtility κ σ u ≤ (collect result.<span class="fl">1.</span>valuations).util (baseAssignment id) := <span class="kw">by</span></span>
+<span id="cb72-68"><a href="#cb72-68" aria-hidden="true" tabindex="-1"></a>    <span class="cf">intro</span> σ hσ</span>
+<span id="cb72-69"><a href="#cb72-69" aria-hidden="true" tabindex="-1"></a>    <span class="kw">have</span> h := hc.dominates σ hσ (baseAssignment id)</span>
+<span id="cb72-70"><a href="#cb72-70" aria-hidden="true" tabindex="-1"></a>    <span class="cf">rw</span> [weight, hp, one_mul, Finset.compl_empty, freeJoint_univ, marg_univ] <span class="kw">at</span> h</span>
+<span id="cb72-71"><a href="#cb72-71" aria-hidden="true" tabindex="-1"></a>    <span class="cf">simpa</span> only [one_mul] <span class="kw">using</span> h</span>
+<span id="cb72-72"><a href="#cb72-72" aria-hidden="true" tabindex="-1"></a>  change result.<span class="fl">2.</span>Deterministic ∧ expectedUtility κ result<span class="fl">.2</span> u =</span>
+<span id="cb72-73"><a href="#cb72-73" aria-hidden="true" tabindex="-1"></a>    (collect result.<span class="fl">1.</span>valuations).util (baseAssignment id) ∧</span>
+<span id="cb72-74"><a href="#cb72-74" aria-hidden="true" tabindex="-1"></a>      (collect result.<span class="fl">1.</span>valuations).util (baseAssignment id) = optimalValue κ u</span>
+<span id="cb72-75"><a href="#cb72-75" aria-hidden="true" tabindex="-1"></a>  <span class="cf">refine</span> ⟨hd, hr, le_antisymm ?_ ?_⟩</span>
+<span id="cb72-76"><a href="#cb72-76" aria-hidden="true" tabindex="-1"></a>  · <span class="cf">rw</span> [← hr]</span>
+<span id="cb72-77"><a href="#cb72-77" aria-hidden="true" tabindex="-1"></a>    <span class="cf">exact</span> expectedUtility_le_optimalValue κ u result<span class="fl">.2</span> (deterministic_nonneg _ hd)</span>
+<span id="cb72-78"><a href="#cb72-78" aria-hidden="true" tabindex="-1"></a>  · <span class="cf">obtain</span> ⟨σ, _, hσ, hvalue⟩ := optimalValue_attained κ u</span>
+<span id="cb72-79"><a href="#cb72-79" aria-hidden="true" tabindex="-1"></a>    <span class="cf">rw</span> [← hvalue]</span>
+<span id="cb72-80"><a href="#cb72-80" aria-hidden="true" tabindex="-1"></a>    <span class="cf">exact</span> ho σ hσ</span>
+<span id="cb72-81"><a href="#cb72-81" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb72-82"><a href="#cb72-82" aria-hidden="true" tabindex="-1"></a><span class="do">/-- The value of Julia&#39;s representative run is the model&#39;s value on the same plan. -/</span></span>
+<span id="cb72-83"><a href="#cb72-83" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> solveRepPlanWith_value (sel : Selector id) (keep : id.V → Bool) (κ : id.Kernel ℝ)</span>
+<span id="cb72-84"><a href="#cb72-84" aria-hidden="true" tabindex="-1"></a>    (hclosed : id.Closed) (ord : id.IDOrder) (hloc : ∀ m, Local κ m)</span>
+<span id="cb72-85"><a href="#cb72-85" aria-hidden="true" tabindex="-1"></a>    (hnorm : ∀ m, Normalised κ m) (hnonneg : ∀ m x a, <span class="dv">0</span> ≤ κ m x a) (u : Utility id ℝ)</span>
+<span id="cb72-86"><a href="#cb72-86" aria-hidden="true" tabindex="-1"></a>    (hu : ∀ j, Utility.Local u j) (plan : Plan id Finset.univ) :</span>
+<span id="cb72-87"><a href="#cb72-87" aria-hidden="true" tabindex="-1"></a>    (solveRepPlanWith sel keep κ hloc hnonneg u hu plan).value =</span>
+<span id="cb72-88"><a href="#cb72-88" aria-hidden="true" tabindex="-1"></a>      (solvePlanWith sel κ hloc hnonneg u hu plan).value := <span class="kw">by</span></span>
+<span id="cb72-89"><a href="#cb72-89" aria-hidden="true" tabindex="-1"></a>  <span class="cf">rw</span> [(solveRepPlanWith_spec sel keep κ hclosed ord hloc hnorm hnonneg u hu plan).<span class="fl">2.2</span>,</span>
+<span id="cb72-90"><a href="#cb72-90" aria-hidden="true" tabindex="-1"></a>    ← solveRepPlanWith_false sel κ hloc hnonneg u hu plan,</span>
+<span id="cb72-91"><a href="#cb72-91" aria-hidden="true" tabindex="-1"></a>    (solveRepPlanWith_spec sel (<span class="kw">fun</span> _ =&gt; false) κ hclosed ord hloc hnorm hnonneg u hu plan).<span class="fl">2.2</span>]</span>
+<span id="cb72-92"><a href="#cb72-92" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb72-93"><a href="#cb72-93" aria-hidden="true" tabindex="-1"></a><span class="do">/-- **Positive-reach scores of Julia&#39;s representative are the model&#39;s.** -/</span></span>
+<span id="cb72-94"><a href="#cb72-94" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> solveRepPlanScore_eq (keep : id.V → Bool) (κ : id.Kernel ℝ) (hclosed : id.Closed)</span>
+<span id="cb72-95"><a href="#cb72-95" aria-hidden="true" tabindex="-1"></a>    (ord : id.IDOrder) (hloc : ∀ m, Local κ m) (hnorm : ∀ m, Normalised κ m)</span>
+<span id="cb72-96"><a href="#cb72-96" aria-hidden="true" tabindex="-1"></a>    (hnonneg : ∀ m x a, <span class="dv">0</span> ≤ κ m x a) (u : Utility id ℝ) (hu : ∀ j, Utility.Local u j)</span>
+<span id="cb72-97"><a href="#cb72-97" aria-hidden="true" tabindex="-1"></a>    (plan : Plan id Finset.univ) (d : id.D) (x : id.Assignment) (ρ : Strategy id ℝ)</span>
+<span id="cb72-98"><a href="#cb72-98" aria-hidden="true" tabindex="-1"></a>    (hx : reach κ (<span class="kw">fun</span> _ =&gt; <span class="dv">1</span>) ρ d x ≠ <span class="dv">0</span>) :</span>
+<span id="cb72-99"><a href="#cb72-99" aria-hidden="true" tabindex="-1"></a>    solveRepPlanScore keep κ hloc hnonneg u hu plan d x =</span>
+<span id="cb72-100"><a href="#cb72-100" aria-hidden="true" tabindex="-1"></a>      solvePlanScore κ hloc hnonneg u hu plan d x :=</span>
+<span id="cb72-101"><a href="#cb72-101" aria-hidden="true" tabindex="-1"></a>  decisionScoreRep_eq keep (independent_one κ hclosed ord hloc hnorm) hclosed plan _ _</span>
+<span id="cb72-102"><a href="#cb72-102" aria-hidden="true" tabindex="-1"></a>    (agrees_refl_list _) (all_guards_complete κ hclosed ord hloc hnorm hnonneg u hu plan)</span>
+<span id="cb72-103"><a href="#cb72-103" aria-hidden="true" tabindex="-1"></a>    (massAll_initial κ hloc hnonneg u hu) d (Finset.mem_univ _) x ρ hx</span>
+<span id="cb72-104"><a href="#cb72-104" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb72-105"><a href="#cb72-105" aria-hidden="true" tabindex="-1"></a><span class="do">/-- **Julia&#39;s representative cannot change a reachable table entry.** For every selector, every</span></span>
+<span id="cb72-106"><a href="#cb72-106" aria-hidden="true" tabindex="-1"></a><span class="do">`keep` and every plan, on every row of positive reach (under any strategy), the returned policy</span></span>
+<span id="cb72-107"><a href="#cb72-107" aria-hidden="true" tabindex="-1"></a><span class="do">entry equals the model&#39;s on the same plan. -/</span></span>
+<span id="cb72-108"><a href="#cb72-108" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> solveRepPlanWith_kernel_eq (sel : Selector id) (keep : id.V → Bool) (κ : id.Kernel ℝ)</span>
+<span id="cb72-109"><a href="#cb72-109" aria-hidden="true" tabindex="-1"></a>    (hclosed : id.Closed) (ord : id.IDOrder) (hloc : ∀ m, Local κ m)</span>
+<span id="cb72-110"><a href="#cb72-110" aria-hidden="true" tabindex="-1"></a>    (hnorm : ∀ m, Normalised κ m) (hnonneg : ∀ m x a, <span class="dv">0</span> ≤ κ m x a) (u : Utility id ℝ)</span>
+<span id="cb72-111"><a href="#cb72-111" aria-hidden="true" tabindex="-1"></a>    (hu : ∀ j, Utility.Local u j) (plan : Plan id Finset.univ) (d : id.D) (x : id.Assignment)</span>
+<span id="cb72-112"><a href="#cb72-112" aria-hidden="true" tabindex="-1"></a>    (ρ : Strategy id ℝ) (hx : reach κ (<span class="kw">fun</span> _ =&gt; <span class="dv">1</span>) ρ d x ≠ <span class="dv">0</span>) :</span>
+<span id="cb72-113"><a href="#cb72-113" aria-hidden="true" tabindex="-1"></a>    ((solveRepPlanWith sel keep κ hloc hnonneg u hu plan).strategy d).kernel x =</span>
+<span id="cb72-114"><a href="#cb72-114" aria-hidden="true" tabindex="-1"></a>      ((solvePlanWith sel κ hloc hnonneg u hu plan).strategy d).kernel x := <span class="kw">by</span></span>
+<span id="cb72-115"><a href="#cb72-115" aria-hidden="true" tabindex="-1"></a>  <span class="kw">have</span> hinj := (id.closed_iff<span class="fl">.1</span> hclosed).<span class="fl">2.1</span></span>
+<span id="cb72-116"><a href="#cb72-116" aria-hidden="true" tabindex="-1"></a>  <span class="cf">funext</span> a</span>
+<span id="cb72-117"><a href="#cb72-117" aria-hidden="true" tabindex="-1"></a>  <span class="kw">have</span> h1 := runRepWith_kernel sel keep hinj plan (initial κ hloc hnonneg u hu) defaultStrategy d</span>
+<span id="cb72-118"><a href="#cb72-118" aria-hidden="true" tabindex="-1"></a>    (Finset.mem_univ _) x a</span>
+<span id="cb72-119"><a href="#cb72-119" aria-hidden="true" tabindex="-1"></a>  <span class="kw">have</span> h2 := runWith_kernel sel hinj plan (initial κ hloc hnonneg u hu) defaultStrategy d</span>
+<span id="cb72-120"><a href="#cb72-120" aria-hidden="true" tabindex="-1"></a>    (Finset.mem_univ _) x a</span>
+<span id="cb72-121"><a href="#cb72-121" aria-hidden="true" tabindex="-1"></a>  change ((runRepWith sel keep plan _ defaultStrategy).<span class="dv">2</span> d).kernel x a =</span>
+<span id="cb72-122"><a href="#cb72-122" aria-hidden="true" tabindex="-1"></a>    ((runWith sel plan _ defaultStrategy).<span class="dv">2</span> d).kernel x a</span>
+<span id="cb72-123"><a href="#cb72-123" aria-hidden="true" tabindex="-1"></a>  <span class="cf">rw</span> [h1, h2]</span>
+<span id="cb72-124"><a href="#cb72-124" aria-hidden="true" tabindex="-1"></a>  <span class="kw">have</span> he := solveRepPlanScore_eq keep κ hclosed ord hloc hnorm hnonneg u hu plan d x ρ hx</span>
+<span id="cb72-125"><a href="#cb72-125" aria-hidden="true" tabindex="-1"></a>  <span class="cf">unfold</span> solveRepPlanScore solvePlanScore <span class="kw">at</span> he</span>
+<span id="cb72-126"><a href="#cb72-126" aria-hidden="true" tabindex="-1"></a>  <span class="cf">rw</span> [he]</span>
+<span id="cb72-127"><a href="#cb72-127" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb72-128"><a href="#cb72-128" aria-hidden="true" tabindex="-1"></a><span class="kw">section</span> Ordered</span>
+<span id="cb72-129"><a href="#cb72-129" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb72-130"><a href="#cb72-130" aria-hidden="true" tabindex="-1"></a><span class="kw">variable</span> [∀ d : id.D, LinearOrder (id.states (id.action d))]</span>
+<span id="cb72-131"><a href="#cb72-131" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb72-132"><a href="#cb72-132" aria-hidden="true" tabindex="-1"></a><span class="do">/-- **First-label table identity for Julia&#39;s representative, on every row.** Reachable or</span></span>
+<span id="cb72-133"><a href="#cb72-133" aria-hidden="true" tabindex="-1"></a><span class="do">not, the ordered solver&#39;s policy is `orderedTable` of its own bucket-utility score, a finite</span></span>
+<span id="cb72-134"><a href="#cb72-134" aria-hidden="true" tabindex="-1"></a><span class="do">table over exactly the information variables. -/</span></span>
+<span id="cb72-135"><a href="#cb72-135" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> solveRepPlanOrdered_table (keep : id.V → Bool) (κ : id.Kernel ℝ) (hclosed : id.Closed)</span>
+<span id="cb72-136"><a href="#cb72-136" aria-hidden="true" tabindex="-1"></a>    (hloc : ∀ m, Local κ m) (hnonneg : ∀ m x a, <span class="dv">0</span> ≤ κ m x a) (u : Utility id ℝ)</span>
+<span id="cb72-137"><a href="#cb72-137" aria-hidden="true" tabindex="-1"></a>    (hu : ∀ j, Utility.Local u j) (plan : Plan id Finset.univ) (d : id.D) (x : id.Assignment)</span>
+<span id="cb72-138"><a href="#cb72-138" aria-hidden="true" tabindex="-1"></a>    (a : id.states (id.action d)) :</span>
+<span id="cb72-139"><a href="#cb72-139" aria-hidden="true" tabindex="-1"></a>    ((solveRepPlanWith (Selector.ordered id) keep κ hloc hnonneg u hu plan).strategy d).kernel</span>
+<span id="cb72-140"><a href="#cb72-140" aria-hidden="true" tabindex="-1"></a>        x a =</span>
+<span id="cb72-141"><a href="#cb72-141" aria-hidden="true" tabindex="-1"></a>      <span class="kw">if</span> a = orderedTable (solveRepPlanScore keep κ hloc hnonneg u hu plan d)</span>
+<span id="cb72-142"><a href="#cb72-142" aria-hidden="true" tabindex="-1"></a>        (infoAssignment d x) <span class="kw">then</span> <span class="dv">1</span> <span class="kw">else</span> <span class="dv">0</span> := <span class="kw">by</span></span>
+<span id="cb72-143"><a href="#cb72-143" aria-hidden="true" tabindex="-1"></a>  <span class="kw">have</span> hinj := (id.closed_iff<span class="fl">.1</span> hclosed).<span class="fl">2.1</span></span>
+<span id="cb72-144"><a href="#cb72-144" aria-hidden="true" tabindex="-1"></a>  <span class="cf">unfold</span> solveRepPlanScore</span>
+<span id="cb72-145"><a href="#cb72-145" aria-hidden="true" tabindex="-1"></a>  <span class="cf">rw</span> [orderedTable_reconstruct _ (decisionScoreRep_local keep hinj plan _ d (Finset.mem_univ _))]</span>
+<span id="cb72-146"><a href="#cb72-146" aria-hidden="true" tabindex="-1"></a>  <span class="cf">exact</span> runRepWith_kernel _ keep hinj _ _ _ d (Finset.mem_univ _) x a</span>
+<span id="cb72-147"><a href="#cb72-147" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb72-148"><a href="#cb72-148" aria-hidden="true" tabindex="-1"></a><span class="do">/-- On a row of positive reach the ordered entry of Julia&#39;s representative is the least</span></span>
+<span id="cb72-149"><a href="#cb72-149" aria-hidden="true" tabindex="-1"></a><span class="do">maximizer of the plan- and representative-independent optimal continuation value. -/</span></span>
+<span id="cb72-150"><a href="#cb72-150" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> solveRepPlanOrdered_optimal (keep : id.V → Bool) (κ : id.Kernel ℝ) (hclosed : id.Closed)</span>
+<span id="cb72-151"><a href="#cb72-151" aria-hidden="true" tabindex="-1"></a>    (ord : id.IDOrder) (hloc : ∀ m, Local κ m) (hnorm : ∀ m, Normalised κ m)</span>
+<span id="cb72-152"><a href="#cb72-152" aria-hidden="true" tabindex="-1"></a>    (hnonneg : ∀ m x a, <span class="dv">0</span> ≤ κ m x a) (u : Utility id ℝ) (hu : ∀ j, Utility.Local u j)</span>
+<span id="cb72-153"><a href="#cb72-153" aria-hidden="true" tabindex="-1"></a>    (plan : Plan id Finset.univ) (d : id.D) (x : id.Assignment) (ρ : Strategy id ℝ)</span>
+<span id="cb72-154"><a href="#cb72-154" aria-hidden="true" tabindex="-1"></a>    (hx : reach κ (<span class="kw">fun</span> _ =&gt; <span class="dv">1</span>) ρ d x ≠ <span class="dv">0</span>) (a : id.states (id.action d)) :</span>
+<span id="cb72-155"><a href="#cb72-155" aria-hidden="true" tabindex="-1"></a>    ((solveRepPlanWith (Selector.ordered id) keep κ hloc hnonneg u hu plan).strategy d).kernel</span>
+<span id="cb72-156"><a href="#cb72-156" aria-hidden="true" tabindex="-1"></a>        x a =</span>
+<span id="cb72-157"><a href="#cb72-157" aria-hidden="true" tabindex="-1"></a>      <span class="kw">if</span> a = firstArgmax (optimalContinuation κ u (<span class="kw">fun</span> _ =&gt; <span class="dv">1</span>) d x) <span class="kw">then</span> <span class="dv">1</span> <span class="kw">else</span> <span class="dv">0</span> := <span class="kw">by</span></span>
+<span id="cb72-158"><a href="#cb72-158" aria-hidden="true" tabindex="-1"></a>  <span class="cf">rw</span> [solveRepPlanWith_kernel_eq _ keep κ hclosed ord hloc hnorm hnonneg u hu plan d x ρ hx]</span>
+<span id="cb72-159"><a href="#cb72-159" aria-hidden="true" tabindex="-1"></a>  <span class="cf">exact</span> solvePlanOrdered_optimal κ hclosed ord hloc hnorm hnonneg u hu plan d x ρ hx a</span>
+<span id="cb72-160"><a href="#cb72-160" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb72-161"><a href="#cb72-161" aria-hidden="true" tabindex="-1"></a><span class="kw">end</span> Ordered</span>
+<span id="cb72-162"><a href="#cb72-162" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb72-163"><a href="#cb72-163" aria-hidden="true" tabindex="-1"></a><span class="kw">end</span></span>
+<span id="cb72-164"><a href="#cb72-164" aria-hidden="true" tabindex="-1"></a><span class="kw">end</span> InfluenceDiagramsProofs.DVE</span></code></pre></div>
+<!-- InfluenceDiagramsProofs/Finite/DVE/LabelOrder.lean -->
+<h1 id="action-labels-in-checked-state-position-order">Action labels in
+checked state-position order</h1>
+<div class="sourceCode" id="cb73"><pre
+class="sourceCode lean"><code class="sourceCode lean"><span id="cb73-1"><a href="#cb73-1" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> InfluenceDiagramsProofs.Finite.DVE.Representative</span>
+<span id="cb73-2"><a href="#cb73-2" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> BayesianNetworksProofs.Finite.RawRecords</span></code></pre></div>
+<p><code>Selector.ordered</code> takes an arbitrary linear order on
+every action space. Julia’s <code>argmax_table</code> returns the first
+maximizing entry along the action axis, and that axis lists the action’s
+states in <code>state_position</code> order. This module derives the
+order from checked records instead of supplying it.</p>
+<ul>
+<li><code>positionOrder pos</code> is the linear order induced by an
+injective position map, and <code>firstArgmax_least_position</code> /
+<code>eq_firstArgmax_of_least_position</code> show that under it
+<code>firstArgmax</code> is exactly the maximizer of least
+position.</li>
+<li><code>Records.Diagram</code> holds raw influence-diagram rows:
+variables and their state rows (<code>var</code>, <code>position</code>,
+<code>name</code>, the BN <code>Raw.StateRow</code>), mechanisms,
+inputs, decisions, information rows, utilities and utility inputs, with
+external IDs already decoded to <code>Fin</code>. <code>Valid</code>
+checks only what the label order needs: every variable has a state,
+positions are bounded and unique per variable
+(<code>Raw.Positioned</code>), and labels are unique per variable.
+<code>compile</code> builds the <code>FinInfluenceDiagram</code> whose
+state space for <code>v</code> is <code>Fin (stateCount v)</code>;
+<code>stateRecord</code> is the record at each position (the positional
+bijection <code>Raw.positionEquiv</code>, derived, not assumed), with
+<code>stateRecord_position</code>.</li>
+<li><code>actionOrder</code> orders each action space by the checked
+<code>position</code> of its records (<code>actionOrder_le_iff</code>:
+it is the order of <code>Fin</code>), and <code>selector</code> is
+<code>Selector.ordered</code> with that order.</li>
+</ul>
+<p>Headline results: <code>solveRecords_table</code> (the model’s
+driver, every information row: the entry is the state of least
+<code>position</code> among the maximizers of <code>solveScore</code>),
+<code>solveRepRecords_table</code> (Julia’s sum-out representative, any
+plan, every row, its own score) and <code>solveRepRecords_optimal</code>
+(Julia’s representative, any plan, every row of positive reach: the
+state of least <code>position</code> among the maximizers of
+<code>optimalContinuation</code>).</p>
+<p>What is not proved here: that Julia’s arrays are laid out in that
+order is the <code>FiniteKernels</code> <code>Layout/</code> result
+together with the Julia test pinning the action axis to
+<code>states(id, v)</code>; that Julia’s DVE certificate
+(<code>variables[].states</code>, rows of <code>id</code>,
+<code>position</code>, <code>label</code>) decodes into these records is
+not formalised (there is no Lean consumer of that certificate); the DVE
+hypotheses (<code>Closed</code>, <code>IDOrder</code>,
+<code>NoForgettingOrder</code>) of the compiled diagram stay hypotheses;
+and Julia’s execution itself is not proved.</p>
+<div class="sourceCode" id="cb74"><pre
+class="sourceCode lean"><code class="sourceCode lean"><span id="cb74-1"><a href="#cb74-1" aria-hidden="true" tabindex="-1"></a><span class="kw">set_option</span> autoImplicit false</span>
+<span id="cb74-2"><a href="#cb74-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb74-3"><a href="#cb74-3" aria-hidden="true" tabindex="-1"></a><span class="kw">namespace</span> InfluenceDiagramsProofs</span>
+<span id="cb74-4"><a href="#cb74-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb74-5"><a href="#cb74-5" aria-hidden="true" tabindex="-1"></a><span class="kw">open</span> BayesianNetworksProofs BayesianNetworksProofs.FinBayesNet FinInfluenceDiagram</span>
+<span id="cb74-6"><a href="#cb74-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb74-7"><a href="#cb74-7" aria-hidden="true" tabindex="-1"></a><span class="kw">noncomputable</span> <span class="kw">section</span></span></code></pre></div>
+<h2 id="least-position-maximizers">Least-position maximizers</h2>
+<div class="sourceCode" id="cb75"><pre
+class="sourceCode lean"><code class="sourceCode lean"><span id="cb75-1"><a href="#cb75-1" aria-hidden="true" tabindex="-1"></a><span class="do">/-- The linear order induced by an injective position map. -/</span></span>
+<span id="cb75-2"><a href="#cb75-2" aria-hidden="true" tabindex="-1"></a><span class="at">@[reducible]</span> <span class="kw">def</span> positionOrder {A : <span class="kw">Type</span>} (pos : A → ℕ) (hpos : Function.Injective pos) : LinearOrder A :=</span>
+<span id="cb75-3"><a href="#cb75-3" aria-hidden="true" tabindex="-1"></a>  LinearOrder.lift&#39; pos hpos</span>
+<span id="cb75-4"><a href="#cb75-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb75-5"><a href="#cb75-5" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> positionOrder_le_iff {A : <span class="kw">Type</span>} (pos : A → ℕ) (hpos : Function.Injective pos)</span>
+<span id="cb75-6"><a href="#cb75-6" aria-hidden="true" tabindex="-1"></a>    (a b : A) : (positionOrder pos hpos).le a b ↔ pos a ≤ pos b :=</span>
+<span id="cb75-7"><a href="#cb75-7" aria-hidden="true" tabindex="-1"></a>  Iff.rfl</span>
+<span id="cb75-8"><a href="#cb75-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb75-9"><a href="#cb75-9" aria-hidden="true" tabindex="-1"></a><span class="do">/-- Under the position order, `firstArgmax` maximizes and has the least position among all</span></span>
+<span id="cb75-10"><a href="#cb75-10" aria-hidden="true" tabindex="-1"></a><span class="do">maximizers. -/</span></span>
+<span id="cb75-11"><a href="#cb75-11" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> firstArgmax_least_position {A : <span class="kw">Type</span>} [Fintype A] [Nonempty A] (pos : A → ℕ)</span>
+<span id="cb75-12"><a href="#cb75-12" aria-hidden="true" tabindex="-1"></a>    (hpos : Function.Injective pos) (f : A → ℝ) :</span>
+<span id="cb75-13"><a href="#cb75-13" aria-hidden="true" tabindex="-1"></a>    (∀ b, f b ≤ f (@firstArgmax A _ _ (positionOrder pos hpos) f)) ∧</span>
+<span id="cb75-14"><a href="#cb75-14" aria-hidden="true" tabindex="-1"></a>      ∀ b, (∀ c, f c ≤ f b) → pos (@firstArgmax A _ _ (positionOrder pos hpos) f) ≤ pos b :=</span>
+<span id="cb75-15"><a href="#cb75-15" aria-hidden="true" tabindex="-1"></a>  <span class="kw">letI</span> := positionOrder pos hpos</span>
+<span id="cb75-16"><a href="#cb75-16" aria-hidden="true" tabindex="-1"></a>  ⟨firstArgmax_maximizes f, <span class="kw">fun</span> b hb =&gt; firstArgmax_first f b hb⟩</span>
+<span id="cb75-17"><a href="#cb75-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb75-18"><a href="#cb75-18" aria-hidden="true" tabindex="-1"></a><span class="do">/-- Conversely, the maximizer of least position is `firstArgmax`. -/</span></span>
+<span id="cb75-19"><a href="#cb75-19" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> eq_firstArgmax_of_least_position {A : <span class="kw">Type</span>} [Fintype A] [Nonempty A] (pos : A → ℕ)</span>
+<span id="cb75-20"><a href="#cb75-20" aria-hidden="true" tabindex="-1"></a>    (hpos : Function.Injective pos) (f : A → ℝ) (t : A) (ht : ∀ b, f b ≤ f t)</span>
+<span id="cb75-21"><a href="#cb75-21" aria-hidden="true" tabindex="-1"></a>    (hleast : ∀ b, (∀ c, f c ≤ f b) → pos t ≤ pos b) :</span>
+<span id="cb75-22"><a href="#cb75-22" aria-hidden="true" tabindex="-1"></a>    t = @firstArgmax A _ _ (positionOrder pos hpos) f := <span class="kw">by</span></span>
+<span id="cb75-23"><a href="#cb75-23" aria-hidden="true" tabindex="-1"></a>  <span class="kw">letI</span> := positionOrder pos hpos</span>
+<span id="cb75-24"><a href="#cb75-24" aria-hidden="true" tabindex="-1"></a>  <span class="cf">obtain</span> ⟨hmax, hfirst⟩ := firstArgmax_least_position pos hpos f</span>
+<span id="cb75-25"><a href="#cb75-25" aria-hidden="true" tabindex="-1"></a>  <span class="cf">exact</span> hpos (le_antisymm (hleast _ hmax) (hfirst t ht))</span></code></pre></div>
+<h2 id="checked-influence-diagram-records">Checked influence-diagram
+records</h2>
+<div class="sourceCode" id="cb76"><pre
+class="sourceCode lean"><code class="sourceCode lean"><span id="cb76-1"><a href="#cb76-1" aria-hidden="true" tabindex="-1"></a><span class="kw">namespace</span> Records</span>
+<span id="cb76-2"><a href="#cb76-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb76-3"><a href="#cb76-3" aria-hidden="true" tabindex="-1"></a><span class="kw">open</span> BayesianNetworksProofs.Raw</span>
+<span id="cb76-4"><a href="#cb76-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb76-5"><a href="#cb76-5" aria-hidden="true" tabindex="-1"></a><span class="kw">structure</span> DecisionRow (nv : Nat) <span class="kw">where</span></span>
+<span id="cb76-6"><a href="#cb76-6" aria-hidden="true" tabindex="-1"></a>  action : Fin nv</span>
+<span id="cb76-7"><a href="#cb76-7" aria-hidden="true" tabindex="-1"></a>  name : String</span>
+<span id="cb76-8"><a href="#cb76-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb76-9"><a href="#cb76-9" aria-hidden="true" tabindex="-1"></a><span class="kw">structure</span> InformationRow (nv nd : Nat) <span class="kw">where</span></span>
+<span id="cb76-10"><a href="#cb76-10" aria-hidden="true" tabindex="-1"></a>  decision : Fin nd</span>
+<span id="cb76-11"><a href="#cb76-11" aria-hidden="true" tabindex="-1"></a>  var : Fin nv</span>
+<span id="cb76-12"><a href="#cb76-12" aria-hidden="true" tabindex="-1"></a>  position : Nat</span>
+<span id="cb76-13"><a href="#cb76-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb76-14"><a href="#cb76-14" aria-hidden="true" tabindex="-1"></a><span class="kw">structure</span> UtilityRow <span class="kw">where</span></span>
+<span id="cb76-15"><a href="#cb76-15" aria-hidden="true" tabindex="-1"></a>  name : String</span>
+<span id="cb76-16"><a href="#cb76-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb76-17"><a href="#cb76-17" aria-hidden="true" tabindex="-1"></a><span class="kw">structure</span> UtilityInputRow (nv nu : Nat) <span class="kw">where</span></span>
+<span id="cb76-18"><a href="#cb76-18" aria-hidden="true" tabindex="-1"></a>  utility : Fin nu</span>
+<span id="cb76-19"><a href="#cb76-19" aria-hidden="true" tabindex="-1"></a>  var : Fin nv</span>
+<span id="cb76-20"><a href="#cb76-20" aria-hidden="true" tabindex="-1"></a>  position : Nat</span>
+<span id="cb76-21"><a href="#cb76-21" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb76-22"><a href="#cb76-22" aria-hidden="true" tabindex="-1"></a><span class="do">/-- Raw influence-diagram rows with decoded finite IDs: the shape of the ACSet, and of the</span></span>
+<span id="cb76-23"><a href="#cb76-23" aria-hidden="true" tabindex="-1"></a><span class="do">`variables` / `mechanisms` / `decisions` / `utilities` sections of the DVE certificate. -/</span></span>
+<span id="cb76-24"><a href="#cb76-24" aria-hidden="true" tabindex="-1"></a><span class="kw">structure</span> Diagram <span class="kw">where</span></span>
+<span id="cb76-25"><a href="#cb76-25" aria-hidden="true" tabindex="-1"></a>  nv : Nat</span>
+<span id="cb76-26"><a href="#cb76-26" aria-hidden="true" tabindex="-1"></a>  ns : Nat</span>
+<span id="cb76-27"><a href="#cb76-27" aria-hidden="true" tabindex="-1"></a>  nm : Nat</span>
+<span id="cb76-28"><a href="#cb76-28" aria-hidden="true" tabindex="-1"></a>  ni : Nat</span>
+<span id="cb76-29"><a href="#cb76-29" aria-hidden="true" tabindex="-1"></a>  nd : Nat</span>
+<span id="cb76-30"><a href="#cb76-30" aria-hidden="true" tabindex="-1"></a>  nf : Nat</span>
+<span id="cb76-31"><a href="#cb76-31" aria-hidden="true" tabindex="-1"></a>  nu : Nat</span>
+<span id="cb76-32"><a href="#cb76-32" aria-hidden="true" tabindex="-1"></a>  nq : Nat</span>
+<span id="cb76-33"><a href="#cb76-33" aria-hidden="true" tabindex="-1"></a>  vars : Fin nv → VariableRow</span>
+<span id="cb76-34"><a href="#cb76-34" aria-hidden="true" tabindex="-1"></a>  states : Fin ns → StateRow nv</span>
+<span id="cb76-35"><a href="#cb76-35" aria-hidden="true" tabindex="-1"></a>  mechanisms : Fin nm → MechanismRow nv</span>
+<span id="cb76-36"><a href="#cb76-36" aria-hidden="true" tabindex="-1"></a>  inputs : Fin ni → InputRow nv nm</span>
+<span id="cb76-37"><a href="#cb76-37" aria-hidden="true" tabindex="-1"></a>  decisions : Fin nd → DecisionRow nv</span>
+<span id="cb76-38"><a href="#cb76-38" aria-hidden="true" tabindex="-1"></a>  information : Fin nf → InformationRow nv nd</span>
+<span id="cb76-39"><a href="#cb76-39" aria-hidden="true" tabindex="-1"></a>  utilities : Fin nu → UtilityRow</span>
+<span id="cb76-40"><a href="#cb76-40" aria-hidden="true" tabindex="-1"></a>  utilityInputs : Fin nq → UtilityInputRow nv nu</span>
+<span id="cb76-41"><a href="#cb76-41" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb76-42"><a href="#cb76-42" aria-hidden="true" tabindex="-1"></a><span class="kw">namespace</span> Diagram</span>
+<span id="cb76-43"><a href="#cb76-43" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb76-44"><a href="#cb76-44" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> stateOwner (r : Diagram) (s : Fin r.ns) : Fin r.nv := (r.states s).var</span>
+<span id="cb76-45"><a href="#cb76-45" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb76-46"><a href="#cb76-46" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> stateCount (r : Diagram) (v : Fin r.nv) : Nat :=</span>
+<span id="cb76-47"><a href="#cb76-47" aria-hidden="true" tabindex="-1"></a>  Fintype.card {s : Fin r.ns // r.stateOwner s = v}</span>
+<span id="cb76-48"><a href="#cb76-48" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb76-49"><a href="#cb76-49" aria-hidden="true" tabindex="-1"></a><span class="do">/-- The checks the label order needs; all decidable. -/</span></span>
+<span id="cb76-50"><a href="#cb76-50" aria-hidden="true" tabindex="-1"></a><span class="kw">structure</span> Valid (r : Diagram) : <span class="kw">Prop</span> <span class="kw">where</span></span>
+<span id="cb76-51"><a href="#cb76-51" aria-hidden="true" tabindex="-1"></a>  state_positions : Positioned r.stateOwner (<span class="kw">fun</span> s =&gt; (r.states s).position)</span>
+<span id="cb76-52"><a href="#cb76-52" aria-hidden="true" tabindex="-1"></a>  nonempty_states : ∀ v, <span class="dv">0</span> &lt; r.stateCount v</span>
+<span id="cb76-53"><a href="#cb76-53" aria-hidden="true" tabindex="-1"></a>  state_names : ∀ s t, (r.states s).var = (r.states t).var →</span>
+<span id="cb76-54"><a href="#cb76-54" aria-hidden="true" tabindex="-1"></a>    (r.states s).name = (r.states t).name → s = t</span>
+<span id="cb76-55"><a href="#cb76-55" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb76-56"><a href="#cb76-56" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> valid_iff (r : Diagram) : r.Valid ↔</span>
+<span id="cb76-57"><a href="#cb76-57" aria-hidden="true" tabindex="-1"></a>    Positioned r.stateOwner (<span class="kw">fun</span> s =&gt; (r.states s).position) ∧ (∀ v, <span class="dv">0</span> &lt; r.stateCount v) ∧</span>
+<span id="cb76-58"><a href="#cb76-58" aria-hidden="true" tabindex="-1"></a>      ∀ s t, (r.states s).var = (r.states t).var →</span>
+<span id="cb76-59"><a href="#cb76-59" aria-hidden="true" tabindex="-1"></a>        (r.states s).name = (r.states t).name → s = t :=</span>
+<span id="cb76-60"><a href="#cb76-60" aria-hidden="true" tabindex="-1"></a>  ⟨fun h =&gt; ⟨h<span class="fl">.1</span>, h<span class="fl">.2</span>, h<span class="fl">.3</span>⟩, <span class="kw">fun</span> h =&gt; ⟨h<span class="fl">.1</span>, h.<span class="fl">2.1</span>, h.<span class="fl">2.2</span>⟩⟩</span>
+<span id="cb76-61"><a href="#cb76-61" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb76-62"><a href="#cb76-62" aria-hidden="true" tabindex="-1"></a><span class="kw">instance</span> (r : Diagram) : Decidable r.Valid := decidable_of_iff _ (valid_iff r).symm</span>
+<span id="cb76-63"><a href="#cb76-63" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb76-64"><a href="#cb76-64" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> check (r : Diagram) : Bool := <span class="cf">decide</span> r.Valid</span>
+<span id="cb76-65"><a href="#cb76-65" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb76-66"><a href="#cb76-66" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> check_iff (r : Diagram) : r.check = true ↔ r.Valid := <span class="kw">by</span> <span class="cf">simp</span> [check]</span>
+<span id="cb76-67"><a href="#cb76-67" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb76-68"><a href="#cb76-68" aria-hidden="true" tabindex="-1"></a><span class="do">/-- The finite influence diagram of checked records. The state space of `v` is</span></span>
+<span id="cb76-69"><a href="#cb76-69" aria-hidden="true" tabindex="-1"></a><span class="do">`Fin (stateCount v)`, indexed by checked position. -/</span></span>
+<span id="cb76-70"><a href="#cb76-70" aria-hidden="true" tabindex="-1"></a><span class="at">@[reducible]</span> <span class="kw">def</span> compile (r : Diagram) (h : r.Valid) : FinInfluenceDiagram <span class="kw">where</span></span>
+<span id="cb76-71"><a href="#cb76-71" aria-hidden="true" tabindex="-1"></a>  V := Fin r.nv</span>
+<span id="cb76-72"><a href="#cb76-72" aria-hidden="true" tabindex="-1"></a>  M := Fin r.nm</span>
+<span id="cb76-73"><a href="#cb76-73" aria-hidden="true" tabindex="-1"></a>  states v := Fin (r.stateCount v)</span>
+<span id="cb76-74"><a href="#cb76-74" aria-hidden="true" tabindex="-1"></a>  nonemptyS v := ⟨⟨<span class="dv">0</span>, h.nonempty_states v⟩⟩</span>
+<span id="cb76-75"><a href="#cb76-75" aria-hidden="true" tabindex="-1"></a>  target m := (r.mechanisms m).target</span>
+<span id="cb76-76"><a href="#cb76-76" aria-hidden="true" tabindex="-1"></a>  parents m := (Finset.univ.filter <span class="kw">fun</span> i =&gt; (r.inputs i).mechanism = m).image</span>
+<span id="cb76-77"><a href="#cb76-77" aria-hidden="true" tabindex="-1"></a>    <span class="kw">fun</span> i =&gt; (r.inputs i).var</span>
+<span id="cb76-78"><a href="#cb76-78" aria-hidden="true" tabindex="-1"></a>  D := Fin r.nd</span>
+<span id="cb76-79"><a href="#cb76-79" aria-hidden="true" tabindex="-1"></a>  action d := (r.decisions d).action</span>
+<span id="cb76-80"><a href="#cb76-80" aria-hidden="true" tabindex="-1"></a>  info d := (Finset.univ.filter <span class="kw">fun</span> i =&gt; (r.information i).decision = d).image</span>
+<span id="cb76-81"><a href="#cb76-81" aria-hidden="true" tabindex="-1"></a>    <span class="kw">fun</span> i =&gt; (r.information i).var</span>
+<span id="cb76-82"><a href="#cb76-82" aria-hidden="true" tabindex="-1"></a>  U := Fin r.nu</span>
+<span id="cb76-83"><a href="#cb76-83" aria-hidden="true" tabindex="-1"></a>  uscope j := (Finset.univ.filter <span class="kw">fun</span> i =&gt; (r.utilityInputs i).utility = j).image</span>
+<span id="cb76-84"><a href="#cb76-84" aria-hidden="true" tabindex="-1"></a>    <span class="kw">fun</span> i =&gt; (r.utilityInputs i).var</span>
+<span id="cb76-85"><a href="#cb76-85" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb76-86"><a href="#cb76-86" aria-hidden="true" tabindex="-1"></a><span class="do">/-- The positional bijection between the state records of `v` and `Fin (stateCount v)`,</span></span>
+<span id="cb76-87"><a href="#cb76-87" aria-hidden="true" tabindex="-1"></a><span class="do">derived from bounded unique positions. -/</span></span>
+<span id="cb76-88"><a href="#cb76-88" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> stateOrder (r : Diagram) (h : r.Valid) (v : Fin r.nv) :</span>
+<span id="cb76-89"><a href="#cb76-89" aria-hidden="true" tabindex="-1"></a>    {s : Fin r.ns // r.stateOwner s = v} ≃ Fin (r.stateCount v) :=</span>
+<span id="cb76-90"><a href="#cb76-90" aria-hidden="true" tabindex="-1"></a>  positionEquiv r.stateOwner (<span class="kw">fun</span> s =&gt; (r.states s).position) h.state_positions v</span>
+<span id="cb76-91"><a href="#cb76-91" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb76-92"><a href="#cb76-92" aria-hidden="true" tabindex="-1"></a><span class="do">/-- The state record at each position. -/</span></span>
+<span id="cb76-93"><a href="#cb76-93" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> stateRecord (r : Diagram) (h : r.Valid) (v : Fin r.nv) (a : Fin (r.stateCount v)) :</span>
+<span id="cb76-94"><a href="#cb76-94" aria-hidden="true" tabindex="-1"></a>    Fin r.ns :=</span>
+<span id="cb76-95"><a href="#cb76-95" aria-hidden="true" tabindex="-1"></a>  ((r.stateOrder h v).symm a).val</span>
+<span id="cb76-96"><a href="#cb76-96" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb76-97"><a href="#cb76-97" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> stateRecord_var (r : Diagram) (h : r.Valid) (v : Fin r.nv) (a : Fin (r.stateCount v)) :</span>
+<span id="cb76-98"><a href="#cb76-98" aria-hidden="true" tabindex="-1"></a>    (r.states (r.stateRecord h v a)).var = v :=</span>
+<span id="cb76-99"><a href="#cb76-99" aria-hidden="true" tabindex="-1"></a>  ((r.stateOrder h v).symm a).property</span>
+<span id="cb76-100"><a href="#cb76-100" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb76-101"><a href="#cb76-101" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> stateRecord_position (r : Diagram) (h : r.Valid) (v : Fin r.nv)</span>
+<span id="cb76-102"><a href="#cb76-102" aria-hidden="true" tabindex="-1"></a>    (a : Fin (r.stateCount v)) : (r.states (r.stateRecord h v a)).position = a.val :=</span>
+<span id="cb76-103"><a href="#cb76-103" aria-hidden="true" tabindex="-1"></a>  congrArg Fin.val ((r.stateOrder h v).apply_symm_apply a)</span>
+<span id="cb76-104"><a href="#cb76-104" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb76-105"><a href="#cb76-105" aria-hidden="true" tabindex="-1"></a><span class="do">/-- Every state record of `v` is the record at its own position. -/</span></span>
+<span id="cb76-106"><a href="#cb76-106" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> stateRecord_of_mem (r : Diagram) (h : r.Valid) (s : Fin r.ns) :</span>
+<span id="cb76-107"><a href="#cb76-107" aria-hidden="true" tabindex="-1"></a>    ∃ a : Fin (r.stateCount (r.states s).var), r.stateRecord h _ a = s ∧</span>
+<span id="cb76-108"><a href="#cb76-108" aria-hidden="true" tabindex="-1"></a>      a.val = (r.states s).position :=</span>
+<span id="cb76-109"><a href="#cb76-109" aria-hidden="true" tabindex="-1"></a>  ⟨r.stateOrder h _ ⟨s, rfl⟩, congrArg Subtype.val ((r.stateOrder h _).symm_apply_apply _), rfl⟩</span>
+<span id="cb76-110"><a href="#cb76-110" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb76-111"><a href="#cb76-111" aria-hidden="true" tabindex="-1"></a><span class="do">/-- The checked `state_position` of a state. -/</span></span>
+<span id="cb76-112"><a href="#cb76-112" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> statePosition (r : Diagram) (h : r.Valid) (v : Fin r.nv) (a : Fin (r.stateCount v)) : ℕ :=</span>
+<span id="cb76-113"><a href="#cb76-113" aria-hidden="true" tabindex="-1"></a>  (r.states (r.stateRecord h v a)).position</span>
+<span id="cb76-114"><a href="#cb76-114" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb76-115"><a href="#cb76-115" aria-hidden="true" tabindex="-1"></a><span class="do">/-- The label (`state_name`) of a state. -/</span></span>
+<span id="cb76-116"><a href="#cb76-116" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> stateLabel (r : Diagram) (h : r.Valid) (v : Fin r.nv) (a : Fin (r.stateCount v)) : String :=</span>
+<span id="cb76-117"><a href="#cb76-117" aria-hidden="true" tabindex="-1"></a>  (r.states (r.stateRecord h v a)).name</span>
+<span id="cb76-118"><a href="#cb76-118" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb76-119"><a href="#cb76-119" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> statePosition_eq (r : Diagram) (h : r.Valid) (v : Fin r.nv) (a : Fin (r.stateCount v)) :</span>
+<span id="cb76-120"><a href="#cb76-120" aria-hidden="true" tabindex="-1"></a>    r.statePosition h v a = a.val :=</span>
+<span id="cb76-121"><a href="#cb76-121" aria-hidden="true" tabindex="-1"></a>  r.stateRecord_position h v a</span>
+<span id="cb76-122"><a href="#cb76-122" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb76-123"><a href="#cb76-123" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> statePosition_injective (r : Diagram) (h : r.Valid) (v : Fin r.nv) :</span>
+<span id="cb76-124"><a href="#cb76-124" aria-hidden="true" tabindex="-1"></a>    Function.Injective (r.statePosition h v) := <span class="kw">by</span></span>
+<span id="cb76-125"><a href="#cb76-125" aria-hidden="true" tabindex="-1"></a>  <span class="cf">intro</span> a b he</span>
+<span id="cb76-126"><a href="#cb76-126" aria-hidden="true" tabindex="-1"></a>  <span class="cf">rw</span> [statePosition_eq, statePosition_eq] <span class="kw">at</span> he</span>
+<span id="cb76-127"><a href="#cb76-127" aria-hidden="true" tabindex="-1"></a>  <span class="cf">exact</span> Fin.ext he</span>
+<span id="cb76-128"><a href="#cb76-128" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb76-129"><a href="#cb76-129" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> stateLabel_injective (r : Diagram) (h : r.Valid) (v : Fin r.nv) :</span>
+<span id="cb76-130"><a href="#cb76-130" aria-hidden="true" tabindex="-1"></a>    Function.Injective (r.stateLabel h v) := <span class="kw">by</span></span>
+<span id="cb76-131"><a href="#cb76-131" aria-hidden="true" tabindex="-1"></a>  <span class="cf">intro</span> a b he</span>
+<span id="cb76-132"><a href="#cb76-132" aria-hidden="true" tabindex="-1"></a>  <span class="kw">have</span> hs : (r.stateOrder h v).symm a = (r.stateOrder h v).symm b :=</span>
+<span id="cb76-133"><a href="#cb76-133" aria-hidden="true" tabindex="-1"></a>    Subtype.ext (h.state_names _ _ ((r.stateRecord_var h v a).trans (r.stateRecord_var h v b).symm)</span>
+<span id="cb76-134"><a href="#cb76-134" aria-hidden="true" tabindex="-1"></a>      he)</span>
+<span id="cb76-135"><a href="#cb76-135" aria-hidden="true" tabindex="-1"></a>  <span class="cf">exact</span> (r.stateOrder h v).symm.injective hs</span>
+<span id="cb76-136"><a href="#cb76-136" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb76-137"><a href="#cb76-137" aria-hidden="true" tabindex="-1"></a><span class="do">/-- Each action space ordered by the checked positions of its state records. -/</span></span>
+<span id="cb76-138"><a href="#cb76-138" aria-hidden="true" tabindex="-1"></a><span class="at">@[reducible]</span> <span class="kw">def</span> actionOrder (r : Diagram) (h : r.Valid) (d : (r.compile h).D) :</span>
+<span id="cb76-139"><a href="#cb76-139" aria-hidden="true" tabindex="-1"></a>    LinearOrder ((r.compile h).states ((r.compile h).action d)) :=</span>
+<span id="cb76-140"><a href="#cb76-140" aria-hidden="true" tabindex="-1"></a>  positionOrder (r.statePosition h (r.decisions d).action)</span>
+<span id="cb76-141"><a href="#cb76-141" aria-hidden="true" tabindex="-1"></a>    (r.statePosition_injective h (r.decisions d).action)</span>
+<span id="cb76-142"><a href="#cb76-142" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb76-143"><a href="#cb76-143" aria-hidden="true" tabindex="-1"></a><span class="do">/-- The position order is the order of `Fin (stateCount v)`. -/</span></span>
+<span id="cb76-144"><a href="#cb76-144" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> actionOrder_le_iff (r : Diagram) (h : r.Valid) (d : (r.compile h).D)</span>
+<span id="cb76-145"><a href="#cb76-145" aria-hidden="true" tabindex="-1"></a>    (a b : Fin (r.stateCount (r.decisions d).action)) :</span>
+<span id="cb76-146"><a href="#cb76-146" aria-hidden="true" tabindex="-1"></a>    (r.actionOrder h d).le a b ↔ a ≤ b := <span class="kw">by</span></span>
+<span id="cb76-147"><a href="#cb76-147" aria-hidden="true" tabindex="-1"></a>  change r.statePosition h _ a ≤ r.statePosition h _ b ↔ a.val ≤ b.val</span>
+<span id="cb76-148"><a href="#cb76-148" aria-hidden="true" tabindex="-1"></a>  <span class="cf">rw</span> [statePosition_eq, statePosition_eq]</span>
+<span id="cb76-149"><a href="#cb76-149" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb76-150"><a href="#cb76-150" aria-hidden="true" tabindex="-1"></a><span class="do">/-- The first-label selector of the checked records. -/</span></span>
+<span id="cb76-151"><a href="#cb76-151" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> selector (r : Diagram) (h : r.Valid) : DVE.Selector (r.compile h) :=</span>
+<span id="cb76-152"><a href="#cb76-152" aria-hidden="true" tabindex="-1"></a>  @DVE.Selector.ordered (r.compile h) (r.actionOrder h)</span></code></pre></div>
+<h2 id="the-returned-tables-in-state-position-terms">The returned tables
+in state-position terms</h2>
+<div class="sourceCode" id="cb77"><pre
+class="sourceCode lean"><code class="sourceCode lean"><span id="cb77-1"><a href="#cb77-1" aria-hidden="true" tabindex="-1"></a><span class="do">/-- **The model&#39;s first-label table is the least checked `state_position` among the</span></span>
+<span id="cb77-2"><a href="#cb77-2" aria-hidden="true" tabindex="-1"></a><span class="do">maximizers, on every information row.** -/</span></span>
+<span id="cb77-3"><a href="#cb77-3" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> solveRecords_table (r : Diagram) (h : r.Valid) (κ : (r.compile h).Kernel ℝ)</span>
+<span id="cb77-4"><a href="#cb77-4" aria-hidden="true" tabindex="-1"></a>    (hclosed : (r.compile h).Closed) (hloc : ∀ m, Local κ m) (hnonneg : ∀ m x a, <span class="dv">0</span> ≤ κ m x a)</span>
+<span id="cb77-5"><a href="#cb77-5" aria-hidden="true" tabindex="-1"></a>    (u : Utility (r.compile h) ℝ) (hu : ∀ j, Utility.Local u j) (ord : (r.compile h).IDOrder)</span>
+<span id="cb77-6"><a href="#cb77-6" aria-hidden="true" tabindex="-1"></a>    (nf : DVE.NoForgettingOrder (r.compile h)) (d : (r.compile h).D)</span>
+<span id="cb77-7"><a href="#cb77-7" aria-hidden="true" tabindex="-1"></a>    (x : (r.compile h).Assignment) :</span>
+<span id="cb77-8"><a href="#cb77-8" aria-hidden="true" tabindex="-1"></a>    ∃ t, (∀ a, ((DVE.solveWith (r.selector h) κ hloc hnonneg u hu ord nf).strategy d).kernel x a =</span>
+<span id="cb77-9"><a href="#cb77-9" aria-hidden="true" tabindex="-1"></a>        <span class="kw">if</span> a = t <span class="kw">then</span> <span class="dv">1</span> <span class="kw">else</span> <span class="dv">0</span>) ∧</span>
+<span id="cb77-10"><a href="#cb77-10" aria-hidden="true" tabindex="-1"></a>      (∀ b, DVE.solveScore κ hloc hnonneg u hu ord nf d x b ≤</span>
+<span id="cb77-11"><a href="#cb77-11" aria-hidden="true" tabindex="-1"></a>        DVE.solveScore κ hloc hnonneg u hu ord nf d x t) ∧</span>
+<span id="cb77-12"><a href="#cb77-12" aria-hidden="true" tabindex="-1"></a>      ∀ b, (∀ c, DVE.solveScore κ hloc hnonneg u hu ord nf d x c ≤</span>
+<span id="cb77-13"><a href="#cb77-13" aria-hidden="true" tabindex="-1"></a>          DVE.solveScore κ hloc hnonneg u hu ord nf d x b) →</span>
+<span id="cb77-14"><a href="#cb77-14" aria-hidden="true" tabindex="-1"></a>        r.statePosition h _ t ≤ r.statePosition h _ b := <span class="kw">by</span></span>
+<span id="cb77-15"><a href="#cb77-15" aria-hidden="true" tabindex="-1"></a>  <span class="kw">have</span> hinj := ((r.compile h).closed_iff<span class="fl">.1</span> hclosed).<span class="fl">2.1</span></span>
+<span id="cb77-16"><a href="#cb77-16" aria-hidden="true" tabindex="-1"></a>  <span class="cf">refine</span> ⟨_, <span class="kw">fun</span> a =&gt; @DVE.runWith_kernel (r.compile h) (r.selector h) hinj _ _ _ _ d</span>
+<span id="cb77-17"><a href="#cb77-17" aria-hidden="true" tabindex="-1"></a>    (Finset.mem_univ _) x a, ?_⟩</span>
+<span id="cb77-18"><a href="#cb77-18" aria-hidden="true" tabindex="-1"></a>  <span class="cf">exact</span> @firstArgmax_least_position _ ((r.compile h).fintypeS _) ((r.compile h).nonemptyS _) _</span>
+<span id="cb77-19"><a href="#cb77-19" aria-hidden="true" tabindex="-1"></a>    (r.statePosition_injective h _) _</span>
+<span id="cb77-20"><a href="#cb77-20" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb77-21"><a href="#cb77-21" aria-hidden="true" tabindex="-1"></a><span class="do">/-- **Julia&#39;s sum-out representative, any plan, every information row:** the entry is the</span></span>
+<span id="cb77-22"><a href="#cb77-22" aria-hidden="true" tabindex="-1"></a><span class="do">least checked `state_position` among the maximizers of the run&#39;s own score. -/</span></span>
+<span id="cb77-23"><a href="#cb77-23" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> solveRepRecords_table (r : Diagram) (h : r.Valid) (keep : (r.compile h).V → Bool)</span>
+<span id="cb77-24"><a href="#cb77-24" aria-hidden="true" tabindex="-1"></a>    (κ : (r.compile h).Kernel ℝ) (hclosed : (r.compile h).Closed) (hloc : ∀ m, Local κ m)</span>
+<span id="cb77-25"><a href="#cb77-25" aria-hidden="true" tabindex="-1"></a>    (hnonneg : ∀ m x a, <span class="dv">0</span> ≤ κ m x a) (u : Utility (r.compile h) ℝ)</span>
+<span id="cb77-26"><a href="#cb77-26" aria-hidden="true" tabindex="-1"></a>    (hu : ∀ j, Utility.Local u j) (plan : DVE.Plan (r.compile h) Finset.univ)</span>
+<span id="cb77-27"><a href="#cb77-27" aria-hidden="true" tabindex="-1"></a>    (d : (r.compile h).D) (x : (r.compile h).Assignment) :</span>
+<span id="cb77-28"><a href="#cb77-28" aria-hidden="true" tabindex="-1"></a>    ∃ t, (∀ a, ((DVE.solveRepPlanWith (r.selector h) keep κ hloc hnonneg u hu plan).strategy</span>
+<span id="cb77-29"><a href="#cb77-29" aria-hidden="true" tabindex="-1"></a>          d).kernel x a = <span class="kw">if</span> a = t <span class="kw">then</span> <span class="dv">1</span> <span class="kw">else</span> <span class="dv">0</span>) ∧</span>
+<span id="cb77-30"><a href="#cb77-30" aria-hidden="true" tabindex="-1"></a>      (∀ b, DVE.solveRepPlanScore keep κ hloc hnonneg u hu plan d x b ≤</span>
+<span id="cb77-31"><a href="#cb77-31" aria-hidden="true" tabindex="-1"></a>        DVE.solveRepPlanScore keep κ hloc hnonneg u hu plan d x t) ∧</span>
+<span id="cb77-32"><a href="#cb77-32" aria-hidden="true" tabindex="-1"></a>      ∀ b, (∀ c, DVE.solveRepPlanScore keep κ hloc hnonneg u hu plan d x c ≤</span>
+<span id="cb77-33"><a href="#cb77-33" aria-hidden="true" tabindex="-1"></a>          DVE.solveRepPlanScore keep κ hloc hnonneg u hu plan d x b) →</span>
+<span id="cb77-34"><a href="#cb77-34" aria-hidden="true" tabindex="-1"></a>        r.statePosition h _ t ≤ r.statePosition h _ b := <span class="kw">by</span></span>
+<span id="cb77-35"><a href="#cb77-35" aria-hidden="true" tabindex="-1"></a>  <span class="kw">have</span> hinj := ((r.compile h).closed_iff<span class="fl">.1</span> hclosed).<span class="fl">2.1</span></span>
+<span id="cb77-36"><a href="#cb77-36" aria-hidden="true" tabindex="-1"></a>  <span class="cf">refine</span> ⟨_, <span class="kw">fun</span> a =&gt; @DVE.runRepWith_kernel (r.compile h) (r.selector h) keep hinj _ _ _ _ d</span>
+<span id="cb77-37"><a href="#cb77-37" aria-hidden="true" tabindex="-1"></a>    (Finset.mem_univ _) x a, ?_⟩</span>
+<span id="cb77-38"><a href="#cb77-38" aria-hidden="true" tabindex="-1"></a>  <span class="cf">exact</span> @firstArgmax_least_position _ ((r.compile h).fintypeS _) ((r.compile h).nonemptyS _) _</span>
+<span id="cb77-39"><a href="#cb77-39" aria-hidden="true" tabindex="-1"></a>    (r.statePosition_injective h _) _</span>
+<span id="cb77-40"><a href="#cb77-40" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb77-41"><a href="#cb77-41" aria-hidden="true" tabindex="-1"></a><span class="do">/-- **Julia&#39;s sum-out representative, any plan, every row of positive reach:** the entry is the</span></span>
+<span id="cb77-42"><a href="#cb77-42" aria-hidden="true" tabindex="-1"></a><span class="do">least checked `state_position` among the maximizers of the optimal continuation value, a</span></span>
+<span id="cb77-43"><a href="#cb77-43" aria-hidden="true" tabindex="-1"></a><span class="do">quantity that mentions no plan, bucket, representative or selector. -/</span></span>
+<span id="cb77-44"><a href="#cb77-44" aria-hidden="true" tabindex="-1"></a><span class="kw">theorem</span> solveRepRecords_optimal (r : Diagram) (h : r.Valid) (keep : (r.compile h).V → Bool)</span>
+<span id="cb77-45"><a href="#cb77-45" aria-hidden="true" tabindex="-1"></a>    (κ : (r.compile h).Kernel ℝ) (hclosed : (r.compile h).Closed) (ord : (r.compile h).IDOrder)</span>
+<span id="cb77-46"><a href="#cb77-46" aria-hidden="true" tabindex="-1"></a>    (hloc : ∀ m, Local κ m) (hnorm : ∀ m, Normalised κ m) (hnonneg : ∀ m x a, <span class="dv">0</span> ≤ κ m x a)</span>
+<span id="cb77-47"><a href="#cb77-47" aria-hidden="true" tabindex="-1"></a>    (u : Utility (r.compile h) ℝ) (hu : ∀ j, Utility.Local u j)</span>
+<span id="cb77-48"><a href="#cb77-48" aria-hidden="true" tabindex="-1"></a>    (plan : DVE.Plan (r.compile h) Finset.univ) (d : (r.compile h).D)</span>
+<span id="cb77-49"><a href="#cb77-49" aria-hidden="true" tabindex="-1"></a>    (x : (r.compile h).Assignment) (ρ : Strategy (r.compile h) ℝ)</span>
+<span id="cb77-50"><a href="#cb77-50" aria-hidden="true" tabindex="-1"></a>    (hx : DVE.reach κ (<span class="kw">fun</span> _ =&gt; <span class="dv">1</span>) ρ d x ≠ <span class="dv">0</span>) :</span>
+<span id="cb77-51"><a href="#cb77-51" aria-hidden="true" tabindex="-1"></a>    ∃ t, (∀ a, ((DVE.solveRepPlanWith (r.selector h) keep κ hloc hnonneg u hu plan).strategy</span>
+<span id="cb77-52"><a href="#cb77-52" aria-hidden="true" tabindex="-1"></a>          d).kernel x a = <span class="kw">if</span> a = t <span class="kw">then</span> <span class="dv">1</span> <span class="kw">else</span> <span class="dv">0</span>) ∧</span>
+<span id="cb77-53"><a href="#cb77-53" aria-hidden="true" tabindex="-1"></a>      (∀ b, DVE.optimalContinuation κ u (<span class="kw">fun</span> _ =&gt; <span class="dv">1</span>) d x b ≤</span>
+<span id="cb77-54"><a href="#cb77-54" aria-hidden="true" tabindex="-1"></a>        DVE.optimalContinuation κ u (<span class="kw">fun</span> _ =&gt; <span class="dv">1</span>) d x t) ∧</span>
+<span id="cb77-55"><a href="#cb77-55" aria-hidden="true" tabindex="-1"></a>      ∀ b, (∀ c, DVE.optimalContinuation κ u (<span class="kw">fun</span> _ =&gt; <span class="dv">1</span>) d x c ≤</span>
+<span id="cb77-56"><a href="#cb77-56" aria-hidden="true" tabindex="-1"></a>          DVE.optimalContinuation κ u (<span class="kw">fun</span> _ =&gt; <span class="dv">1</span>) d x b) →</span>
+<span id="cb77-57"><a href="#cb77-57" aria-hidden="true" tabindex="-1"></a>        r.statePosition h _ t ≤ r.statePosition h _ b :=</span>
+<span id="cb77-58"><a href="#cb77-58" aria-hidden="true" tabindex="-1"></a>  ⟨_, <span class="kw">fun</span> a =&gt; @DVE.solveRepPlanOrdered_optimal (r.compile h) (r.actionOrder h) keep κ hclosed</span>
+<span id="cb77-59"><a href="#cb77-59" aria-hidden="true" tabindex="-1"></a>      ord hloc hnorm hnonneg u hu plan d x ρ hx a,</span>
+<span id="cb77-60"><a href="#cb77-60" aria-hidden="true" tabindex="-1"></a>    @firstArgmax_least_position _ ((r.compile h).fintypeS _) ((r.compile h).nonemptyS _) _</span>
+<span id="cb77-61"><a href="#cb77-61" aria-hidden="true" tabindex="-1"></a>      (r.statePosition_injective h _) _⟩</span>
+<span id="cb77-62"><a href="#cb77-62" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb77-63"><a href="#cb77-63" aria-hidden="true" tabindex="-1"></a><span class="kw">end</span> Diagram</span>
+<span id="cb77-64"><a href="#cb77-64" aria-hidden="true" tabindex="-1"></a><span class="kw">end</span> Records</span>
+<span id="cb77-65"><a href="#cb77-65" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb77-66"><a href="#cb77-66" aria-hidden="true" tabindex="-1"></a><span class="kw">end</span></span>
+<span id="cb77-67"><a href="#cb77-67" aria-hidden="true" tabindex="-1"></a><span class="kw">end</span> InfluenceDiagramsProofs</span></code></pre></div>
 <!-- InfluenceDiagramsProofs/Roadmap.lean -->
 <h1 id="roadmap-and-exact-scope-of-the-dve-theorem">Roadmap and exact
 scope of the DVE theorem</h1>
-<div class="sourceCode" id="cb64"><pre
-class="sourceCode lean"><code class="sourceCode lean"><span id="cb64-1"><a href="#cb64-1" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> InfluenceDiagramsProofs.Finite.DVE.PlanIndependence</span></code></pre></div>
+<div class="sourceCode" id="cb78"><pre
+class="sourceCode lean"><code class="sourceCode lean"><span id="cb78-1"><a href="#cb78-1" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> InfluenceDiagramsProofs.Finite.DVE.LabelOrder</span></code></pre></div>
 <p>The global optimum-existence result is now supplemented by an actual
 bucket solver: <code>DVE.solve_spec</code> proves its deterministic
 policies realize the reported value and attain the existing optimum.
@@ -6041,25 +7090,63 @@ nonnegative strategies); the entry is its least maximizer
 (<code>runWith_ordered_optimal</code>), and reach is the same under
 every strategy (<code>reach_strategy_independent</code>). No
 counterexample exists on positive-reach rows.</p>
+<p><code>Finite/DVE/Representative.lean</code> models Julia’s chance
+step on zero-probability rows: when the summed variable is not in the
+utility potential’s scope, Julia’s <code>sum_out</code> keeps the
+utility unchanged where the model stores <code>0</code>.
+<code>sumOutKeep keep</code> covers both (<code>keep = false</code> is
+the model, <code>sumOutKeep_false</code>; <code>keep = true</code> is
+literally Julia’s <code>ψ′ = ψ</code> whenever the bucket utility does
+not depend on the summed variable,
+<code>sumOutKeep_util_of_const</code>), and every theorem holds for
+every <code>keep : id.V → Bool</code>. On any plan the two runs agree
+valuation by valuation in scope, probability potential and weighted
+utility (<code>solveRepPlan_agrees</code>); the returned strategy
+realizes the global optimum and the value is the model’s
+(<code>solveRepPlanWith_spec</code>,
+<code>solveRepPlanWith_value</code>); on every row of positive reach the
+scores and, for every selector, the policy entries are the model’s
+(<code>solveRepPlanScore_eq</code>,
+<code>solveRepPlanWith_kernel_eq</code>); and on every row, reachable or
+not, the first-label table is <code>orderedTable</code> of the run’s own
+score (<code>solveRepPlanOrdered_table</code>). Julia’s representative
+therefore cannot change a returned table entry on a reachable row.</p>
+<p><code>Finite/DVE/LabelOrder.lean</code> derives the selector’s order
+from checked records instead of supplying it.
+<code>Records.Diagram</code> holds raw rows (state rows with
+<code>var</code>, <code>position</code>, <code>name</code>);
+<code>Valid</code> checks bounded unique positions, nonempty spaces and
+unique labels; <code>compile</code> gives a
+<code>FinInfluenceDiagram</code> with state spaces
+<code>Fin (stateCount v)</code>, and <code>actionOrder</code> orders
+each action space by checked <code>position</code>
+(<code>actionOrder_le_iff</code>). With
+<code>Records.Diagram.selector</code>, <code>solveRecords_table</code>,
+<code>solveRepRecords_table</code> and
+<code>solveRepRecords_optimal</code> prove that the returned entry is
+the maximizer of least checked <code>state_position</code> (every row of
+the model’s and Julia’s representative’s score; every positive-reach row
+of <code>optimalContinuation</code>).</p>
 <p>This is <strong>not</strong> a byte-for-byte verification of Julia.
 Remaining refinements are:</p>
 <ul>
-<li>ordered arrays, state labels, reference resolution and the concrete
-min-fill scheduler. In particular the linear order that
-<code>Selector.ordered</code> takes on each action space is supplied;
-that it is Julia’s axis-label position is not derived from the ACSet or
-from the arrays. That Julia’s block schedule is a <code>Plan</code> is
-read off the source, not derived; given that, positive-reach tables do
-not depend on which min-fill order it chose;</li>
-<li>policy tables on zero-probability rows. There no semantic score
-exists, and the entry is fixed by the utility representative. The
-model’s chance step stores utility <code>0</code> wherever the summed
-probability is zero, while Julia’s <code>sum_out</code> keeps a utility
-table that does not contain the summed variable; the likelihood and
-sliced representations also differ there, including on rows that
-contradict the evidence. Only weighted valuations, values and
-positive-reach tables are proved to agree. Zero-reach entries are also
-not claimed to be independent of the elimination plan. The model’s
+<li>the record-to-Julia link. <code>Records.Diagram</code> is not
+produced from the ACSet or from the DVE certificate by a proved decoder
+(the certificate exports exactly these state rows; no Lean consumer
+reads it), and <code>Valid</code> checks only the state rows:
+closedness, the order and no-forgetting of the compiled diagram stay
+hypotheses. That Julia’s action axis lists the states in
+<code>state_position</code> order is pinned by a Julia test, and the
+array layout is the <code>FiniteKernels</code> <code>Layout/</code>
+result; Julia’s execution itself is not proved. That Julia’s block
+schedule is a <code>Plan</code>, and which <code>keep</code> its run
+uses, are read off the source, not derived;</li>
+<li>zero-probability rows beyond the above. There no semantic score
+exists, so a zero-reach entry is fixed by the representatives and is not
+claimed independent of the elimination plan. Julia’s hard-evidence path
+(sliced factors, absent variables skipped) is proved only against the
+model’s representative (<code>Conditioning.lean</code>); combined with
+Julia’s <code>keep</code> representative it is not modelled. The model’s
 empty-bucket decision step adds a unit valuation that Julia omits; this
 changes no value and no table;</li>
 <li>Float64/tolerance behavior. Small action-dependent evidence

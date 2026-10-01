@@ -122,6 +122,28 @@ evidence-clamped row has positive probability. There the entry is the least acti
 the optimal continuation value, a supremum over strategies that mentions no plan. Entries on
 zero-probability rows are not claimed to be plan independent.
 
+`Finite/DVE/Representative.lean` models the one place where Julia's chance elimination stores a
+different utility from the model's: when the summed variable is not in the utility potential's
+scope, `sum_out` keeps that utility on rows where the summed probability is zero, where the
+model stores `0`. `solveRepPlanWith_kernel_eq` proves that this representative cannot change a
+policy entry on a row of positive probability, for any elimination plan and any selector, and
+`solveRepPlanOrdered_table` proves that on every row, zero-probability rows included, the
+first-label table is `orderedTable` of that run's own bucket-utility score.
+`solveRepPlanWith_spec` proves that the returned strategy still realizes the global optimum.
+Which representative Julia uses at each step is read off the source; the theorems hold for every
+choice. Julia's hard-evidence path combined with this representative is not modelled.
+
+`Finite/DVE/LabelOrder.lean` derives the first-label order from checked records instead of
+supplying it: `Records.Diagram` holds raw influence-diagram rows, its check requires bounded,
+unique state positions and unique labels per variable, and each action space is ordered by
+checked `state_position`. `solveRepRecords_optimal` proves that, for a diagram compiled from
+checked records, on every row of positive probability the returned entry is the action of least
+`state_position` among the maximizers of the optimal continuation value, for any plan and with
+any zero-row utility representative, Julia's included, and `solveRecords_table` that on every
+row the model's entry is the least-`state_position` maximizer of its bucket-utility score. The
+records are not decoded from the ACSet or from the DVE certificate by a proved parser, and that
+Julia's action axis lists the states in `state_position` order is pinned by a test, not proved.
+
 `Finite/DVE/Conditioning.lean` models Julia's explicit evidence conditioning: every chance and
 utility factor is sliced at the observed states, and variables that no factor mentions are
 skipped. For hard evidence on an action-free chance-ancestral set, `solveConditioned_spec`
@@ -137,8 +159,8 @@ repeats the entry of the evidence-clamped row (`solveConditioned_kernel_clamp`),
 likelihood driver's entry there is fixed only by its utility representatives.
 
 These are exact finite-function results, not a complete refinement of the Julia
-Float64 arrays, reference lookup or label order: the least-state order is supplied to the
-proof rather than read from Julia's axes, and Float64 comparison (rounding near-ties, signed
+Float64 arrays, reference lookup or label order: the least-state order is derived from checked
+records, not read from Julia's axes or from a decoded certificate, and Float64 comparison (rounding near-ties, signed
 zeros, `NaN`) is not covered. In particular, literal floating-point DVE/oracle equality is not
 a theorem. See [`proofs/README.md`](proofs/README.md) for exact statements and implementation
 boundaries.
