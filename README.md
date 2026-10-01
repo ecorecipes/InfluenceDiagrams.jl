@@ -140,9 +140,21 @@ checked `state_position`. `solveRepRecords_optimal` proves that, for a diagram c
 checked records, on every row of positive probability the returned entry is the action of least
 `state_position` among the maximizers of the optimal continuation value, for any plan and with
 any zero-row utility representative, Julia's included, and `solveRecords_table` that on every
-row the model's entry is the least-`state_position` maximizer of its bucket-utility score. The
-records are not decoded from the ACSet or from the DVE certificate by a proved parser, and that
-Julia's action axis lists the states in `state_position` order is pinned by a test, not proved.
+row the model's entry is the least-`state_position` maximizer of its bucket-utility score.
+`Finite/DVE/RecordsValid.lean` adds `FullValid`, which checks every table (input, information and
+utility positions, one generator per variable, acyclicity) and proves that the diagram's chance
+part, with every decision instantiated as a policy mechanism, satisfies BayesianNetworks'
+`Raw.Network.Valid`; under it `solveRepRecords_optimal_of_fullValid` and
+`solveRecords_table_of_fullValid` no longer take closedness or an order as hypotheses.
+`Finite/DVE/JsonRecords.lean` decodes the records from the ACSet JSON:
+`decodeDiagram_eq_ok` proves that decoding a parsed `write_json_influence_diagram` document
+succeeds with records `r` exactly when its twelve tables have `r`'s row counts and every column
+of every row holds `r`'s value, `decodeDiagram_encodeDiagram` that decoding the encoded records
+gives them back, and `decodeDiagramChecked_isSome_iff` that the checked decoder succeeds exactly
+when the decoded records satisfy `FullValid`. Parsing the text (`Lean.Json.parse`) and Julia's
+JSON3/ACSets writer are trusted, not proved; the DVE certificate is still not decoded; and that
+Julia's action axis lists the states in `state_position` order is pinned by a test and
+cross-checked on fixtures (`lake exe check_records`), not proved.
 
 `Finite/DVE/Conditioning.lean` models Julia's explicit evidence conditioning: every chance and
 utility factor is sliced at the observed states, and variables that no factor mentions are
@@ -160,7 +172,8 @@ likelihood driver's entry there is fixed only by its utility representatives.
 
 These are exact finite-function results, not a complete refinement of the Julia
 Float64 arrays, reference lookup or label order: the least-state order is derived from checked
-records, not read from Julia's axes or from a decoded certificate, and Float64 comparison (rounding near-ties, signed
+records (decoded from a parsed ACSet JSON tree), not read from Julia's arrays or from a decoded
+DVE certificate, and Float64 comparison (rounding near-ties, signed
 zeros, `NaN`) is not covered. In particular, literal floating-point DVE/oracle equality is not
 a theorem. See [`proofs/README.md`](proofs/README.md) for exact statements and implementation
 boundaries.

@@ -6465,9 +6465,11 @@ records instead of supplying it.
   `firstArgmax` is exactly the maximizer of least position.
 * `Records.Diagram` holds raw influence-diagram rows: variables and their state rows
   (`var`, `position`, `name`, the BN `Raw.StateRow`), mechanisms, inputs, decisions, information
-  rows, utilities and utility inputs, with external IDs already decoded to `Fin`. `Valid` checks
-  only what the label order needs: every variable has a state, positions are bounded and unique
-  per variable (`Raw.Positioned`), and labels are unique per variable. `compile` builds the
+  rows, utilities (`name`, `ref`), utility inputs and decision-precedence rows, with external
+  IDs already decoded to `Fin`. `Valid` checks only what the label order needs: every variable
+  has a state, positions are bounded and unique per variable (`Raw.Positioned`), and labels are
+  unique per variable; `RecordsValid.lean` adds `FullValid`, which checks every table. `compile`
+  builds the
   `FinInfluenceDiagram` whose state space for `v` is `Fin (stateCount v)`; `stateRecord` is
   the record at each position (the positional bijection `Raw.positionEquiv`, derived, not
   assumed), with `stateRecord_position`.
@@ -6485,8 +6487,11 @@ What is not proved here: that Julia's arrays are laid out in that order is the
 `FiniteKernels` `Layout/` result together with the Julia test pinning the action axis to
 `states(id, v)`; that Julia's DVE certificate (`variables[].states`, rows of
 `id`, `position`, `label`) decodes into these records is not formalised (there is no Lean
-consumer of that certificate); the DVE hypotheses (`Closed`, `IDOrder`, `NoForgettingOrder`)
-of the compiled diagram stay hypotheses; and Julia's execution itself is not proved.
+consumer of that certificate; the ACSet JSON of `write_json_influence_diagram` is decoded into
+them by `Finite/DVE/JsonRecords.lean`); here the DVE hypotheses (`Closed`, `IDOrder`,
+`NoForgettingOrder`) of the compiled diagram stay hypotheses (`RecordsValid.lean` derives
+`Closed` and an `IDOrder` from `FullValid`; `NoForgettingOrder` stays one); and Julia's
+execution itself is not proved.
 
 ```lean
 set_option autoImplicit false
@@ -6546,13 +6551,20 @@ structure InformationRow (nv nd : Nat) where
 
 structure UtilityRow where
   name : String
+  ref : Ref
 
 structure UtilityInputRow (nv nu : Nat) where
   utility : Fin nu
   var : Fin nv
   position : Nat
 
-/-- Raw influence-diagram rows with decoded finite IDs: the shape of the ACSet, and of the
+/-- A `DecisionPrecedence` row: `earlier` is taken before `later`. -/
+structure PrecedenceRow (nd : Nat) where
+  earlier : Fin nd
+  later : Fin nd
+
+/-- Raw influence-diagram rows with decoded finite IDs: every table of the `SchInfluenceDiagram`
+ACSet (`Finite/DVE/JsonRecords.lean` decodes them from Julia's JSON), and the shape of the
 `variables` / `mechanisms` / `decisions` / `utilities` sections of the DVE certificate. -/
 structure Diagram where
   nv : Nat
@@ -6563,6 +6575,7 @@ structure Diagram where
   nf : Nat
   nu : Nat
   nq : Nat
+  np : Nat
   vars : Fin nv → VariableRow
   states : Fin ns → StateRow nv
   mechanisms : Fin nm → MechanismRow nv
@@ -6571,6 +6584,7 @@ structure Diagram where
   information : Fin nf → InformationRow nv nd
   utilities : Fin nu → UtilityRow
   utilityInputs : Fin nq → UtilityInputRow nv nu
+  precedence : Fin np → PrecedenceRow nd
 
 namespace Diagram
 
@@ -6758,6 +6772,1051 @@ end InfluenceDiagramsProofs
 ```
 
 
+<!-- InfluenceDiagramsProofs/Finite/DVE/RecordsValid.lean -->
+
+# Full validity of influence-diagram records
+
+```lean
+import InfluenceDiagramsProofs.Finite.DVE.LabelOrder
+import BayesianNetworksProofs.Finite.JsonRecords
+import Mathlib.Algebra.BigOperators.Fin
+```
+
+`Records.Diagram.Valid` checks only the state rows, which is all the label-order theorems of
+`LabelOrder.lean` read. `FullValid` checks every table, the decidable counterpart of what
+BayesianNetworks' `Raw.Network.Valid` checks for a network:
+
+* the state rows (`Valid`): bounded unique positions per variable, a state for every variable,
+  unique labels per variable;
+* the `Input`, `InformationInput` and `UtilityInput` rows: bounded unique positions per mechanism,
+  per decision and per utility (`Raw.Positioned`);
+* the generators: mechanism targets and decision actions are injective, disjoint, and cover the
+  variables (every variable has exactly one generator);
+* acyclicity: some injective rank puts every mechanism input below the mechanism's target and
+  every information variable below the decision's action (`chance.Acyclic`, decided by the
+  proved placement of `Raw.Tables.computeRank`).
+
+`chance` is the chance part with every decision instantiated as a mechanism, as Julia's
+`instantiate` does: decision `d` becomes the mechanism `nm + d` named `policy[name]` with kernel
+reference `PolicyRef(name)`, targeting the action, whose inputs are the information rows of `d`
+with their positions. `FullValid.chance_valid`: the instantiated rows satisfy `Raw.Tables.Valid`,
+so `chance_network_valid` gives a BN `Raw.Network` satisfying `Raw.Network.Valid`.
+
+From `FullValid` the compiled diagram is closed (`FullValid.closed`) and has an `IDOrder`
+(`FullValid.idOrder`, from the computed rank). The label-order theorems then lose those
+hypotheses: `solveRepRecords_table_of_fullValid` (no `Closed`),
+`solveRepRecords_optimal_of_fullValid` and `solveRecords_table_of_fullValid` (neither `Closed`
+nor `IDOrder`). The original theorems, under `Valid` with the hypotheses, are unchanged.
+
+Not checked: decision precedence rows (stored, not validated), unique variable, decision or
+utility names, and the no-forgetting condition (`NoForgettingOrder` stays a hypothesis).
+
+```lean
+set_option autoImplicit false
+
+namespace InfluenceDiagramsProofs
+
+open BayesianNetworksProofs BayesianNetworksProofs.FinBayesNet FinInfluenceDiagram
+open BayesianNetworksProofs.Raw
+
+namespace Records
+```
+
+## Positions over an appended table
+
+```lean
+theorem castAdd_ne_natAdd {a b : Nat} (i : Fin a) (j : Fin b) :
+    Fin.castAdd b i ≠ Fin.natAdd a j := by
+  intro h
+  have := congrArg Fin.val h
+  simp only [Fin.val_castAdd, Fin.val_natAdd] at this
+  omega
+
+/-- The owner map of two tables appended, the second's owners shifted past the first's. -/
+def appendOwner {n1 n2 o1 o2 : Nat} (own1 : Fin n1 → Fin o1) (own2 : Fin n2 → Fin o2) :
+    Fin (n1 + n2) → Fin (o1 + o2) :=
+  Fin.append (fun i => Fin.castAdd o2 (own1 i)) (fun j => Fin.natAdd o1 (own2 j))
+
+theorem card_fibre_left {n1 n2 o1 o2 : Nat} (own1 : Fin n1 → Fin o1) (own2 : Fin n2 → Fin o2)
+    (o : Fin o1) :
+    Fintype.card {s : Fin (n1 + n2) // appendOwner own1 own2 s = Fin.castAdd o2 o} =
+      Fintype.card {s : Fin n1 // own1 s = o} := by
+  rw [Fintype.card_subtype, Fintype.card_subtype, Finset.card_filter, Finset.card_filter,
+    Fin.sum_univ_add]
+  simp only [appendOwner, Fin.append_left, Fin.append_right]
+  have h1 : ∀ i, (Fin.castAdd o2 (own1 i) = Fin.castAdd o2 o) ↔ own1 i = o :=
+    fun i => (Fin.castAdd_injective o1 o2).eq_iff
+  have h2 : ∀ j, ¬ (Fin.natAdd o1 (own2 j) = Fin.castAdd o2 o) :=
+    fun j h => castAdd_ne_natAdd o (own2 j) h.symm
+  simp [h1, h2]
+
+theorem card_fibre_right {n1 n2 o1 o2 : Nat} (own1 : Fin n1 → Fin o1) (own2 : Fin n2 → Fin o2)
+    (o : Fin o2) :
+    Fintype.card {s : Fin (n1 + n2) // appendOwner own1 own2 s = Fin.natAdd o1 o} =
+      Fintype.card {s : Fin n2 // own2 s = o} := by
+  rw [Fintype.card_subtype, Fintype.card_subtype, Finset.card_filter, Finset.card_filter,
+    Fin.sum_univ_add]
+  simp only [appendOwner, Fin.append_left, Fin.append_right]
+  have h1 : ∀ i, ¬ (Fin.castAdd o2 (own1 i) = Fin.natAdd o1 o) :=
+    fun i h => castAdd_ne_natAdd (own1 i) o h
+  have h2 : ∀ j, (Fin.natAdd o1 (own2 j) = Fin.natAdd o1 o) ↔ own2 j = o :=
+    fun j => (Fin.natAdd_injective o2 o1).eq_iff
+  simp [h1, h2]
+
+/-- Bounded unique positions on both tables give bounded unique positions on the appended table. -/
+theorem positioned_append {n1 n2 o1 o2 : Nat} {own1 : Fin n1 → Fin o1} {own2 : Fin n2 → Fin o2}
+    {pos1 : Fin n1 → Nat} {pos2 : Fin n2 → Nat} (h1 : Positioned own1 pos1)
+    (h2 : Positioned own2 pos2) : Positioned (appendOwner own1 own2) (Fin.append pos1 pos2) := by
+  refine ⟨fun r => ?_, fun r s => ?_⟩
+  · refine Fin.addCases (fun i => ?_) (fun j => ?_) r
+    · have hc := card_fibre_left own1 own2 (own1 i)
+      have hlt := h1.1 i
+      simp only [appendOwner, Fin.append_left] at hc ⊢
+      convert hlt using 1
+    · have hc := card_fibre_right own1 own2 (own2 j)
+      have hlt := h2.1 j
+      simp only [appendOwner, Fin.append_right] at hc ⊢
+      convert hlt using 1
+  · refine Fin.addCases (fun i => ?_) (fun j => ?_) r <;>
+      refine Fin.addCases (fun i' => ?_) (fun j' => ?_) s <;>
+      simp only [appendOwner, Fin.append_left, Fin.append_right]
+    · intro ho hp
+      rw [h1.2 i i' ((Fin.castAdd_injective o1 o2) ho) hp]
+    · intro ho
+      exact absurd ho (castAdd_ne_natAdd _ _)
+    · intro ho
+      exact absurd ho.symm (castAdd_ne_natAdd _ _)
+    · intro ho hp
+      rw [h2.2 j j' ((Fin.natAdd_injective o2 o1) ho) hp]
+
+namespace Diagram
+```
+
+## The instantiated chance part
+
+```lean
+/-- The mechanism a decision becomes under `instantiate`: target the action, named
+`policy[name]`, with kernel reference `PolicyRef(name)`. -/
+def policyMechanism {nv : Nat} (d : DecisionRow nv) : MechanismRow nv :=
+  ⟨d.action, "policy[" ++ d.name ++ "]", .policy d.name⟩
+
+/-- **The chance part with every decision instantiated**: the BN rows of the diagram, plus one
+policy mechanism per decision (after the chance mechanisms) whose inputs are the decision's
+information rows (after the chance inputs), positions kept. -/
+def chance (r : Diagram) : Raw.Tables where
+  nv := r.nv
+  ns := r.ns
+  nm := r.nm + r.nd
+  ni := r.ni + r.nf
+  vars := r.vars
+  states := r.states
+  mechanisms := Fin.append r.mechanisms fun d => policyMechanism (r.decisions d)
+  inputs := Fin.append
+    (fun i => ⟨Fin.castAdd r.nd (r.inputs i).mechanism, (r.inputs i).var, (r.inputs i).position⟩)
+    (fun f => ⟨Fin.natAdd r.nm (r.information f).decision, (r.information f).var,
+      (r.information f).position⟩)
+
+theorem chance_target_left (r : Diagram) (m : Fin r.nm) :
+    (r.chance.mechanisms (Fin.castAdd r.nd m)).target = (r.mechanisms m).target := by
+  simp [chance]
+
+theorem chance_target_right (r : Diagram) (d : Fin r.nd) :
+    (r.chance.mechanisms (Fin.natAdd r.nm d)).target = (r.decisions d).action := by
+  simp [chance, policyMechanism]
+
+theorem chance_input_left (r : Diagram) (i : Fin r.ni) :
+    r.chance.inputs (Fin.castAdd r.nf i) =
+      ⟨Fin.castAdd r.nd (r.inputs i).mechanism, (r.inputs i).var, (r.inputs i).position⟩ := by
+  simp [chance]
+
+theorem chance_input_right (r : Diagram) (f : Fin r.nf) :
+    r.chance.inputs (Fin.natAdd r.ni f) =
+      ⟨Fin.natAdd r.nm (r.information f).decision, (r.information f).var,
+        (r.information f).position⟩ := by
+  simp [chance]
+
+/-- The acyclicity of the instantiated chance part, unpacked: one injective rank orders every
+mechanism input before its target and every information variable before its action. -/
+theorem chance_acyclic_iff (r : Diagram) : r.chance.Acyclic ↔
+    ∃ rank : Fin r.nv → Fin r.nv, Function.Injective rank ∧
+      (∀ i, rank (r.inputs i).var < rank (r.mechanisms (r.inputs i).mechanism).target) ∧
+      ∀ f, rank (r.information f).var < rank (r.decisions (r.information f).decision).action := by
+  constructor
+  · rintro ⟨rank, hinj, hc⟩
+    refine ⟨rank, hinj, fun i => ?_, fun f => ?_⟩
+    · have := hc (Fin.castAdd r.nf i)
+      rw [chance_input_left] at this
+      simpa [chance_target_left] using this
+    · have := hc (Fin.natAdd r.ni f)
+      rw [chance_input_right] at this
+      simpa [chance_target_right] using this
+  · rintro ⟨rank, hinj, hi, hf⟩
+    refine ⟨rank, hinj, fun k => ?_⟩
+    refine Fin.addCases (fun i => ?_) (fun f => ?_) k
+    · rw [chance_input_left]
+      simpa [chance_target_left] using hi i
+    · rw [chance_input_right]
+      simpa [chance_target_right] using hf f
+```
+
+## Full validity
+
+```lean
+/-- **Every table checked**: the state rows (`Valid`), positions of inputs, information inputs
+and utility inputs, the generators (one per variable) and acyclicity of the instantiated chance
+part. All decidable. -/
+structure FullValid (r : Diagram) : Prop where
+  valid : r.Valid
+  input_positions : Positioned (fun i => (r.inputs i).mechanism) (fun i => (r.inputs i).position)
+  information_positions :
+    Positioned (fun f => (r.information f).decision) (fun f => (r.information f).position)
+  utility_positions :
+    Positioned (fun q => (r.utilityInputs q).utility) (fun q => (r.utilityInputs q).position)
+  targets_injective : Function.Injective fun m => (r.mechanisms m).target
+  actions_injective : Function.Injective fun d => (r.decisions d).action
+  disjoint : ∀ m d, (r.mechanisms m).target ≠ (r.decisions d).action
+  cover : ∀ v, (∃ m, (r.mechanisms m).target = v) ∨ ∃ d, (r.decisions d).action = v
+  acyclic : r.chance.Acyclic
+
+theorem fullValid_iff (r : Diagram) : r.FullValid ↔
+    r.Valid ∧ Positioned (fun i => (r.inputs i).mechanism) (fun i => (r.inputs i).position) ∧
+    Positioned (fun f => (r.information f).decision) (fun f => (r.information f).position) ∧
+    Positioned (fun q => (r.utilityInputs q).utility) (fun q => (r.utilityInputs q).position) ∧
+    (∀ m m', (r.mechanisms m).target = (r.mechanisms m').target → m = m') ∧
+    (∀ d d', (r.decisions d).action = (r.decisions d').action → d = d') ∧
+    (∀ m d, (r.mechanisms m).target ≠ (r.decisions d).action) ∧
+    (∀ v, (∃ m, (r.mechanisms m).target = v) ∨ ∃ d, (r.decisions d).action = v) ∧
+    r.chance.Acyclic :=
+  ⟨fun h => ⟨h.1, h.2, h.3, h.4, fun _ _ he => h.5 he, fun _ _ he => h.6 he, h.7, h.8, h.9⟩,
+    fun h => ⟨h.1, h.2.1, h.2.2.1, h.2.2.2.1, fun _ _ he => h.2.2.2.2.1 _ _ he,
+      fun _ _ he => h.2.2.2.2.2.1 _ _ he, h.2.2.2.2.2.2.1, h.2.2.2.2.2.2.2.1,
+      h.2.2.2.2.2.2.2.2⟩⟩
+
+instance (r : Diagram) : Decidable r.FullValid := decidable_of_iff _ (fullValid_iff r).symm
+
+def fullCheck (r : Diagram) : Bool := decide r.FullValid
+
+theorem fullCheck_iff (r : Diagram) : r.fullCheck = true ↔ r.FullValid := by simp [fullCheck]
+
+/-- **The instantiated chance part satisfies BN's row checks and is acyclic.** -/
+theorem FullValid.chance_valid {r : Diagram} (h : r.FullValid) : r.chance.Valid := by
+  refine ⟨⟨h.valid.state_positions, ?_, h.valid.nonempty_states, h.valid.state_names, ?_⟩,
+    h.acyclic⟩
+  · have hp := positioned_append h.input_positions h.information_positions
+    have howner : (fun k => (r.chance.inputs k).mechanism) =
+        appendOwner (fun i => (r.inputs i).mechanism) (fun f => (r.information f).decision) := by
+      funext k
+      refine Fin.addCases (fun i => ?_) (fun f => ?_) k
+      · rw [chance_input_left]
+        simp [appendOwner]
+      · rw [chance_input_right]
+        simp [appendOwner]
+    have hpos : (fun k => (r.chance.inputs k).position) =
+        Fin.append (fun i => (r.inputs i).position) (fun f => (r.information f).position) := by
+      funext k
+      refine Fin.addCases (fun i => ?_) (fun f => ?_) k
+      · rw [chance_input_left]
+        simp
+      · rw [chance_input_right]
+        simp
+    rw [howner, hpos]
+    exact hp
+  · constructor
+    · intro k k' he
+      revert he
+      refine Fin.addCases (fun m => ?_) (fun d => ?_) k <;>
+        refine Fin.addCases (fun m' => ?_) (fun d' => ?_) k' <;>
+        simp only [chance_target_left, chance_target_right] <;> intro he
+      · rw [h.targets_injective he]
+      · exact absurd he (h.disjoint m d')
+      · exact absurd he.symm (h.disjoint m' d)
+      · rw [h.actions_injective he]
+    · intro v
+      rcases h.cover v with ⟨m, hm⟩ | ⟨d, hd⟩
+      · exact ⟨Fin.castAdd r.nd m, by simp only [chance_target_left]; exact hm⟩
+      · exact ⟨Fin.natAdd r.nm d, by simp only [chance_target_right]; exact hd⟩
+
+/-- **The ID's instantiated chance part is a BN `Raw.Network` satisfying `Raw.Network.Valid`**,
+with the computed causal rank. -/
+theorem FullValid.chance_network_valid {r : Diagram} (h : r.FullValid) :
+    ∃ rank, r.chance.computeRank = some rank ∧ (r.chance.withRank rank).Valid := by
+  obtain ⟨hrows, hac⟩ := h.chance_valid
+  obtain ⟨rank, hrank⟩ := Tables.computeRank_complete hac
+  exact ⟨rank, hrank, (Network.valid_iff_tables _).2 ⟨hrows, Tables.computeRank_sound hrank⟩⟩
+
+noncomputable section
+
+/-- **Closedness of the compiled diagram**, from `FullValid`. -/
+theorem FullValid.closed {r : Diagram} (h : r.FullValid) : (r.compile h.valid).Closed :=
+  (r.compile h.valid).closed_iff.2 ⟨h.targets_injective, h.actions_injective, h.disjoint, h.cover⟩
+
+/-- A causal rank of the instantiated chance part. -/
+def FullValid.rank {r : Diagram} (h : r.FullValid) : Fin r.nv ≃ Fin r.nv :=
+  let hr := (r.chance_acyclic_iff.1 h.acyclic).choose_spec
+  Equiv.ofBijective _ ⟨hr.1, Finite.surjective_of_injective hr.1⟩
+
+theorem FullValid.rank_input {r : Diagram} (h : r.FullValid) (i : Fin r.ni) :
+    h.rank (r.inputs i).var < h.rank (r.mechanisms (r.inputs i).mechanism).target :=
+  (r.chance_acyclic_iff.1 h.acyclic).choose_spec.2.1 i
+
+theorem FullValid.rank_information {r : Diagram} (h : r.FullValid) (f : Fin r.nf) :
+    h.rank (r.information f).var < h.rank (r.decisions (r.information f).decision).action :=
+  (r.chance_acyclic_iff.1 h.acyclic).choose_spec.2.2 f
+
+/-- **An `IDOrder` of the compiled diagram**, listing the variables by the rank. -/
+def FullValid.idOrder {r : Diagram} (h : r.FullValid) : (r.compile h.valid).IDOrder where
+  order := List.ofFn h.rank.symm
+  nodup := List.nodup_ofFn.2 h.rank.symm.injective
+  complete v := List.mem_ofFn.2 ⟨h.rank v, h.rank.symm_apply_apply v⟩
+  parents_before := by
+    apply List.pairwise_ofFn.2
+    intro a b hab m hm hv
+    obtain ⟨i, hi, he⟩ := Finset.mem_image.1 hv
+    have hown := (Finset.mem_filter.1 hi).2
+    have hr := h.rank_input i
+    change (r.mechanisms m).target = h.rank.symm a at hm
+    rw [hown, hm, he, h.rank.apply_symm_apply, h.rank.apply_symm_apply] at hr
+    exact (not_lt_of_ge hab.le) hr
+  info_before_action := by
+    apply List.pairwise_ofFn.2
+    intro a b hab d hd hv
+    obtain ⟨f, hf, he⟩ := Finset.mem_image.1 hv
+    have hown := (Finset.mem_filter.1 hf).2
+    have hr := h.rank_information f
+    change (r.decisions d).action = h.rank.symm a at hd
+    rw [hown, hd, he, h.rank.apply_symm_apply, h.rank.apply_symm_apply] at hr
+    exact (not_lt_of_ge hab.le) hr
+  no_self m := by
+    intro hm
+    obtain ⟨i, hi, he⟩ := Finset.mem_image.1 hm
+    have hr := h.rank_input i
+    rw [(Finset.mem_filter.1 hi).2, he] at hr
+    exact lt_irrefl _ hr
+  no_self_info d := by
+    intro hd
+    obtain ⟨f, hf, he⟩ := Finset.mem_image.1 hd
+    have hr := h.rank_information f
+    rw [(Finset.mem_filter.1 hf).2, he] at hr
+    exact lt_irrefl _ hr
+```
+
+## The label-order theorems under `FullValid`
+
+```lean
+/-- `solveRepRecords_table` without the `Closed` hypothesis: Julia's sum-out representative, any
+plan, every information row, is the least checked `state_position` among the maximizers of the
+run's own score. -/
+theorem solveRepRecords_table_of_fullValid (r : Diagram) (h : r.FullValid)
+    (keep : (r.compile h.valid).V → Bool) (κ : (r.compile h.valid).Kernel ℝ)
+    (hloc : ∀ m, Local κ m) (hnonneg : ∀ m x a, 0 ≤ κ m x a) (u : Utility (r.compile h.valid) ℝ)
+    (hu : ∀ j, Utility.Local u j) (plan : DVE.Plan (r.compile h.valid) Finset.univ)
+    (d : (r.compile h.valid).D) (x : (r.compile h.valid).Assignment) :
+    ∃ t, (∀ a, ((DVE.solveRepPlanWith (r.selector h.valid) keep κ hloc hnonneg u hu plan).strategy
+          d).kernel x a = if a = t then 1 else 0) ∧
+      (∀ b, DVE.solveRepPlanScore keep κ hloc hnonneg u hu plan d x b ≤
+        DVE.solveRepPlanScore keep κ hloc hnonneg u hu plan d x t) ∧
+      ∀ b, (∀ c, DVE.solveRepPlanScore keep κ hloc hnonneg u hu plan d x c ≤
+          DVE.solveRepPlanScore keep κ hloc hnonneg u hu plan d x b) →
+        r.statePosition h.valid _ t ≤ r.statePosition h.valid _ b :=
+  r.solveRepRecords_table h.valid keep κ h.closed hloc hnonneg u hu plan d x
+
+/-- `solveRepRecords_optimal` without the `Closed` and `IDOrder` hypotheses. -/
+theorem solveRepRecords_optimal_of_fullValid (r : Diagram) (h : r.FullValid)
+    (keep : (r.compile h.valid).V → Bool) (κ : (r.compile h.valid).Kernel ℝ)
+    (hloc : ∀ m, Local κ m) (hnorm : ∀ m, Normalised κ m) (hnonneg : ∀ m x a, 0 ≤ κ m x a)
+    (u : Utility (r.compile h.valid) ℝ) (hu : ∀ j, Utility.Local u j)
+    (plan : DVE.Plan (r.compile h.valid) Finset.univ) (d : (r.compile h.valid).D)
+    (x : (r.compile h.valid).Assignment) (ρ : Strategy (r.compile h.valid) ℝ)
+    (hx : DVE.reach κ (fun _ => 1) ρ d x ≠ 0) :
+    ∃ t, (∀ a, ((DVE.solveRepPlanWith (r.selector h.valid) keep κ hloc hnonneg u hu plan).strategy
+          d).kernel x a = if a = t then 1 else 0) ∧
+      (∀ b, DVE.optimalContinuation κ u (fun _ => 1) d x b ≤
+        DVE.optimalContinuation κ u (fun _ => 1) d x t) ∧
+      ∀ b, (∀ c, DVE.optimalContinuation κ u (fun _ => 1) d x c ≤
+          DVE.optimalContinuation κ u (fun _ => 1) d x b) →
+        r.statePosition h.valid _ t ≤ r.statePosition h.valid _ b :=
+  r.solveRepRecords_optimal h.valid keep κ h.closed h.idOrder hloc hnorm hnonneg u hu plan d x ρ hx
+
+/-- `solveRecords_table` without the `Closed` and `IDOrder` hypotheses (the order is
+`FullValid.idOrder`; the no-forgetting order stays a hypothesis). -/
+theorem solveRecords_table_of_fullValid (r : Diagram) (h : r.FullValid)
+    (κ : (r.compile h.valid).Kernel ℝ) (hloc : ∀ m, Local κ m) (hnonneg : ∀ m x a, 0 ≤ κ m x a)
+    (u : Utility (r.compile h.valid) ℝ) (hu : ∀ j, Utility.Local u j)
+    (nf : DVE.NoForgettingOrder (r.compile h.valid)) (d : (r.compile h.valid).D)
+    (x : (r.compile h.valid).Assignment) :
+    ∃ t, (∀ a, ((DVE.solveWith (r.selector h.valid) κ hloc hnonneg u hu h.idOrder nf).strategy
+          d).kernel x a = if a = t then 1 else 0) ∧
+      (∀ b, DVE.solveScore κ hloc hnonneg u hu h.idOrder nf d x b ≤
+        DVE.solveScore κ hloc hnonneg u hu h.idOrder nf d x t) ∧
+      ∀ b, (∀ c, DVE.solveScore κ hloc hnonneg u hu h.idOrder nf d x c ≤
+          DVE.solveScore κ hloc hnonneg u hu h.idOrder nf d x b) →
+        r.statePosition h.valid _ t ≤ r.statePosition h.valid _ b :=
+  r.solveRecords_table h.valid κ h.closed hloc hnonneg u hu h.idOrder nf d x
+
+end
+
+end Diagram
+end Records
+end InfluenceDiagramsProofs
+```
+
+
+<!-- InfluenceDiagramsProofs/Finite/DVE/JsonRecords.lean -->
+
+# Decoding the ACSets JSON of a `SchInfluenceDiagram` diagram into checked records
+
+```lean
+import InfluenceDiagramsProofs.Finite.DVE.RecordsValid
+```
+
+`write_json_influence_diagram` (InfluenceDiagrams.jl, `src/serialization.jl`) writes the envelope
+`{"format": "influence-diagram-acset", "schema_version": "0.1", "acset": body}` with ACSets'
+`generate_json_acset` of the diagram as the body: the four `SchBayesNet` tables (decoded by the
+row decoders of BayesianNetworks' `Finite/JsonRecords.lean`), five more object tables and the
+three empty attribute-variable tables, twelve keys in all:
+
+* `"Decision"`: `_id`, `decision_variable` (hom to `Variable`), `decision_name` (label);
+* `"InformationInput"`: `_id`, `information_decision` (hom to `Decision`), `information_variable`
+  (hom to `Variable`), `information_position` (one-based position);
+* `"Utility"`: `_id`, `utility_name` (label), `utility_ref` (`KernelRef` object);
+* `"UtilityInput"`: `_id`, `utility_node` (hom to `Utility`), `utility_variable` (hom to
+  `Variable`), `utility_position` (one-based position);
+* `"DecisionPrecedence"`: `_id`, `earlier`, `later` (homs to `Decision`);
+* `"Label"`, `"Position"`, `"Ref"`: empty.
+
+The conventions and the strictness are those of the BN decoder: one-based IDs through
+`decodeId`, one-based positions stored zero-based, exact key sets, errors naming the table, row
+and column.
+
+Results: `decodeDiagram_eq_ok` (decoding succeeds with `r` exactly when the document has `r`'s
+rows, `DiagramBodyMatches`), the round trip `decodeDiagram_encodeDiagram`, the shape theorem
+`decodeDiagramBody_shape` with its failure corollaries (a missing table or column, a hom out of
+range, a non-integer or non-string value), and the checked decoder
+`decodeDiagramChecked : Json → Option (Σ' r : Diagram, r.FullValid)` with
+`decodeDiagramChecked_isSome_iff` and `decodeDiagramChecked_encode`. `decodeDiagramChecked_policyAxes`
+states what a successful decode guarantees for the policy tables of the DVE label-order
+theorems: the information inputs of each decision in `information_position` order, and each
+action's labels in `state_position` order, read off the document.
+
+Trusted, not proved: `Lean.Json.parse`, Julia's JSON3 writer and ACSets' `generate_json_acset`.
+
+```lean
+set_option autoImplicit false
+
+namespace InfluenceDiagramsProofs.Records
+
+open Lean (Json)
+open BayesianNetworksProofs.Raw
+```
+
+## Rows of the influence-diagram tables
+
+```lean
+def decodeDecisionRow (nv : Nat) (k : Nat) (j : Json) : Except String (DecisionRow nv) := do
+  let o ← object (rowLabel "Decision" k) 3 j
+  checkId (rowLabel "Decision" k) o k
+  let v ← homField (rowLabel "Decision" k) o "decision_variable" nv
+  let name ← strField (rowLabel "Decision" k) o "decision_name"
+  pure ⟨v, name⟩
+
+def decodeInformationRow (nv nd : Nat) (k : Nat) (j : Json) :
+    Except String (InformationRow nv nd) := do
+  let o ← object (rowLabel "InformationInput" k) 4 j
+  checkId (rowLabel "InformationInput" k) o k
+  let d ← homField (rowLabel "InformationInput" k) o "information_decision" nd
+  let v ← homField (rowLabel "InformationInput" k) o "information_variable" nv
+  let p ← posField (rowLabel "InformationInput" k) o "information_position"
+  pure ⟨d, v, p⟩
+
+def decodeUtilityRow (k : Nat) (j : Json) : Except String UtilityRow := do
+  let o ← object (rowLabel "Utility" k) 3 j
+  checkId (rowLabel "Utility" k) o k
+  let name ← strField (rowLabel "Utility" k) o "utility_name"
+  let rj ← field (rowLabel "Utility" k) o "utility_ref"
+  let ref ← decodeRef (rowLabel "Utility" k) rj
+  pure ⟨name, ref⟩
+
+def decodeUtilityInputRow (nv nu : Nat) (k : Nat) (j : Json) :
+    Except String (UtilityInputRow nv nu) := do
+  let o ← object (rowLabel "UtilityInput" k) 4 j
+  checkId (rowLabel "UtilityInput" k) o k
+  let q ← homField (rowLabel "UtilityInput" k) o "utility_node" nu
+  let v ← homField (rowLabel "UtilityInput" k) o "utility_variable" nv
+  let p ← posField (rowLabel "UtilityInput" k) o "utility_position"
+  pure ⟨q, v, p⟩
+
+def decodePrecedenceRow (nd : Nat) (k : Nat) (j : Json) : Except String (PrecedenceRow nd) := do
+  let o ← object (rowLabel "DecisionPrecedence" k) 3 j
+  checkId (rowLabel "DecisionPrecedence" k) o k
+  let e ← homField (rowLabel "DecisionPrecedence" k) o "earlier" nd
+  let l ← homField (rowLabel "DecisionPrecedence" k) o "later" nd
+  pure ⟨e, l⟩
+
+def encodeDecisionRow {nv : Nat} (k : Nat) (r : DecisionRow nv) : Json :=
+  Json.mkObj [("_id", natJson (k + 1)), ("decision_variable", natJson (r.action.val + 1)),
+    ("decision_name", .str r.name)]
+
+def encodeInformationRow {nv nd : Nat} (k : Nat) (r : InformationRow nv nd) : Json :=
+  Json.mkObj [("_id", natJson (k + 1)), ("information_decision", natJson (r.decision.val + 1)),
+    ("information_variable", natJson (r.var.val + 1)),
+    ("information_position", natJson (r.position + 1))]
+
+def encodeUtilityRow (k : Nat) (r : UtilityRow) : Json :=
+  Json.mkObj [("_id", natJson (k + 1)), ("utility_name", .str r.name),
+    ("utility_ref", encodeRef r.ref)]
+
+def encodeUtilityInputRow {nv nu : Nat} (k : Nat) (r : UtilityInputRow nv nu) : Json :=
+  Json.mkObj [("_id", natJson (k + 1)), ("utility_node", natJson (r.utility.val + 1)),
+    ("utility_variable", natJson (r.var.val + 1)), ("utility_position", natJson (r.position + 1))]
+
+def encodePrecedenceRow {nd : Nat} (k : Nat) (r : PrecedenceRow nd) : Json :=
+  Json.mkObj [("_id", natJson (k + 1)), ("earlier", natJson (r.earlier.val + 1)),
+    ("later", natJson (r.later.val + 1))]
+
+def DecisionRowMatches {nv : Nat} (k : Nat) (j : Json) (r : DecisionRow nv) : Prop :=
+  ∃ o, j = .obj o ∧ o.size = 3 ∧ o["_id"]? = some (natJson (k + 1)) ∧
+    o["decision_variable"]? = some (natJson (r.action.val + 1)) ∧
+    o["decision_name"]? = some (.str r.name)
+
+def InformationRowMatches {nv nd : Nat} (k : Nat) (j : Json) (r : InformationRow nv nd) : Prop :=
+  ∃ o, j = .obj o ∧ o.size = 4 ∧ o["_id"]? = some (natJson (k + 1)) ∧
+    o["information_decision"]? = some (natJson (r.decision.val + 1)) ∧
+    o["information_variable"]? = some (natJson (r.var.val + 1)) ∧
+    o["information_position"]? = some (natJson (r.position + 1))
+
+def UtilityRowMatches (k : Nat) (j : Json) (r : UtilityRow) : Prop :=
+  ∃ o, j = .obj o ∧ o.size = 3 ∧ o["_id"]? = some (natJson (k + 1)) ∧
+    o["utility_name"]? = some (.str r.name) ∧
+    ∃ rj, o["utility_ref"]? = some rj ∧ RefMatches rj r.ref
+
+def UtilityInputRowMatches {nv nu : Nat} (k : Nat) (j : Json) (r : UtilityInputRow nv nu) :
+    Prop :=
+  ∃ o, j = .obj o ∧ o.size = 4 ∧ o["_id"]? = some (natJson (k + 1)) ∧
+    o["utility_node"]? = some (natJson (r.utility.val + 1)) ∧
+    o["utility_variable"]? = some (natJson (r.var.val + 1)) ∧
+    o["utility_position"]? = some (natJson (r.position + 1))
+
+def PrecedenceRowMatches {nd : Nat} (k : Nat) (j : Json) (r : PrecedenceRow nd) : Prop :=
+  ∃ o, j = .obj o ∧ o.size = 3 ∧ o["_id"]? = some (natJson (k + 1)) ∧
+    o["earlier"]? = some (natJson (r.earlier.val + 1)) ∧
+    o["later"]? = some (natJson (r.later.val + 1))
+
+theorem decodeDecisionRow_eq_ok {nv k : Nat} {j : Json} {r : DecisionRow nv} :
+    decodeDecisionRow nv k j = .ok r ↔ DecisionRowMatches k j r := by
+  unfold decodeDecisionRow DecisionRowMatches
+  simp only [bind_eq_ok, object_eq_ok, checkId_eq_ok, strField_eq_ok, homField_eq_ok, pure_eq_ok]
+  constructor
+  · rintro ⟨o, ⟨rfl, hs⟩, _, hid, v, hv, n, hn, rfl⟩
+    exact ⟨o, rfl, hs, hid, hv, hn⟩
+  · rintro ⟨o, rfl, hs, hid, hv, hn⟩
+    exact ⟨o, ⟨rfl, hs⟩, (), hid, _, hv, _, hn, rfl⟩
+
+theorem decodeInformationRow_eq_ok {nv nd k : Nat} {j : Json} {r : InformationRow nv nd} :
+    decodeInformationRow nv nd k j = .ok r ↔ InformationRowMatches k j r := by
+  unfold decodeInformationRow InformationRowMatches
+  simp only [bind_eq_ok, object_eq_ok, checkId_eq_ok, homField_eq_ok, posField_eq_ok, pure_eq_ok]
+  constructor
+  · rintro ⟨o, ⟨rfl, hs⟩, _, hid, d, hd, v, hv, p, hp, rfl⟩
+    exact ⟨o, rfl, hs, hid, hd, hv, hp⟩
+  · rintro ⟨o, rfl, hs, hid, hd, hv, hp⟩
+    exact ⟨o, ⟨rfl, hs⟩, (), hid, _, hd, _, hv, _, hp, rfl⟩
+
+theorem decodeUtilityRow_eq_ok {k : Nat} {j : Json} {r : UtilityRow} :
+    decodeUtilityRow k j = .ok r ↔ UtilityRowMatches k j r := by
+  unfold decodeUtilityRow UtilityRowMatches
+  simp only [bind_eq_ok, object_eq_ok, checkId_eq_ok, strField_eq_ok, field_eq_ok,
+    decodeRef_eq_ok, pure_eq_ok]
+  constructor
+  · rintro ⟨o, ⟨rfl, hs⟩, _, hid, n, hn, rj, hrj, ref, href, rfl⟩
+    exact ⟨o, rfl, hs, hid, hn, rj, hrj, href⟩
+  · rintro ⟨o, rfl, hs, hid, hn, rj, hrj, href⟩
+    exact ⟨o, ⟨rfl, hs⟩, (), hid, _, hn, rj, hrj, _, href, rfl⟩
+
+theorem decodeUtilityInputRow_eq_ok {nv nu k : Nat} {j : Json} {r : UtilityInputRow nv nu} :
+    decodeUtilityInputRow nv nu k j = .ok r ↔ UtilityInputRowMatches k j r := by
+  unfold decodeUtilityInputRow UtilityInputRowMatches
+  simp only [bind_eq_ok, object_eq_ok, checkId_eq_ok, homField_eq_ok, posField_eq_ok, pure_eq_ok]
+  constructor
+  · rintro ⟨o, ⟨rfl, hs⟩, _, hid, q, hq, v, hv, p, hp, rfl⟩
+    exact ⟨o, rfl, hs, hid, hq, hv, hp⟩
+  · rintro ⟨o, rfl, hs, hid, hq, hv, hp⟩
+    exact ⟨o, ⟨rfl, hs⟩, (), hid, _, hq, _, hv, _, hp, rfl⟩
+
+theorem decodePrecedenceRow_eq_ok {nd k : Nat} {j : Json} {r : PrecedenceRow nd} :
+    decodePrecedenceRow nd k j = .ok r ↔ PrecedenceRowMatches k j r := by
+  unfold decodePrecedenceRow PrecedenceRowMatches
+  simp only [bind_eq_ok, object_eq_ok, checkId_eq_ok, homField_eq_ok, pure_eq_ok]
+  constructor
+  · rintro ⟨o, ⟨rfl, hs⟩, _, hid, e, he, l, hl, rfl⟩
+    exact ⟨o, rfl, hs, hid, he, hl⟩
+  · rintro ⟨o, rfl, hs, hid, he, hl⟩
+    exact ⟨o, ⟨rfl, hs⟩, (), hid, _, he, _, hl, rfl⟩
+
+theorem decisionRowMatches_encode {nv : Nat} (k : Nat) (r : DecisionRow nv) :
+    DecisionRowMatches k (encodeDecisionRow k r) r :=
+  ⟨_, rfl, mkObj_size (by simp), mkObj_getElem? (by simp) (by simp),
+    mkObj_getElem? (by simp) (by simp), mkObj_getElem? (by simp) (by simp)⟩
+
+theorem informationRowMatches_encode {nv nd : Nat} (k : Nat) (r : InformationRow nv nd) :
+    InformationRowMatches k (encodeInformationRow k r) r :=
+  ⟨_, rfl, mkObj_size (by simp), mkObj_getElem? (by simp) (by simp),
+    mkObj_getElem? (by simp) (by simp), mkObj_getElem? (by simp) (by simp),
+    mkObj_getElem? (by simp) (by simp)⟩
+
+theorem utilityRowMatches_encode (k : Nat) (r : UtilityRow) :
+    UtilityRowMatches k (encodeUtilityRow k r) r :=
+  ⟨_, rfl, mkObj_size (by simp), mkObj_getElem? (by simp) (by simp),
+    mkObj_getElem? (by simp) (by simp), _, mkObj_getElem? (by simp) (by simp),
+    refMatches_encodeRef _⟩
+
+theorem utilityInputRowMatches_encode {nv nu : Nat} (k : Nat) (r : UtilityInputRow nv nu) :
+    UtilityInputRowMatches k (encodeUtilityInputRow k r) r :=
+  ⟨_, rfl, mkObj_size (by simp), mkObj_getElem? (by simp) (by simp),
+    mkObj_getElem? (by simp) (by simp), mkObj_getElem? (by simp) (by simp),
+    mkObj_getElem? (by simp) (by simp)⟩
+
+theorem precedenceRowMatches_encode {nd : Nat} (k : Nat) (r : PrecedenceRow nd) :
+    PrecedenceRowMatches k (encodePrecedenceRow k r) r :=
+  ⟨_, rfl, mkObj_size (by simp), mkObj_getElem? (by simp) (by simp),
+    mkObj_getElem? (by simp) (by simp), mkObj_getElem? (by simp) (by simp)⟩
+```
+
+## The diagram body and the envelope
+
+```lean
+/-- The object tables of `SchInfluenceDiagram`. -/
+def idObjectTables : List String :=
+  ["Variable", "State", "Mechanism", "Input", "Decision", "InformationInput", "Utility",
+    "UtilityInput", "DecisionPrecedence"]
+
+/-- The columns of each object table of `SchInfluenceDiagram`. -/
+def idColumns : String → List (String × ColumnKind)
+  | "Variable" => [("_id", .id), ("variable_name", .label), ("space_ref", .ref)]
+  | "State" => [("_id", .id), ("state_variable", .hom "Variable"), ("state_name", .label),
+      ("state_position", .position)]
+  | "Mechanism" => [("_id", .id), ("target", .hom "Variable"), ("mechanism_name", .label),
+      ("kernel_ref", .ref)]
+  | "Input" => [("_id", .id), ("input_mechanism", .hom "Mechanism"),
+      ("input_variable", .hom "Variable"), ("input_position", .position)]
+  | "Decision" => [("_id", .id), ("decision_variable", .hom "Variable"),
+      ("decision_name", .label)]
+  | "InformationInput" => [("_id", .id), ("information_decision", .hom "Decision"),
+      ("information_variable", .hom "Variable"), ("information_position", .position)]
+  | "Utility" => [("_id", .id), ("utility_name", .label), ("utility_ref", .ref)]
+  | "UtilityInput" => [("_id", .id), ("utility_node", .hom "Utility"),
+      ("utility_variable", .hom "Variable"), ("utility_position", .position)]
+  | "DecisionPrecedence" => [("_id", .id), ("earlier", .hom "Decision"),
+      ("later", .hom "Decision")]
+  | _ => []
+
+def decodeDiagramBody (j : Json) : Except String Diagram := do
+  let body ← object "acset" 12 j
+  emptyTable body "Label"
+  emptyTable body "Position"
+  emptyTable body "Ref"
+  let V ← decodeTable body "Variable" decodeVariableRow
+  let S ← decodeTable body "State" (decodeStateRow V.1)
+  let M ← decodeTable body "Mechanism" (decodeMechanismRow V.1)
+  let I ← decodeTable body "Input" (decodeInputRow V.1 M.1)
+  let D ← decodeTable body "Decision" (decodeDecisionRow V.1)
+  let F ← decodeTable body "InformationInput" (decodeInformationRow V.1 D.1)
+  let U ← decodeTable body "Utility" decodeUtilityRow
+  let Q ← decodeTable body "UtilityInput" (decodeUtilityInputRow V.1 U.1)
+  let P ← decodeTable body "DecisionPrecedence" (decodePrecedenceRow D.1)
+  pure ⟨V.1, S.1, M.1, I.1, D.1, F.1, U.1, Q.1, P.1, V.2, S.2, M.2, I.2, D.2, F.2, U.2, Q.2, P.2⟩
+
+/-- The body is the ACSet JSON of `r`: exactly the twelve tables, the attribute tables empty, and
+each object table matching `r` row for row. -/
+def DiagramBodyMatches (j : Json) (r : Diagram) : Prop :=
+  ∃ body, j = .obj body ∧ body.size = 12 ∧
+    body["Label"]? = some (.arr #[]) ∧ body["Position"]? = some (.arr #[]) ∧
+    body["Ref"]? = some (.arr #[]) ∧
+    TableMatches body "Variable" VariableRowMatches r.nv r.vars ∧
+    TableMatches body "State" StateRowMatches r.ns r.states ∧
+    TableMatches body "Mechanism" MechanismRowMatches r.nm r.mechanisms ∧
+    TableMatches body "Input" InputRowMatches r.ni r.inputs ∧
+    TableMatches body "Decision" DecisionRowMatches r.nd r.decisions ∧
+    TableMatches body "InformationInput" InformationRowMatches r.nf r.information ∧
+    TableMatches body "Utility" UtilityRowMatches r.nu r.utilities ∧
+    TableMatches body "UtilityInput" UtilityInputRowMatches r.nq r.utilityInputs ∧
+    TableMatches body "DecisionPrecedence" PrecedenceRowMatches r.np r.precedence
+
+theorem decodeDiagramBody_eq_ok {j : Json} {r : Diagram} :
+    decodeDiagramBody j = .ok r ↔ DiagramBodyMatches j r := by
+  unfold decodeDiagramBody DiagramBodyMatches
+  simp only [bind_eq_ok, object_eq_ok, emptyTable_eq_ok, pure_eq_ok]
+  constructor
+  · rintro ⟨body, ⟨rfl, hs⟩, _, hL, _, hP, _, hR, ⟨nv, vars⟩, hV, ⟨ns, states⟩, hS,
+      ⟨nm, mechs⟩, hM, ⟨ni, inputs⟩, hI, ⟨nd, decs⟩, hD, ⟨nf, info⟩, hF, ⟨nu, utils⟩, hU,
+      ⟨nq, uinputs⟩, hQ, ⟨np, prec⟩, hPr, rfl⟩
+    exact ⟨body, rfl, hs, hL, hP, hR,
+      (decodeTable_eq_ok fun _ _ _ => decodeVariableRow_eq_ok).1 hV,
+      (decodeTable_eq_ok fun _ _ _ => decodeStateRow_eq_ok).1 hS,
+      (decodeTable_eq_ok fun _ _ _ => decodeMechanismRow_eq_ok).1 hM,
+      (decodeTable_eq_ok fun _ _ _ => decodeInputRow_eq_ok).1 hI,
+      (decodeTable_eq_ok fun _ _ _ => decodeDecisionRow_eq_ok).1 hD,
+      (decodeTable_eq_ok fun _ _ _ => decodeInformationRow_eq_ok).1 hF,
+      (decodeTable_eq_ok fun _ _ _ => decodeUtilityRow_eq_ok).1 hU,
+      (decodeTable_eq_ok fun _ _ _ => decodeUtilityInputRow_eq_ok).1 hQ,
+      (decodeTable_eq_ok fun _ _ _ => decodePrecedenceRow_eq_ok).1 hPr⟩
+  · rintro ⟨body, rfl, hs, hL, hP, hR, hV, hS, hM, hI, hD, hF, hU, hQ, hPr⟩
+    exact ⟨body, ⟨rfl, hs⟩, (), hL, (), hP, (), hR,
+      ⟨r.nv, r.vars⟩, (decodeTable_eq_ok fun _ _ _ => decodeVariableRow_eq_ok).2 hV,
+      ⟨r.ns, r.states⟩, (decodeTable_eq_ok fun _ _ _ => decodeStateRow_eq_ok).2 hS,
+      ⟨r.nm, r.mechanisms⟩, (decodeTable_eq_ok fun _ _ _ => decodeMechanismRow_eq_ok).2 hM,
+      ⟨r.ni, r.inputs⟩, (decodeTable_eq_ok fun _ _ _ => decodeInputRow_eq_ok).2 hI,
+      ⟨r.nd, r.decisions⟩, (decodeTable_eq_ok fun _ _ _ => decodeDecisionRow_eq_ok).2 hD,
+      ⟨r.nf, r.information⟩, (decodeTable_eq_ok fun _ _ _ => decodeInformationRow_eq_ok).2 hF,
+      ⟨r.nu, r.utilities⟩, (decodeTable_eq_ok fun _ _ _ => decodeUtilityRow_eq_ok).2 hU,
+      ⟨r.nq, r.utilityInputs⟩,
+      (decodeTable_eq_ok fun _ _ _ => decodeUtilityInputRow_eq_ok).2 hQ,
+      ⟨r.np, r.precedence⟩, (decodeTable_eq_ok fun _ _ _ => decodePrecedenceRow_eq_ok).2 hPr,
+      rfl⟩
+
+def encodeDiagramBody (r : Diagram) : Json :=
+  Json.mkObj [("Variable", encodeTable encodeVariableRow r.vars),
+    ("State", encodeTable encodeStateRow r.states),
+    ("Mechanism", encodeTable encodeMechanismRow r.mechanisms),
+    ("Input", encodeTable encodeInputRow r.inputs),
+    ("Decision", encodeTable encodeDecisionRow r.decisions),
+    ("InformationInput", encodeTable encodeInformationRow r.information),
+    ("Utility", encodeTable encodeUtilityRow r.utilities),
+    ("UtilityInput", encodeTable encodeUtilityInputRow r.utilityInputs),
+    ("DecisionPrecedence", encodeTable encodePrecedenceRow r.precedence),
+    ("Label", .arr #[]), ("Position", .arr #[]), ("Ref", .arr #[])]
+
+theorem diagramBodyMatches_encode (r : Diagram) : DiagramBodyMatches (encodeDiagramBody r) r :=
+  ⟨_, rfl, mkObj_size (by simp), mkObj_getElem? (by simp) (by simp),
+    mkObj_getElem? (by simp) (by simp), mkObj_getElem? (by simp) (by simp),
+    tableMatches_encode (mkObj_getElem? (by simp) (by simp)) variableRowMatches_encode,
+    tableMatches_encode (mkObj_getElem? (by simp) (by simp)) stateRowMatches_encode,
+    tableMatches_encode (mkObj_getElem? (by simp) (by simp)) mechanismRowMatches_encode,
+    tableMatches_encode (mkObj_getElem? (by simp) (by simp)) inputRowMatches_encode,
+    tableMatches_encode (mkObj_getElem? (by simp) (by simp)) decisionRowMatches_encode,
+    tableMatches_encode (mkObj_getElem? (by simp) (by simp)) informationRowMatches_encode,
+    tableMatches_encode (mkObj_getElem? (by simp) (by simp)) utilityRowMatches_encode,
+    tableMatches_encode (mkObj_getElem? (by simp) (by simp)) utilityInputRowMatches_encode,
+    tableMatches_encode (mkObj_getElem? (by simp) (by simp)) precedenceRowMatches_encode⟩
+
+/-- The format name `write_json_influence_diagram` writes. -/
+def idFormat : String := "influence-diagram-acset"
+
+/-- **The decoder.** A parsed `write_json_influence_diagram` document to its rows. -/
+def decodeDiagram (j : Json) : Except String Diagram := do
+  let body ← decodeEnvelope idFormat j
+  decodeDiagramBody body
+
+/-- **The encoder**, the layout `write_json_influence_diagram` writes (up to key order and
+whitespace). -/
+def encodeDiagram (r : Diagram) : Json := encodeEnvelope idFormat (encodeDiagramBody r)
+
+/-- **Faithfulness.** Decoding succeeds with `r` exactly when the document is an
+`"influence-diagram-acset"` envelope whose body has `r`'s row counts and, row by row and column
+by column, `r`'s values. -/
+theorem decodeDiagram_eq_ok {j : Json} {r : Diagram} :
+    decodeDiagram j = .ok r ↔ ∃ body, EnvelopeMatches idFormat j body ∧ DiagramBodyMatches body r := by
+  unfold decodeDiagram
+  simp only [bind_eq_ok, decodeEnvelope_eq_ok, decodeDiagramBody_eq_ok]
+
+/-- **Round trip.** -/
+theorem decodeDiagram_encodeDiagram (r : Diagram) : decodeDiagram (encodeDiagram r) = .ok r :=
+  decodeDiagram_eq_ok.2 ⟨_, envelopeMatches_encode _ _, diagramBodyMatches_encode r⟩
+
+/-- With a well-formed envelope, the document decodes exactly as its body. -/
+theorem decodeDiagram_of_envelope {j body : Json} (h : EnvelopeMatches idFormat j body) :
+    decodeDiagram j = decodeDiagramBody body := by
+  unfold decodeDiagram
+  rw [decodeEnvelope_eq_ok.2 h]
+  rfl
+```
+
+## Shape and failures
+
+```lean
+/-- A decoded body has the shape of `SchInfluenceDiagram`. -/
+theorem DiagramBodyMatches.shape {j : Json} {r : Diagram} (h : DiagramBodyMatches j r) :
+    ∃ body, j = .obj body ∧ Shape idObjectTables idColumns body := by
+  obtain ⟨body, rfl, -, -, -, -, hV, hS, hM, hI, hD, hF, hU, hQ, hP⟩ := h
+  refine ⟨body, rfl, ?_⟩
+  have cV := rowCount_of_tableMatches hV
+  have cM := rowCount_of_tableMatches hM
+  have cD := rowCount_of_tableMatches hD
+  have cU := rowCount_of_tableMatches hU
+  intro T hT
+  simp only [idObjectTables, List.mem_cons, List.not_mem_nil, or_false] at hT
+  rcases hT with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl
+  · obtain ⟨a, ha, -, -⟩ := id hV
+    refine ⟨a, ha, fun k hk => ?_⟩
+    obtain ⟨i, -, o, ho, hs, hid, hn, rj, hrj, href⟩ := hV.row ha k hk
+    refine ⟨o, ho, hs, fun c κ hc => ?_⟩
+    simp only [idColumns, List.mem_cons, Prod.mk.injEq, List.not_mem_nil,
+      or_false] at hc
+    rcases hc with ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩
+    · exact ⟨_, hid, rfl⟩
+    · exact ⟨_, hn, _, rfl⟩
+    · exact ⟨_, hrj, _, href⟩
+  · obtain ⟨a, ha, -, -⟩ := id hS
+    refine ⟨a, ha, fun k hk => ?_⟩
+    obtain ⟨i, -, o, ho, hs, hid, hv, hn, hp⟩ := hS.row ha k hk
+    refine ⟨o, ho, hs, fun c κ hc => ?_⟩
+    simp only [idColumns, List.mem_cons, Prod.mk.injEq, List.not_mem_nil,
+      or_false] at hc
+    rcases hc with ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩
+    · exact ⟨_, hid, rfl⟩
+    · exact ⟨_, hv, _, rfl, by rw [cV]; exact natJson_le⟩
+    · exact ⟨_, hn, _, rfl⟩
+    · exact ⟨_, hp, _, rfl, Nat.le_add_left 1 _⟩
+  · obtain ⟨a, ha, -, -⟩ := id hM
+    refine ⟨a, ha, fun k hk => ?_⟩
+    obtain ⟨i, -, o, ho, hs, hid, hv, hn, rj, hrj, href⟩ := hM.row ha k hk
+    refine ⟨o, ho, hs, fun c κ hc => ?_⟩
+    simp only [idColumns, List.mem_cons, Prod.mk.injEq, List.not_mem_nil,
+      or_false] at hc
+    rcases hc with ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩
+    · exact ⟨_, hid, rfl⟩
+    · exact ⟨_, hv, _, rfl, by rw [cV]; exact natJson_le⟩
+    · exact ⟨_, hn, _, rfl⟩
+    · exact ⟨_, hrj, _, href⟩
+  · obtain ⟨a, ha, -, -⟩ := id hI
+    refine ⟨a, ha, fun k hk => ?_⟩
+    obtain ⟨i, -, o, ho, hs, hid, hm, hv, hp⟩ := hI.row ha k hk
+    refine ⟨o, ho, hs, fun c κ hc => ?_⟩
+    simp only [idColumns, List.mem_cons, Prod.mk.injEq, List.not_mem_nil,
+      or_false] at hc
+    rcases hc with ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩
+    · exact ⟨_, hid, rfl⟩
+    · exact ⟨_, hm, _, rfl, by rw [cM]; exact natJson_le⟩
+    · exact ⟨_, hv, _, rfl, by rw [cV]; exact natJson_le⟩
+    · exact ⟨_, hp, _, rfl, Nat.le_add_left 1 _⟩
+  · obtain ⟨a, ha, -, -⟩ := id hD
+    refine ⟨a, ha, fun k hk => ?_⟩
+    obtain ⟨i, -, o, ho, hs, hid, hv, hn⟩ := hD.row ha k hk
+    refine ⟨o, ho, hs, fun c κ hc => ?_⟩
+    simp only [idColumns, List.mem_cons, Prod.mk.injEq, List.not_mem_nil, or_false] at hc
+    rcases hc with ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩
+    · exact ⟨_, hid, rfl⟩
+    · exact ⟨_, hv, _, rfl, by rw [cV]; exact natJson_le⟩
+    · exact ⟨_, hn, _, rfl⟩
+  · obtain ⟨a, ha, -, -⟩ := id hF
+    refine ⟨a, ha, fun k hk => ?_⟩
+    obtain ⟨i, -, o, ho, hs, hid, hd, hv, hp⟩ := hF.row ha k hk
+    refine ⟨o, ho, hs, fun c κ hc => ?_⟩
+    simp only [idColumns, List.mem_cons, Prod.mk.injEq, List.not_mem_nil, or_false] at hc
+    rcases hc with ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩
+    · exact ⟨_, hid, rfl⟩
+    · exact ⟨_, hd, _, rfl, by rw [cD]; exact natJson_le⟩
+    · exact ⟨_, hv, _, rfl, by rw [cV]; exact natJson_le⟩
+    · exact ⟨_, hp, _, rfl, Nat.le_add_left 1 _⟩
+  · obtain ⟨a, ha, -, -⟩ := id hU
+    refine ⟨a, ha, fun k hk => ?_⟩
+    obtain ⟨i, -, o, ho, hs, hid, hn, rj, hrj, href⟩ := hU.row ha k hk
+    refine ⟨o, ho, hs, fun c κ hc => ?_⟩
+    simp only [idColumns, List.mem_cons, Prod.mk.injEq, List.not_mem_nil, or_false] at hc
+    rcases hc with ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩
+    · exact ⟨_, hid, rfl⟩
+    · exact ⟨_, hn, _, rfl⟩
+    · exact ⟨_, hrj, _, href⟩
+  · obtain ⟨a, ha, -, -⟩ := id hQ
+    refine ⟨a, ha, fun k hk => ?_⟩
+    obtain ⟨i, -, o, ho, hs, hid, hq, hv, hp⟩ := hQ.row ha k hk
+    refine ⟨o, ho, hs, fun c κ hc => ?_⟩
+    simp only [idColumns, List.mem_cons, Prod.mk.injEq, List.not_mem_nil, or_false] at hc
+    rcases hc with ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩
+    · exact ⟨_, hid, rfl⟩
+    · exact ⟨_, hq, _, rfl, by rw [cU]; exact natJson_le⟩
+    · exact ⟨_, hv, _, rfl, by rw [cV]; exact natJson_le⟩
+    · exact ⟨_, hp, _, rfl, Nat.le_add_left 1 _⟩
+  · obtain ⟨a, ha, -, -⟩ := id hP
+    refine ⟨a, ha, fun k hk => ?_⟩
+    obtain ⟨i, -, o, ho, hs, hid, he, hl⟩ := hP.row ha k hk
+    refine ⟨o, ho, hs, fun c κ hc => ?_⟩
+    simp only [idColumns, List.mem_cons, Prod.mk.injEq, List.not_mem_nil, or_false] at hc
+    rcases hc with ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩
+    · exact ⟨_, hid, rfl⟩
+    · exact ⟨_, he, _, rfl, by rw [cD]; exact natJson_le⟩
+    · exact ⟨_, hl, _, rfl, by rw [cD]; exact natJson_le⟩
+
+theorem decodeDiagramBody_shape {acset : JsonObject} {r : Diagram}
+    (h : decodeDiagramBody (.obj acset) = .ok r) : Shape idObjectTables idColumns acset := by
+  obtain ⟨body, hb, hs⟩ := (decodeDiagramBody_eq_ok.1 h).shape
+  cases hb
+  exact hs
+
+/-- **Failure: a missing object table.** -/
+theorem decodeDiagramBody_error_of_missing_table {acset : JsonObject} {T : String}
+    (hT : T ∈ idObjectTables) (h : acset[T]? = none) (r : Diagram) :
+    decodeDiagramBody (.obj acset) ≠ .ok r := fun hd => by
+  obtain ⟨a, ha⟩ := (decodeDiagramBody_shape hd).table hT
+  rw [h] at ha
+  cases ha
+
+/-- **Failure: a row that is not an object, or has missing or extra columns.** -/
+theorem decodeDiagramBody_error_of_bad_row {acset : JsonObject} {T : String} {a : Array Json}
+    {k : Nat} {row : Json} (hT : T ∈ idObjectTables) (ha : acset[T]? = some (.arr a))
+    (hk : a[k]? = some row)
+    (hrow : ∀ ro : JsonObject, row = .obj ro → ro.size ≠ (idColumns T).length) (r : Diagram) :
+    decodeDiagramBody (.obj acset) ≠ .ok r := fun hd => by
+  obtain ⟨ro, hro, hs⟩ := (decodeDiagramBody_shape hd).row hT ha hk
+  exact hrow ro hro hs
+
+/-- **Failure: a missing or ill-formed column** (wrong JSON type, hom out of range, position `0`,
+wrong `"_id"`, malformed `KernelRef`). -/
+theorem decodeDiagramBody_error_of_bad_column {acset : JsonObject} {T : String} {a : Array Json}
+    {k : Nat} {ro : JsonObject} {c : String} {κ : ColumnKind} (hT : T ∈ idObjectTables)
+    (ha : acset[T]? = some (.arr a)) (hk : a[k]? = some (.obj ro)) (hc : (c, κ) ∈ idColumns T)
+    (hbad : ∀ v, ro[c]? = some v → ¬ ColumnOk acset k v κ) (r : Diagram) :
+    decodeDiagramBody (.obj acset) ≠ .ok r := fun hd => by
+  obtain ⟨v, hv, hok⟩ := (decodeDiagramBody_shape hd).column hT ha hk hc
+  exact hbad v hv hok
+
+/-- **Failure: a hom ID out of range.** -/
+theorem decodeDiagramBody_error_of_hom_out_of_range {acset : JsonObject} {T T' : String}
+    {a : Array Json} {k e : Nat} {ro : JsonObject} {c : String} (hT : T ∈ idObjectTables)
+    (ha : acset[T]? = some (.arr a)) (hk : a[k]? = some (.obj ro))
+    (hc : (c, ColumnKind.hom T') ∈ idColumns T) (hv : ro[c]? = some (natJson e))
+    (hout : e = 0 ∨ rowCount acset T' < e) (r : Diagram) :
+    decodeDiagramBody (.obj acset) ≠ .ok r := by
+  refine decodeDiagramBody_error_of_bad_column hT ha hk hc (fun v hv' hok => ?_) r
+  rw [hv, Option.some.injEq] at hv'
+  subst hv'
+  have := hok.hom_range
+  omega
+
+/-- **Failure: an ID, hom or position column that is not a nonnegative JSON integer.** -/
+theorem decodeDiagramBody_error_of_not_integer {acset : JsonObject} {T : String}
+    {a : Array Json} {k : Nat} {ro : JsonObject} {c : String} {κ : ColumnKind} {v : Json}
+    (hT : T ∈ idObjectTables) (ha : acset[T]? = some (.arr a)) (hk : a[k]? = some (.obj ro))
+    (hc : (c, κ) ∈ idColumns T) (hκ : κ = .id ∨ κ = .position ∨ ∃ T', κ = .hom T')
+    (hv : ro[c]? = some v) (hnot : jsonNat? v = none) (r : Diagram) :
+    decodeDiagramBody (.obj acset) ≠ .ok r := by
+  refine decodeDiagramBody_error_of_bad_column hT ha hk hc (fun v' hv' hok => ?_) r
+  rw [hv, Option.some.injEq] at hv'
+  subst hv'
+  have := hok.isNat hκ
+  rw [hnot] at this
+  cases this
+
+/-- **Failure: a `Label` column that is not a JSON string.** -/
+theorem decodeDiagramBody_error_of_not_string {acset : JsonObject} {T : String}
+    {a : Array Json} {k : Nat} {ro : JsonObject} {c : String} {v : Json}
+    (hT : T ∈ idObjectTables) (ha : acset[T]? = some (.arr a)) (hk : a[k]? = some (.obj ro))
+    (hc : (c, ColumnKind.label) ∈ idColumns T) (hv : ro[c]? = some v) (hnot : ∀ s, v ≠ .str s)
+    (r : Diagram) : decodeDiagramBody (.obj acset) ≠ .ok r := by
+  refine decodeDiagramBody_error_of_bad_column hT ha hk hc (fun v' hv' hok => ?_) r
+  rw [hv, Option.some.injEq] at hv'
+  subst hv'
+  obtain ⟨s, rfl⟩ := hok
+  exact hnot s rfl
+```
+
+## The checked decoder
+
+```lean
+/-- **The checked decoder**: decode and run `Diagram.fullCheck`. -/
+def decodeDiagramChecked (j : Json) : Option (Σ' r : Diagram, r.FullValid) :=
+  match decodeDiagram j with
+  | .ok r => if h : r.fullCheck = true then some ⟨r, (Diagram.fullCheck_iff r).1 h⟩ else none
+  | .error _ => none
+
+theorem decodeDiagramChecked_eq_some {j : Json} {r : Diagram} {h : r.FullValid} :
+    decodeDiagramChecked j = some ⟨r, h⟩ ↔ decodeDiagram j = .ok r := by
+  unfold decodeDiagramChecked
+  constructor
+  · intro hd
+    split at hd
+    · rename_i r' hr'
+      split_ifs at hd
+      simp only [Option.some.injEq, PSigma.mk.injEq] at hd
+      obtain ⟨rfl, -⟩ := hd
+      exact hr'
+    · cases hd
+  · intro hd
+    rw [hd]
+    simp only
+    rw [dif_pos ((Diagram.fullCheck_iff r).2 h)]
+
+/-- **Exactly the fully valid documents decode.** -/
+theorem decodeDiagramChecked_isSome_iff {j : Json} :
+    (decodeDiagramChecked j).isSome ↔ ∃ r, decodeDiagram j = .ok r ∧ r.FullValid := by
+  constructor
+  · intro hs
+    obtain ⟨⟨r, h⟩, hr⟩ := Option.isSome_iff_exists.1 hs
+    exact ⟨r, decodeDiagramChecked_eq_some.1 hr, h⟩
+  · rintro ⟨r, hr, h⟩
+    rw [decodeDiagramChecked_eq_some (h := h) |>.2 hr]
+    rfl
+
+/-- **Completeness on encoded diagrams**: every fully valid diagram is recovered exactly. -/
+theorem decodeDiagramChecked_encode {r : Diagram} (h : r.FullValid) :
+    decodeDiagramChecked (encodeDiagram r) = some ⟨r, h⟩ :=
+  decodeDiagramChecked_eq_some.2 (decodeDiagram_encodeDiagram r)
+
+/-- **The policy-table axes in the document.** After a successful checked decode, for every
+decision `d` and every slot `j` of its policy mechanism in the instantiated chance part, the
+document's `"InformationInput"` table has a row with `information_decision = d + 1`,
+`information_position = j + 1` and `information_variable` the slot's variable plus one; and for
+every state `a` of `d`'s action, the `"State"` table has a row with `state_variable` the action
+plus one, `state_position = a + 1` and `state_name` the label `stateLabel a`, which orders the
+action axis that `solveRepRecords_table_of_fullValid` reads. -/
+theorem decodeDiagramChecked_policyAxes {j : Json} {r : Diagram} {h : r.FullValid}
+    (hd : decodeDiagramChecked j = some ⟨r, h⟩) (rank : Fin r.nv → Fin r.nv)
+    (hrank : (r.chance.withRank rank).Valid) (d : Fin r.nd) :
+    (∀ slot : Fin ((r.chance.withRank rank).inputCount (Fin.natAdd r.nm d)),
+      ∃ (acset : JsonObject) (arr : Array Json), EnvelopeMatches idFormat j (.obj acset) ∧
+        acset["InformationInput"]? = some (.arr arr) ∧
+        ∃ (k : Nat) (ro : JsonObject), arr[k]? = some (.obj ro) ∧
+          ro["information_decision"]? = some (natJson (d.val + 1)) ∧
+          ro["information_position"]? = some (natJson (slot.val + 1)) ∧
+          ro["information_variable"]? =
+            some (natJson (((r.chance.withRank rank).slotVariable hrank _ slot).val + 1))) ∧
+    ∀ a : Fin (r.stateCount (r.decisions d).action),
+      ∃ (acset : JsonObject) (arr : Array Json), EnvelopeMatches idFormat j (.obj acset) ∧
+        acset["State"]? = some (.arr arr) ∧
+        ∃ (k : Nat) (ro : JsonObject), arr[k]? = some (.obj ro) ∧
+          ro["state_variable"]? = some (natJson ((r.decisions d).action.val + 1)) ∧
+          ro["state_position"]? = some (natJson (a.val + 1)) ∧
+          ro["state_name"]? = some (.str (r.stateLabel h.valid _ a)) := by
+  obtain ⟨body, henv, acset, rfl, -, -, -, -, -, hS, -, -, -, hF, -, -, -⟩ :=
+    decodeDiagram_eq_ok.1 (decodeDiagramChecked_eq_some.1 hd)
+  constructor
+  · intro slot
+    obtain ⟨arr, harr, -, hrows⟩ := hF
+    set i := ((r.chance.withRank rank).inputOrder hrank _).symm slot
+    have hown : (r.chance.inputs i.val).mechanism = Fin.natAdd r.nm d := i.property
+    have hpos : (r.chance.inputs i.val).position = slot.val :=
+      (r.chance.withRank rank).slot_position hrank _ slot
+    have hslot : (r.chance.withRank rank).slotVariable hrank _ slot =
+        (r.chance.inputs i.val).var := rfl
+    have key : ∀ k : Fin (r.ni + r.nf), (r.chance.inputs k).mechanism = Fin.natAdd r.nm d →
+        ∃ f, k = Fin.natAdd r.ni f := by
+      intro k
+      refine Fin.addCases (fun ci => ?_) (fun f => ?_) k
+      · intro hk
+        rw [Diagram.chance_input_left] at hk
+        exact absurd hk (castAdd_ne_natAdd _ _)
+      · intro _
+        exact ⟨f, rfl⟩
+    obtain ⟨f, hf⟩ := key i.val hown
+    rw [hf, Diagram.chance_input_right] at hown hpos hslot
+    have hdec : (r.information f).decision = d := Fin.natAdd_injective _ _ hown
+    obtain ⟨x, hx, ro, rfl, -, -, hdj, hvj, hpj⟩ := hrows f
+    refine ⟨acset, arr, henv, harr, f.val, ro, hx, ?_, ?_, ?_⟩
+    · rw [hdj, hdec]
+    · rw [hpj]
+      exact congrArg (fun p => some (natJson (p + 1))) hpos
+    · rw [hvj, hslot]
+  · intro a
+    obtain ⟨arr, harr, -, hrows⟩ := hS
+    set s := r.stateRecord h.valid _ a
+    obtain ⟨x, hx, ro, rfl, -, -, hvar, hname, hpos⟩ := hrows s
+    refine ⟨acset, arr, henv, harr, s.val, ro, hx, ?_, ?_, hname⟩
+    · rw [hvar, r.stateRecord_var h.valid _ a]
+    · rw [hpos, r.stateRecord_position h.valid _ a]
+
+end InfluenceDiagramsProofs.Records
+```
+
+
 <!-- InfluenceDiagramsProofs/Roadmap.lean -->
 
 # Roadmap and exact scope of the DVE theorem
@@ -6841,10 +7900,13 @@ representative's score; every positive-reach row of `optimalContinuation`).
 
 This is **not** a byte-for-byte verification of Julia. Remaining refinements are:
 
-* the record-to-Julia link. `Records.Diagram` is not produced from the ACSet or from the DVE
-  certificate by a proved decoder (the certificate exports exactly these state rows; no Lean
-  consumer reads it), and `Valid` checks only the state rows: closedness, the order and
-  no-forgetting of the compiled diagram stay hypotheses. That Julia's action axis lists the
+* the record-to-Julia link. `Records.Diagram` is produced from a parsed ACSet JSON tree by the
+  proved decoder of `Finite/DVE/JsonRecords.lean` (faithful, `decodeDiagram_eq_ok`, with round
+  trip and failure lemmas), but `Lean.Json.parse` and Julia's JSON3/ACSets writer are trusted,
+  and the DVE certificate is not decoded (it exports exactly these state rows; no Lean consumer
+  reads it). `Valid` checks only the state rows; `FullValid` (`Finite/DVE/RecordsValid.lean`)
+  checks every table and discharges closedness and the order of the compiled diagram, while
+  no-forgetting stays a hypothesis. That Julia's action axis lists the
   states in `state_position` order is pinned by a Julia test, and the array layout is the
   `FiniteKernels` `Layout/` result; Julia's execution itself is not proved. That Julia's block
   schedule is a `Plan`, and which `keep` its run uses, are read off the source, not derived;

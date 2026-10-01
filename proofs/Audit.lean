@@ -166,6 +166,35 @@ assert_no_sorry InfluenceDiagramsProofs.Records.Diagram.solveRepRecords_optimal
 #print axioms InfluenceDiagramsProofs.Records.Diagram.solveRepRecords_table
 #print axioms InfluenceDiagramsProofs.Records.Diagram.solveRepRecords_optimal
 
+-- Full validity of the records and the ACSets JSON decoder.
+assert_no_sorry InfluenceDiagramsProofs.Records.Diagram.FullValid.chance_valid
+assert_no_sorry InfluenceDiagramsProofs.Records.Diagram.solveRepRecords_optimal_of_fullValid
+assert_no_sorry InfluenceDiagramsProofs.Records.decodeDiagram_eq_ok
+assert_no_sorry InfluenceDiagramsProofs.Records.decodeDiagramChecked_isSome_iff
+#print axioms InfluenceDiagramsProofs.Records.positioned_append
+#print axioms InfluenceDiagramsProofs.Records.Diagram.chance_acyclic_iff
+#print axioms InfluenceDiagramsProofs.Records.Diagram.fullCheck_iff
+#print axioms InfluenceDiagramsProofs.Records.Diagram.FullValid.chance_valid
+#print axioms InfluenceDiagramsProofs.Records.Diagram.FullValid.chance_network_valid
+#print axioms InfluenceDiagramsProofs.Records.Diagram.FullValid.closed
+#print axioms InfluenceDiagramsProofs.Records.Diagram.FullValid.idOrder
+#print axioms InfluenceDiagramsProofs.Records.Diagram.solveRepRecords_table_of_fullValid
+#print axioms InfluenceDiagramsProofs.Records.Diagram.solveRepRecords_optimal_of_fullValid
+#print axioms InfluenceDiagramsProofs.Records.Diagram.solveRecords_table_of_fullValid
+#print axioms InfluenceDiagramsProofs.Records.decodeDiagramBody_eq_ok
+#print axioms InfluenceDiagramsProofs.Records.decodeDiagram_eq_ok
+#print axioms InfluenceDiagramsProofs.Records.decodeDiagram_encodeDiagram
+#print axioms InfluenceDiagramsProofs.Records.DiagramBodyMatches.shape
+#print axioms InfluenceDiagramsProofs.Records.decodeDiagramBody_error_of_missing_table
+#print axioms InfluenceDiagramsProofs.Records.decodeDiagramBody_error_of_bad_row
+#print axioms InfluenceDiagramsProofs.Records.decodeDiagramBody_error_of_bad_column
+#print axioms InfluenceDiagramsProofs.Records.decodeDiagramBody_error_of_hom_out_of_range
+#print axioms InfluenceDiagramsProofs.Records.decodeDiagramBody_error_of_not_integer
+#print axioms InfluenceDiagramsProofs.Records.decodeDiagramBody_error_of_not_string
+#print axioms InfluenceDiagramsProofs.Records.decodeDiagramChecked_isSome_iff
+#print axioms InfluenceDiagramsProofs.Records.decodeDiagramChecked_encode
+#print axioms InfluenceDiagramsProofs.Records.decodeDiagramChecked_policyAxes
+
 -- Exact multi-decision bucket DVE; the schedule is generated from no-forgetting.
 assert_no_sorry InfluenceDiagramsProofs.DVE.solve_spec
 assert_no_sorry InfluenceDiagramsProofs.DVE.solveEvidence_spec

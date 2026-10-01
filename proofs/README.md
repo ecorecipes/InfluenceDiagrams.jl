@@ -88,6 +88,8 @@ inherited `FinBayesNet.nonemptyS` fields ensure that every action space is nonem
 | `Finite/DVE/PlanIndependence.lean` | `MassAll` (the probability potential is the reach marginal under every strategy) is preserved by every step, so `reach_strategy_independent`. `optimalContinuation` is the supremum of `continuation` over nonnegative strategies; `weight_eq_optimalContinuation` identifies it with the weighted valuation at the decision step of any plan, and `runWith_ordered_optimal` makes the first-label entry its least maximizer on rows of positive reach. `solvePlanWith`, `solveEvidencePlanWith`, `solveConditionedPlan` run on an arbitrary `Plan id Finset.univ`; `solvePlanOrdered_table_eq`, `solveEvidencePlanOrdered_table_eq`, `solveConditionedPlan_table_eq` and `solveOrdered_table_plan_independent`. |
 | `Finite/DVE/Representative.lean` | `sumOutKeep keep` is Julia's chance step: on rows of zero summed probability it stores the bucket utility (`keep = true`) or `0` (`keep = false`, the model: `sumOutKeep_false`); `sumOutKeep_util_of_const` makes `keep = true` literally Julia's `ψ′ = ψ` when the utility does not mention the summed variable. `runRepWith sel keep` is the driver with that step. `Agrees` (scope, probability, weighted utility) is preserved by every step under the exact guard (`agrees_chanceStep`, `agrees_decisionStep`, `runRep_agrees`). `solveRepPlan_agrees`, `solveRepPlanWith_spec` (realized optimum), `solveRepPlanWith_value`, `solveRepPlanScore_eq` and `solveRepPlanWith_kernel_eq` (positive reach), `solveRepPlanOrdered_table` (every row) and `solveRepPlanOrdered_optimal`, for every `keep`, selector and plan. |
 | `Finite/DVE/LabelOrder.lean` | `positionOrder`, `firstArgmax_least_position`, `eq_firstArgmax_of_least_position`. `Records.Diagram` (raw rows reusing the BN `Raw.StateRow`), `Valid` / `check_iff`, `compile` (state spaces `Fin (stateCount v)`), `stateRecord` with `stateRecord_position` (from `Raw.positionEquiv`), `actionOrder` with `actionOrder_le_iff`, `selector`; `solveRecords_table`, `solveRepRecords_table`, `solveRepRecords_optimal`: the entry is the maximizer of least checked `state_position`. |
+| `Finite/DVE/RecordsValid.lean` | `FullValid` / `fullCheck_iff` (every table checked), `chance` (decisions instantiated as policy mechanisms), `chance_acyclic_iff`, `FullValid.chance_valid` and `chance_network_valid` (BN `Raw.Network.Valid`), `FullValid.closed`, `FullValid.idOrder`; `solveRepRecords_table_of_fullValid`, `solveRepRecords_optimal_of_fullValid`, `solveRecords_table_of_fullValid`. |
+| `Finite/DVE/JsonRecords.lean` | The ACSets JSON decoder: row decoders and `…RowMatches` for the five influence-diagram tables, `decodeDiagram`, `decodeDiagram_eq_ok`, `decodeDiagram_encodeDiagram`, `DiagramBodyMatches.shape` and the failure lemmas, `decodeDiagramChecked`, `decodeDiagramChecked_isSome_iff`, `decodeDiagramChecked_encode`, `decodeDiagramChecked_policyAxes`. |
 | `Roadmap.lean` | Remaining literal-Julia refinements; no unproved declarations. |
 
 `Audit.lean` prints the axioms of every main theorem (and of the definitions `Policy.ofFun`,
@@ -227,12 +229,43 @@ row, its own score) and `solveRepRecords_optimal` (Julia's representative, any p
 positive reach, `optimalContinuation`) prove that the returned entry is the maximizer of least
 checked `state_position`.
 
-Not proved: that Julia's DVE certificate (whose `variables[].states` rows carry exactly `id`,
-`position` and `label`) or the ACSet decodes into these records (there is no Lean consumer of the
-certificate); the closedness, order and no-forgetting hypotheses of the compiled diagram (they
-stay hypotheses); that Julia's action axis lists `states(id, v)` in `state_position` order (a
-Julia test pins it; the array layout is the `FiniteKernels` `Layout/` result); and Julia's
-execution itself.
+`Finite/DVE/RecordsValid.lean` strengthens the check. `FullValid` (decidable; `fullCheck_iff`)
+keeps `Valid` and adds bounded unique positions of the `Input`, `InformationInput` and
+`UtilityInput` rows per owner, injective mechanism targets and decision actions that are
+disjoint and cover the variables, and acyclicity of `chance`, the chance rows with every
+decision `d` instantiated as the mechanism `nm + d` (`policy[name]`, `PolicyRef(name)`) whose
+inputs are `d`'s information rows. `FullValid.chance_valid` proves that `chance` satisfies BN
+`Raw.Tables.Valid`, so with its computed rank it is a `Raw.Network` satisfying
+`Raw.Network.Valid` (`chance_network_valid`). `FullValid.closed` and `FullValid.idOrder` derive
+`Closed` and an `IDOrder` of the compiled diagram, so `solveRepRecords_table_of_fullValid`,
+`solveRepRecords_optimal_of_fullValid` and `solveRecords_table_of_fullValid` drop those
+hypotheses; the original theorems under `Valid` are unchanged. Not checked by `FullValid`:
+decision-precedence rows (stored, not validated), unique variable, decision or utility names,
+and no-forgetting (`NoForgettingOrder` stays a hypothesis).
+
+`Finite/DVE/JsonRecords.lean` decodes the records from a parsed `Lean.Json` tree in the layout of
+`write_json_influence_diagram` (the `"influence-diagram-acset"` envelope; the four BN tables
+through the BN row decoders, `Decision`, `InformationInput`, `Utility`, `UtilityInput`,
+`DecisionPrecedence`, and the empty `Label`, `Position`, `Ref` tables; one-based IDs and
+positions). `decodeDiagram_eq_ok` proves it succeeds with `r` exactly when every table has
+`r`'s row count and every column of every row holds `r`'s value; `decodeDiagram_encodeDiagram`
+is the round trip; `decodeDiagramBody_error_of_missing_table`, `…_bad_row`, `…_bad_column`,
+`…_hom_out_of_range`, `…_not_integer` and `…_not_string` show failures are never defaulted;
+`decodeDiagramChecked` adds `fullCheck`, succeeds exactly on fully valid documents
+(`decodeDiagramChecked_isSome_iff`) and on every encoded fully valid diagram
+(`decodeDiagramChecked_encode`); `decodeDiagramChecked_policyAxes` reads the policy-table axes
+off the document (information inputs in `information_position` order, action labels in
+`state_position` order). `lake exe check_records FILE.json` prints that summary, and
+`BayesianNetworks.jl/proofs/scripts/check_records.jl` compares it with Julia's `states`,
+`inputs`, `decision_information` and the axes of the policy tables `optimize` returns.
+
+Not proved: `Lean.Json.parse` and Julia's JSON3/ACSets writer (trusted; the theorems start from
+a parsed `Json` tree); that Julia's DVE certificate (whose `variables[].states` rows carry
+exactly `id`, `position` and `label`) decodes into these records (there is no Lean consumer of
+the certificate); the no-forgetting hypothesis, and under `Valid` alone the closedness and order
+hypotheses; that Julia's action axis lists `states(id, v)` in `state_position` order (a Julia
+test pins it, and the cross-check agrees on every fixture; the array layout is the
+`FiniteKernels` `Layout/` result); and Julia's execution itself.
 
 `make audit` also rejects missing/ambiguous results, any other axiom and
 proof escape hatches in this project's sources and its own BayesianNetworks proof

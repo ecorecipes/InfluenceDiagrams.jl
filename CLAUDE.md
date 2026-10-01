@@ -89,9 +89,18 @@ ordered but neither knows the other's action: that is a forgetting diagram, and 
   is `orderedTable` of the run's own score (`solveRepPlanOrdered_table`); not combined with
   sliced evidence. `Finite/DVE/LabelOrder.lean` compiles checked raw records (bounded unique
   state positions) to a diagram whose action order is `state_position`, and proves the entry
-  is the least-position maximizer (`solveRecords_table`, `solveRepRecords_optimal`). Not
-  proved: decoding the ACSet or DVE certificate into those records, that Julia's action axis
-  follows `state_position` (a test pins it), and Float64 rounding (near-ties that rounding
+  is the least-position maximizer (`solveRecords_table`, `solveRepRecords_optimal`).
+  `Finite/DVE/RecordsValid.lean` adds `FullValid` (every table checked; the instantiated chance
+  part satisfies BN `Raw.Network.Valid`, `FullValid.chance_valid`) and the `_of_fullValid`
+  versions of those theorems without the `Closed`/`IDOrder` hypotheses (no-forgetting stays one;
+  decision precedence and name uniqueness are not checked). `Finite/DVE/JsonRecords.lean`
+  decodes a parsed `write_json_influence_diagram` JSON tree into the records, faithfully
+  (`decodeDiagram_eq_ok`), with round trip (`decodeDiagram_encodeDiagram`) and failure lemmas;
+  `lake exe check_records` in `proofs/` prints the decoded summary and
+  `BayesianNetworks.jl/proofs/scripts/check_records.jl` compares it with Julia. Not proved:
+  `Lean.Json.parse` and Julia's JSON3/ACSets writer (trusted), decoding the DVE certificate,
+  that Julia's action axis follows `state_position` (a test pins it, the cross-check agrees on
+  fixtures), and Float64 rounding (near-ties that rounding
   creates or breaks); signed zeros now tie as reals and non-finite utilities are rejected.
   Follow the proof README's build, audit and rendering rules when extending this layer.
 

@@ -78,10 +78,13 @@ representative's score; every positive-reach row of `optimalContinuation`).
 
 This is **not** a byte-for-byte verification of Julia. Remaining refinements are:
 
-* the record-to-Julia link. `Records.Diagram` is not produced from the ACSet or from the DVE
-  certificate by a proved decoder (the certificate exports exactly these state rows; no Lean
-  consumer reads it), and `Valid` checks only the state rows: closedness, the order and
-  no-forgetting of the compiled diagram stay hypotheses. That Julia's action axis lists the
+* the record-to-Julia link. `Records.Diagram` is produced from a parsed ACSet JSON tree by the
+  proved decoder of `Finite/DVE/JsonRecords.lean` (faithful, `decodeDiagram_eq_ok`, with round
+  trip and failure lemmas), but `Lean.Json.parse` and Julia's JSON3/ACSets writer are trusted,
+  and the DVE certificate is not decoded (it exports exactly these state rows; no Lean consumer
+  reads it). `Valid` checks only the state rows; `FullValid` (`Finite/DVE/RecordsValid.lean`)
+  checks every table and discharges closedness and the order of the compiled diagram, while
+  no-forgetting stays a hypothesis. That Julia's action axis lists the
   states in `state_position` order is pinned by a Julia test, and the array layout is the
   `FiniteKernels` `Layout/` result; Julia's execution itself is not proved. That Julia's block
   schedule is a `Plan`, and which `keep` its run uses, are read off the source, not derived;

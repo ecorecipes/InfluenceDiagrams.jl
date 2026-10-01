@@ -14,9 +14,11 @@ records instead of supplying it.
   `firstArgmax` is exactly the maximizer of least position.
 * `Records.Diagram` holds raw influence-diagram rows: variables and their state rows
   (`var`, `position`, `name`, the BN `Raw.StateRow`), mechanisms, inputs, decisions, information
-  rows, utilities and utility inputs, with external IDs already decoded to `Fin`. `Valid` checks
-  only what the label order needs: every variable has a state, positions are bounded and unique
-  per variable (`Raw.Positioned`), and labels are unique per variable. `compile` builds the
+  rows, utilities (`name`, `ref`), utility inputs and decision-precedence rows, with external
+  IDs already decoded to `Fin`. `Valid` checks only what the label order needs: every variable
+  has a state, positions are bounded and unique per variable (`Raw.Positioned`), and labels are
+  unique per variable; `RecordsValid.lean` adds `FullValid`, which checks every table. `compile`
+  builds the
   `FinInfluenceDiagram` whose state space for `v` is `Fin (stateCount v)`; `stateRecord` is
   the record at each position (the positional bijection `Raw.positionEquiv`, derived, not
   assumed), with `stateRecord_position`.
@@ -34,8 +36,11 @@ What is not proved here: that Julia's arrays are laid out in that order is the
 `FiniteKernels` `Layout/` result together with the Julia test pinning the action axis to
 `states(id, v)`; that Julia's DVE certificate (`variables[].states`, rows of
 `id`, `position`, `label`) decodes into these records is not formalised (there is no Lean
-consumer of that certificate); the DVE hypotheses (`Closed`, `IDOrder`, `NoForgettingOrder`)
-of the compiled diagram stay hypotheses; and Julia's execution itself is not proved.
+consumer of that certificate; the ACSet JSON of `write_json_influence_diagram` is decoded into
+them by `Finite/DVE/JsonRecords.lean`); here the DVE hypotheses (`Closed`, `IDOrder`,
+`NoForgettingOrder`) of the compiled diagram stay hypotheses (`RecordsValid.lean` derives
+`Closed` and an `IDOrder` from `FullValid`; `NoForgettingOrder` stays one); and Julia's
+execution itself is not proved.
 -/
 
 set_option autoImplicit false
@@ -91,13 +96,20 @@ structure InformationRow (nv nd : Nat) where
 
 structure UtilityRow where
   name : String
+  ref : Ref
 
 structure UtilityInputRow (nv nu : Nat) where
   utility : Fin nu
   var : Fin nv
   position : Nat
 
-/-- Raw influence-diagram rows with decoded finite IDs: the shape of the ACSet, and of the
+/-- A `DecisionPrecedence` row: `earlier` is taken before `later`. -/
+structure PrecedenceRow (nd : Nat) where
+  earlier : Fin nd
+  later : Fin nd
+
+/-- Raw influence-diagram rows with decoded finite IDs: every table of the `SchInfluenceDiagram`
+ACSet (`Finite/DVE/JsonRecords.lean` decodes them from Julia's JSON), and the shape of the
 `variables` / `mechanisms` / `decisions` / `utilities` sections of the DVE certificate. -/
 structure Diagram where
   nv : Nat
@@ -108,6 +120,7 @@ structure Diagram where
   nf : Nat
   nu : Nat
   nq : Nat
+  np : Nat
   vars : Fin nv → VariableRow
   states : Fin ns → StateRow nv
   mechanisms : Fin nm → MechanismRow nv
@@ -116,6 +129,7 @@ structure Diagram where
   information : Fin nf → InformationRow nv nd
   utilities : Fin nu → UtilityRow
   utilityInputs : Fin nq → UtilityInputRow nv nu
+  precedence : Fin np → PrecedenceRow nd
 
 namespace Diagram
 
