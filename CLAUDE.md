@@ -83,8 +83,8 @@ ordered but neither knows the other's action: that is a forgetting diagram, and 
   the likelihood factor. `Finite/DVE/PlanIndependence.lean` proves those positive-probability
   first-label tables (plain, likelihood evidence and sliced evidence) identical for any two
   elimination plans, so the min-fill order inside a strong block cannot change them. Zero-probability rows, the link from the supplied order to
-  Julia's labels, and Float64 comparison (near-ties, `-0.0` versus `0.0`, `NaN`) stay
-  outside the proofs.
+  Julia's labels, and Float64 rounding (near-ties that rounding creates or breaks) stay
+  outside the proofs; signed zeros now tie as reals and non-finite utilities are rejected.
   Follow the proof README's build, audit and rendering rules when extending this layer.
 
 ## Invariants that must not be broken
@@ -97,7 +97,7 @@ ordered but neither knows the other's action: that is a forgetting diagram, and 
 - No-forgetting is a solver precondition, not a validity condition (see above). Do not add it to `validate`.
 - `validate`, `instantiate`, `expected_utility` and `optimize` thread the kernel-normalisation `atol` through the joint/conditional oracle as well as validation. DVE checks no-forgetting and action-free causal ancestry of external evidence structurally; its separate probability diagnostic uses a relative tolerance per row, including arbitrarily small rows. Accepted rounded CPTs are not silently renormalized, so tolerance acceptance is not exact arithmetic.
 - The valuation layer reuses BayesianNetworkInference's `_union_axes` and `_broadcastable` helpers for scope/axis agreement and alignment. Keep those internal cross-package contracts in step.
-- Every optimised path is checked against a slower oracle (`joint_distribution`, exhaustive policy search) on small models; DVE ties resolve to the first action label (on the Float64 path under Julia's `argmax` order, which puts `0.0` above `-0.0` and `NaN` above everything).
+- Every optimised path is checked against a slower oracle (`joint_distribution`, exhaustive policy search) on small models; DVE ties resolve to the first action label: `argmax_table` compares with `==`, so `-0.0` and `0.0` tie as the reals they are, and every backend rejects a NaN or infinite utility (`UtilityScopeError`). Ties that Float64 rounding creates or breaks remain an approximation; `stable=true` compares exact rationals.
 - Models are immutable values: every operation returns a new model.
 - Evidence mass (ADR 0014): `ImpossibleEvidenceError` means probability exactly zero. The Float64
   DVE run throws the internal `_UnresolvedDecisionMass` when its mass is not a normal positive number,

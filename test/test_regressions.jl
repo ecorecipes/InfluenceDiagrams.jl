@@ -112,3 +112,31 @@ end
     end
     @test is_isomorphic(duplicate_utilities(false), duplicate_utilities(true))
 end
+
+# docs/LEAN-JULIA-DISCREPANCIES-2026-09-30.md, items 1 and 2: the Float64 path broke an exact
+# signed-zero tie towards the second label, and accepted non-finite utilities.
+@testset "Float64 DVE: signed-zero ties and non-finite utilities" begin
+    id = influence_diagram(:Act => [:off, :on]; decisions=[:Act => ()],
+                           utilities=[:Reward => :Act])
+    # -0.0 and 0.0 are an exact tie, which resolves to the first label in both arithmetics,
+    # as the Lean first-label selector proves.
+    tie = bind_utility(InfluenceDiagramModel(id), :Reward => [-0.0, 0.0])
+    for backend in
+        (DecisionVariableElimination(), DecisionVariableElimination(; stable=true),
+         ExhaustivePolicySearch(), ExhaustivePolicySearch(; brute_force=true))
+        sol = optimize(tie, backend)
+        @test sol.strategy[:Act]() == :off
+        @test iszero(sol.expected_utility)
+    end
+    # A NaN or infinite utility has no expected value: every backend rejects it, as
+    # `expected_utility` does.
+    for bad in (NaN, Inf, -Inf)
+        m = bind_utility(InfluenceDiagramModel(id), :Reward => [1.0, bad])
+        for backend in (DecisionVariableElimination(),
+                        DecisionVariableElimination(; stable=true),
+                        ExhaustivePolicySearch(), ExhaustivePolicySearch(; brute_force=true))
+            @test_throws UtilityScopeError optimize(m, backend)
+        end
+        @test_throws UtilityScopeError expected_utility(m, optimize(tie).strategy)
+    end
+end

@@ -6065,11 +6065,12 @@ changes no value and no table;</li>
 <li>Float64/tolerance behavior. Small action-dependent evidence
 probabilities can pass the source’s tolerance guard and yield a wrong
 reported value; they are outside the theorem’s action-independent
-evidence contract. Float64 comparison is not the real order used here:
-rounding can create or break ties, Julia’s <code>argmax</code>
-distinguishes <code>-0.0</code> from <code>0.0</code>, and
-<code>NaN</code> compares as largest. <code>firstArgmax_stable</code> is
-only a strict-gap stability contract.</li>
+evidence contract. Float64 rounding can create or break ties that the
+real order used here does not see. (Signed zeros and <code>NaN</code> no
+longer differ: Julia’s <code>argmax_table</code> compares with
+<code>==</code> and every backend rejects non-finite utilities.)
+<code>firstArgmax_stable</code> is only a strict-gap stability
+contract.</li>
 </ul>
 <p><code>Finite/OrderedPolicies.lean</code> supplies the local
 least-state selector, the information-table reconstruction theorem and

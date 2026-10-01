@@ -114,10 +114,11 @@ tables at ties or unreachable rows is a different, stronger question.
 
 Equal optimal values do not require identical policy tables. The native DVE
 selector breaks exact local ties by the first action label; exhaustive search
-returns the first best strategy in its own enumeration. On the Float64 path a
-tie is decided by Julia's `argmax`, which ranks `0.0` above `-0.0` and `NaN`
-above every number, so a tie between `-0.0` and `0.0` goes to the later label;
-`stable=true` compares exact rationals. An information row with zero
+returns the first best strategy in its own enumeration. Ties are decided by
+comparing with `==`, so `-0.0` and `0.0` tie as the equal reals they are and the
+first label wins; a NaN or infinite utility is rejected by every backend. On the
+Float64 path rounding can still create or break a tie that exact arithmetic would
+see differently; `stable=true` compares exact rationals. An information row with zero
 probability can also have several globally equivalent choices.
 
 ```@example policy_equivalence

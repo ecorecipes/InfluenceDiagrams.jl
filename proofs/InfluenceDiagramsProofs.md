@@ -5816,9 +5816,10 @@ This is **not** a byte-for-byte verification of Julia. Remaining refinements are
   unit valuation that Julia omits; this changes no value and no table;
 * Float64/tolerance behavior. Small action-dependent evidence probabilities can pass the
   source's tolerance guard and yield a wrong reported value; they are outside the theorem's
-  action-independent evidence contract. Float64 comparison is not the real order used here:
-  rounding can create or break ties, Julia's `argmax` distinguishes `-0.0` from `0.0`, and
-  `NaN` compares as largest. `firstArgmax_stable` is only a strict-gap stability contract.
+  action-independent evidence contract. Float64 rounding can create or break ties that the
+  real order used here does not see. (Signed zeros and `NaN` no longer differ: Julia's
+  `argmax_table` compares with `==` and every backend rejects non-finite utilities.)
+  `firstArgmax_stable` is only a strict-gap stability contract.
 
 `Finite/OrderedPolicies.lean` supplies the local least-state selector, the information-table
 reconstruction theorem and the strict-gap numerical stability contract used above. The BN proof

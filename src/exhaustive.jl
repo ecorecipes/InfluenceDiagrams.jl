@@ -123,7 +123,12 @@ function _value_tables(m::InfluenceDiagramModel, keep::Vector{Symbol};
     utils = Tuple{Array{Float64},Vector{Int}}[]
     for (name, u) in m.utilities
         axes = _utility_axes(m, utility_id(id, name))
-        push!(utils, (utility_table(u, axes), Int[pos[a.name] for a in axes]))
+        table = utility_table(u, axes)
+        # As decision elimination and `expected_utility` do: a NaN or infinite utility has
+        # no expected value.
+        all(isfinite, table) ||
+            throw(UtilityScopeError(name, :value, "finite utility entries", table))
+        push!(utils, (table, Int[pos[a.name] for a in axes]))
     end
     ev = [(pos[x], label_index(only(factors(space(bm, x))), s)) for (x, s) in evidence(m)]
     kpos = Int[pos[x] for x in keep]

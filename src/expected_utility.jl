@@ -52,7 +52,12 @@ function _expectation(J::JointTable, us::AbstractDict{Symbol,<:AbstractUtility},
             J.states[pos[a.name]] == a.labels ||
                 throw(UtilityScopeError(name, :scope, J.states[pos[a.name]], a.labels))
         end
-        push!(tables, (utility_table(u, axes), Int[pos[a.name] for a in axes]))
+        table = utility_table(u, axes)
+        # Checked on every entry, reachable or not: a NaN or infinite utility makes the model
+        # invalid data, as in the stable path and the optimisers.
+        all(isfinite, table) ||
+            throw(UtilityScopeError(name, :value, "finite utility entries", table))
+        push!(tables, (table, Int[pos[a.name] for a in axes]))
     end
     eu = 0.0
     for ci in CartesianIndices(J.table)

@@ -119,8 +119,9 @@ guarantees as the classical driver.
 
 `Selector.ordered` takes a supplied linear order on every action space and picks
 `firstArgmax`, the least maximizing state. Julia's first-label rule, read with exact real
-comparisons, is this selector for the axis-position order; Float64 `argmax` differs on `-0.0`
-versus `0.0` and on `NaN`. `solveOrdered_table` proves that the returned policy is exactly
+comparisons, is this selector for the axis-position order. Julia's `argmax_table` compares
+with `==`, so `-0.0` and `0.0` tie as reals, and non-finite utilities are rejected before it
+is reached; ties created or broken by Float64 rounding remain outside the model. `solveOrdered_table` proves that the returned policy is exactly
 `orderedTable (solveScore …)` on **every** information row, reachable or not, where
 `solveScore` is the bucket-utility row recorded when the decision is eliminated. The table is
 therefore unique. `solveOrdered_semantic` (and `solveEvidenceOrdered_semantic` with evidence)
@@ -254,7 +255,7 @@ see `all_guards_complete`, `all_guards_complete_evidence`, `checkedRun_generated
 equivalent to the likelihood factor for values, masses and positive-reach tables (see above);
 zero-probability representatives are not proved entrywise equal. Float64 behaviour is not
 covered: tolerance can admit action-dependent evidence that violates the exact invariant, and
-Float64 comparison (rounding near-ties, `-0.0` versus `0.0`, `NaN`) is not the real order.
+Float64 rounding can create or break near-ties, which the real order does not see.
 
 ### Exact all-row diagnostic completeness
 

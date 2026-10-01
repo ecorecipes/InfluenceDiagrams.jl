@@ -295,7 +295,9 @@ function _decision_elimination(m::InfluenceDiagramModel, order, atol, ::Type{T},
     end
     for (name, u) in m.utilities
         f = utility_factor(u, _utility_axes(m, utility_id(id, name)))
-        stable && !all(isfinite, f.table) &&
+        # In both arithmetics: a NaN or infinite utility has no expected value, and
+        # `expected_utility` rejects it too (docs/LEAN-JULIA-DISCREPANCIES-2026-09-30.md, 2).
+        all(isfinite, f.table) ||
             throw(UtilityScopeError(name, :value, "finite utility entries", f.table))
         initial = Valuation(unit_factor(T), _convert(T, f))
         observer === nothing || observer(:input,
