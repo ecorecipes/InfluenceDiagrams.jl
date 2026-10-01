@@ -69,6 +69,24 @@ taken as impossibility: the same schedule is rerun in exact arithmetic and the
 diagnostics record `exact_fallback = true`. `ImpossibleEvidenceError` means
 probability exactly zero. A model with tolerated negative entries whose evidence mass
 is within the tolerance budget raises `IndeterminatePosteriorError` (ADR 0014).
+
+What the policy tables are (docs/LEAN-JULIA-DISCREPANCIES-2026-09-30.md):
+
+- **Ties.** On every information row the policy picks the first action label among the
+  maximizers of the computed scores, compared with `==` (so `-0.0` and `0.0` tie). With
+  `stable=true` the scores are exact, and the table is the one the Lean development proves
+  unique (`solveOrdered_table`) and independent of the elimination plan
+  (`solvePlanOrdered_table_eq`). On the Float64 path rounding can create or break a tie
+  that exact arithmetic would see differently, and the summation order follows the order
+  in which the utilities are stored; use `stable=true` when a reproducible table matters.
+- **Tolerance.** The probability-constancy guard accepts rows equal within the relative
+  `atol`. `exact_probability_guards == false` in a stable run means some row was accepted
+  only by that tolerance, which is outside the proved contract; an exactly normalised model
+  passes with exact equality.
+- **Zero-probability rows.** On an information row of probability zero every action is
+  optimal and the returned entry is a representative, not a proved choice. (Julia keeps the
+  utility table there where the Lean model stores zero; values and positive-probability
+  rows agree.)
 """
 struct DecisionVariableElimination{O<:EliminationStrategy} <: DecisionBackend
     order::O

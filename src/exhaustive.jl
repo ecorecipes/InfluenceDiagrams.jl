@@ -58,6 +58,13 @@ The result of [`optimize`](@ref): the maximal expected utility, an optimal
 named tuple: the number of strategies enumerated for the exhaustive backend; the
 elimination order, largest factor and recovered policies' scopes for decision variable
 elimination).
+
+With evidence, decision variable elimination conditions every factor on the observed
+states, so a returned policy does not read an observed information variable: its
+`policy_scopes` omit it, and a row that contradicts the evidence repeats the observed row's
+action. Such rows have probability zero, so the expected utility is unaffected; the Lean
+development proves the conditioned tables agree with the likelihood representation on rows
+of positive reach (`solveConditioned_policy_eq`).
 """
 struct DecisionSolution
     expected_utility::Float64

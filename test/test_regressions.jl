@@ -140,3 +140,52 @@ end
         @test_throws UtilityScopeError expected_utility(m, optimize(tie).strategy)
     end
 end
+
+# docs/LEAN-JULIA-DISCREPANCIES-2026-09-30.md, items 3, 4, 6 and 8: what the policy tables are.
+@testset "DVE policy tables: rounding ties, exact guards, evidence, label order" begin
+    # 3. The stored data tie exactly (both rows sum to 1 + 2^-52), so exact arithmetic picks
+    # the first label; Float64 summation may round the tie either way, but its value is
+    # within a few ulps of the exact one.
+    id = influence_diagram(:Act => [:off, :on]; decisions=[:Act => ()],
+                           utilities=[:U1 => :Act, :U2 => :Act, :U3 => :Act])
+    m = bind_utility(InfluenceDiagramModel(id), :U1 => [2.0^-53, 2.0^-52])
+    m = bind_utility(m, :U2 => [2.0^-53, 0.0])
+    m = bind_utility(m, :U3 => [1.0, 1.0])
+    exact = optimize(m, DecisionVariableElimination(; stable=true))
+    @test exact.strategy[:Act]() == :off
+    @test exact.expected_utility == 1 + 2.0^-52
+    @test isapprox(optimize(m).expected_utility, exact.expected_utility; atol=4eps())
+
+    # 4. An exactly normalised model passes the probability guard with exact equality.
+    ih = influence_diagram(:H => [:low, :high], :Act => [:leave, :act];
+                           decisions=[:Act => :H], utilities=[:U => (:H, :Act)])
+    mh = bind_cpt(InfluenceDiagramModel(ih), :H => [0.25, 0.75])
+    mh = bind_utility(mh, :U => [0.0 1.0; 2.0 0.5])
+    sol = optimize(mh, DecisionVariableElimination(; stable=true, atol=0))
+    @test sol.diagnostics.exact_probability_guards
+    @test sol.expected_utility == optimize(mh, ExhaustivePolicySearch()).expected_utility
+
+    # 6. With evidence on an information variable the policy does not read it: the row that
+    # contradicts the evidence repeats the observed row, and the scope omits the variable.
+    is = influence_diagram(:S => [:a, :b], :Act => [:off, :on]; decisions=[:Act => :S],
+                           utilities=[:U => (:S, :Act)])
+    ms = bind_cpt(InfluenceDiagramModel(is), :S => [0.5, 0.5])
+    ms = observe(bind_utility(ms, :U => [1.0 0.0; 0.0 1.0]), :S => :a)
+    so = optimize(ms)
+    @test so.strategy[:Act](:a) == :off
+    @test so.strategy[:Act](:b) == so.strategy[:Act](:a)
+    @test so.diagnostics.policy_scopes[:Act] == Symbol[]
+    @test so.expected_utility == 1.0
+
+    # 8. The first label is the first in `state_position` order, not alphabetical: the
+    # action axis DVE maximises over lists the states as declared.
+    iz = influence_diagram(:Act => [:zeta, :alpha]; decisions=[:Act => ()],
+                           utilities=[:U => :Act])
+    mz = bind_utility(InfluenceDiagramModel(iz), :U => [1.0, 1.0])
+    for backend in
+        (DecisionVariableElimination(), DecisionVariableElimination(; stable=true))
+        policy = optimize(mz, backend).strategy[:Act]
+        @test policy() == :zeta
+        @test policy.action.labels == [:zeta, :alpha]
+    end
+end
