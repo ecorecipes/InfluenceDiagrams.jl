@@ -39,7 +39,8 @@ at fault:
   error, not an unset reference), or a value has the wrong JSON type or range: an `"_id"`
   other than the row number, a hom that is not the ID of a row of its codomain, a position
   that is not an integer `>= 1`, a name that is not a string, or a reference that is not a
-  `KernelRef` object with exactly its type's keys.
+  `KernelRef` object with exactly its type's keys. An `"_id"`, hom or position must be
+  written as a JSON integer literal: `1`, not `1.0`, `1e0` or `01`.
 
 The body is checked by BayesianNetworks' reader with the rules of the proved Lean decoder
 (`proofs/InfluenceDiagramsProofs/Finite/DVE/JsonRecords.lean`). A document that passes them
@@ -48,10 +49,12 @@ target: [`validate`](@ref) reports those.
 """
 function parse_json_influence_diagram(str::AbstractString;
                                       type::Type{<:AbstractInfluenceDiagram}=InfluenceDiagram)
-    return _parse_envelope(BayesianNetworks._read_json(str), type)
+    return _parse_envelope(BayesianNetworks._read_json(str), str, type)
 end
 
-function _parse_envelope(obj, type)
+# `obj` is `BayesianNetworks._read_json(str)`; `str` gives the spellings of the numbers,
+# which the ID, hom and position columns need (`BayesianNetworks._json_number_spellings`).
+function _parse_envelope(obj, str, type)
     obj isa AbstractDict || throw(FormatError("expected a JSON object envelope"))
     for key in (:format, :schema_version, :acset)
         haskey(obj, key) || throw(FormatError("envelope is missing the \"$key\" key"))
@@ -62,7 +65,8 @@ function _parse_envelope(obj, type)
         throw(FormatError("schema_version is \"$(obj[:schema_version])\", expected \"$JSON_SCHEMA_VERSION\""))
     # BayesianNetworks' wrapper of ACSets' parser: an error inside the body is a
     # `FormatError` (ADR 0015).
-    return BayesianNetworks._parse_acset(type, obj[:acset])
+    return BayesianNetworks._parse_acset(type, obj[:acset],
+                                         BayesianNetworks._json_number_spellings(str)[:acset])
 end
 
 """
@@ -92,7 +96,8 @@ JSON type or range; the message names the table, row and column. A missing file 
 """
 function read_json_influence_diagram(path::AbstractString;
                                      type::Type{<:AbstractInfluenceDiagram}=InfluenceDiagram)
-    return _parse_envelope(BayesianNetworks._read_json(read(path, String)), type)
+    str = read(path, String)
+    return _parse_envelope(BayesianNetworks._read_json(str), str, type)
 end
 
 """

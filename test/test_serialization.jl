@@ -67,6 +67,28 @@
         both = parse_json_influence_diagram(mutated(a -> (a["Mechanism"][1]["target"] = a["Decision"][1]["decision_variable"])))
         @test any(e -> e isa DecisionUniquenessError && e.reason == :has_mechanism,
                   validation_errors(both))
+        # An `"_id"`, hom or position must be a JSON integer literal, though JSON3 reads
+        # `1.0`, `1e0` and `1E0` as the `Int64` 1: the reader checks the spelling.
+        function respelled(table, row, col, spelling)
+            d = JSON3.read(base, Dict{String,Any})
+            d["acset"][table][row][col] = "\0SPELLING\0"
+            return replace(JSON3.write(d), "\"\\u0000SPELLING\\u0000\"" => spelling)
+        end
+        for (table, row, col) in
+            (("Decision", 1, "_id"), ("Decision", 1, "decision_variable"),
+             ("InformationInput", 1, "information_position"))
+            v = JSON3.read(base, Dict{String,Any})["acset"][table][row][col]
+            @test parse_json_influence_diagram(respelled(table, row, col, string(v))) ==
+                  umbrella_diagram()
+            for spelling in
+                (string(v, ".0"), string(v, "e0"), string(v, "E0"), "-1", "1.5",
+                 "99999999999999999999")
+                msg = message(respelled(table, row, col, spelling))
+                @test occursin("$table row $row: column \"$col\"", msg)
+                @test occursin("integer literal", msg)
+                @test occursin("got the number $spelling", msg)
+            end
+        end
         # The influence-diagram columns come from `SchInfluenceDiagram`, as `idColumns`.
         cols(ob) = [c => kind
                     for (c, (kind, _)) in
