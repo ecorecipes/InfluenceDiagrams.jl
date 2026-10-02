@@ -173,10 +173,11 @@ table axes and lexicographic entries, factor diagonals, a topological order and 
 decision order). `certificate_solve_spec` proves that if the certificate matches and its CPT
 cells are nonnegative and every CPT row sums to exactly one, the DVE solution scheduled by the
 certificate's own `decision_order` is deterministic, realizes its value and attains the optimum
-of the model the certificate's exact numbers define. The certificate carries no policy table or
-value, so this is a theorem about the exported model, not about Julia's computed solution; and the
-binary64 words Julia writes by default rarely sum to exactly one, so exact normalization is
-decided (`lake exe check_certificate`), not assumed.
+of the model the certificate's exact numbers define. A version-1 certificate carries no policy
+table or value, so this is a theorem about the exported model, not about Julia's computed
+solution (a version-2 certificate records it; see below); and the binary64 words Julia writes by
+default rarely sum to exactly one, so exact normalization is decided (`lake exe
+check_certificate`), not assumed.
 
 `Finite/DVE/CertificateApprox.lean` drops exact normalization. `certificateEpsilon c` is the
 largest `|row sum - 1|` over the certificate's CPT rows, computed exactly over `ℚ`, and the
@@ -192,6 +193,37 @@ normalised certificate has `ε = 0` and gap `0`. The row-normalised model is the
 because the decimal model Julia rounded is not known to the certificate, and the theorem is about
 the exact run on the certificate's numbers, not about Julia's Float64 solver run.
 `lake exe check_certificate` prints `ε`, `n`, `Umax` and the gap `2 e`.
+
+`Finite/DVE/SolutionJson.lean` decodes the version-2 certificate, which adds Julia's recorded
+solution: `decodeCertificateV2_eq_ok` is faithfulness key for key, `decodeCertificateV2_encode`
+the round trip, `decodeSolution_wellFormed` that the decision, action and state IDs exist and
+the axes are the decision's information slots, and `decodeSolution_coverage` that the `at` lists
+enumerate every configuration once, lexicographically. Version 1 decodes exactly as before
+(`decodeAnyCertificate_v1`), and neither version is accepted with the other's key count.
+`Finite/DVE/SolutionRun.lean` computes the exact DVE run on the certificate's numbers over `ℚ`,
+on tables (`exactRun_spec`), and `Finite/DVE/SolutionCheck.lean` compares Julia's recorded
+tables, scores and value with it. `recorded_solution_optimal` proves that if a version-2
+certificate matches, its CPT cells are nonnegative, its solution is well formed and
+`solutionMatches` holds, then Julia's elimination order is a plan and, for that plan and the
+representative choice `keepOfT`, Julia's recorded strategy is the strategy of the exact DVE run
+on the certificate's numbers and the recorded value is that run's value; on every information
+row the recorded action is the action of least `state_position` among the maximizers of the
+run's own score; and if every CPT row sums to exactly one, the recorded strategy is
+deterministic and optimal and the recorded value is the optimum.
+`solutionMatches` asks for exact equality, so it is the check for a Julia run in exact arithmetic
+on the certificate's own numbers (`arithmetic = "exact_rational"` and `DataConsistent`); with
+`certificateEpsilon c < 1`,
+`recorded_solution_approx_optimal` carries the bounds of `certificate_approx_optimal` over to the
+recorded strategy and value. A binary64 Julia run is compared, not proved:
+`recorded_binary64_approx_optimal` proves, under `solutionWithin τ τv`, that every recorded action
+is within `τ` of the maximum of its exact score row and the recorded value within `τv + e` of
+the reference optimum, and that the recorded strategy is the exact run's when the recorded
+actions agree with the exact ones (`actionsAgree`). For an action that differs from the exact
+one at a near-tie no bound on the lost expected utility is proved, and evidence is not modelled
+(the checks require a certificate without evidence rows). `keepOfT` follows the branch of
+Julia's `sum_out` (keep the utility potential when the summed variable is not one of its
+variables), read off the source; that Julia's run uses it is checked on the cross-check's
+fixtures, not proved.
 
 `Finite/DVE/Conditioning.lean` models Julia's explicit evidence conditioning: every chance and
 utility factor is sliced at the observed states, and variables that no factor mentions are
@@ -231,7 +263,8 @@ This data export is not a proof of a production optimization trace.
 `DecisionVariableElimination` backend, emits version 2: the same model data plus
 the run's policy tables (action state IDs and per-row maximal scores, in
 `information_position` and `state_position` order), elimination order and value.
-That records what Julia computed; it is not an optimality claim.
+That records what Julia computed; it is not an optimality claim. `lake exe
+check_certificate` compares it with the exact Lean run (see the proofs paragraph above).
 
 `trace_decision_elimination(model)` now captures an actual exact-arithmetic
 stable-DVE run, including initial/conditioned valuations, every combined and

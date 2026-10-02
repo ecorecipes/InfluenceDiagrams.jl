@@ -11330,6 +11330,2408 @@ end InfluenceDiagramsProofs.DVECertificate
 ```
 
 
+<!-- InfluenceDiagramsProofs/Finite/DVE/SolutionJson.lean -->
+
+# Decoding the version-2 DVE certificate: Julia's recorded solution
+
+```lean
+import InfluenceDiagramsProofs.Finite.DVE.CertificateApprox
+```
+
+`export_dve_certificate(m; solution = true)` (InfluenceDiagrams.jl, `src/certificates.jl`) writes
+a version-2 certificate: the fourteen version-1 keys, with `"version": 2`, and one more key,
+`"solution"`, holding the output of one Julia DVE run on the certificate's own cells. This module
+decodes it. The version-1 decoder `decodeCertificate` and its theorems are unchanged; version 1
+still decodes exactly as before.
+
+**The layout of `"solution"`** (nine keys; confirmed on the umbrella, oil-wildcatter and grazing
+certificates and on `docs/src/dve-certificate-v2.schema.json`):
+
+* `"backend"`: `{name, order, stable, atol_f64, constancy_atol_f64}`, `name` the string
+  `"DecisionVariableElimination"`, `order` a string, `stable` a boolean, `atol_f64` `null` or a
+  binary64 word, `constancy_atol_f64` a word;
+* `"arithmetic"`: `"binary64"` or `"exact_rational"`; `"data"`: `"f64"` or `"q"`;
+  `"exact_fallback"`: a boolean; `"conditioned_on"`: the string `"evidence.hard"`;
+  `"julia_version"`: a string;
+* `"elimination_order"`: variable IDs; `"value"`: a solution number, `{"f64"}` or `{"q", "f64"}`;
+* `"policies"`: one row per decision, in the order of `"decisions"`, each
+  `{decision, action, axes, scope, entries}`: the decision ID, its action variable ID, the
+  information variables in `information_position` order, the variables the run's table depends on,
+  and `entries`, rows `{at, action, score}`: zero-based coordinates, the chosen action's state ID
+  and the row's score.
+
+**Checked while decoding.** Every variable reference is in range; policy `k` is decision `k`, its
+`action` is that decision's action and its `axes` are that decision's information slots; every
+entry's action is a state ID of the action variable; and the `at` lists are exactly
+`lexCoords` of the axes' state counts, so they enumerate every configuration once,
+lexicographically with the rightmost coordinate fastest (`decodeSolution_coverage`,
+`lexCoords_nodup`, `lexCoords_pairwise_lex`).
+
+**Results.** `decodeSolution_eq_ok` (faithfulness, key for key), `decodeCertificateV2_eq_ok`
+(the fifteen keys: the version-1 fields, read by the same row decoders as `decodeCertificate`, and
+the solution), `decodeCertificateV2_encode` (round trip), `decodeSolution_wellFormed` (references
+in range, coverage), `decodeSolution_shape` with its corollaries
+`decodeSolution_error_of_missing_key` / `decodeSolution_error_of_ill_typed`, and for the
+dispatching decoder `decodeAnyCertificate`: `decodeAnyCertificate_v1` /
+`decodeAnyCertificate_v2` and the exclusions `decodeAnyCertificate_error_of_v2_with_v1_keys` /
+`decodeAnyCertificate_error_of_v1_with_v2_keys` (version 2 is not accepted with fourteen keys, nor
+version 1 with fifteen).
+
+Trusted, not proved: `Lean.Json.parse`, Julia's `export_dve_certificate` and `JSON3.write`.
+
+```lean
+set_option autoImplicit false
+
+namespace InfluenceDiagramsProofs.DVECertificate
+
+open Lean (Json)
+open BayesianNetworksProofs.Raw
+```
+
+## Leaves
+
+```lean
+/-- `null` or a binary64 word. -/
+def optWordOf : Json → Except String (Option Nat)
+  | .null => .ok none
+  | .str s => do
+    let w ← wordOf (.str s)
+    pure (some w)
+  | _ => .error "expected null or a binary64 word"
+
+def OptWordMatches (j : Json) : Option Nat → Prop
+  | none => j = .null
+  | some w => j = .str (hexWord w) ∧ w < 2 ^ 64
+
+theorem optWordOf_eq_ok {j : Json} {o : Option Nat} : optWordOf j = .ok o ↔ OptWordMatches j o := by
+  cases o with
+  | none =>
+    cases j with
+    | str s =>
+      simp only [optWordOf, OptWordMatches, bind_eq_ok, pure_eq_ok]
+      constructor
+      · rintro ⟨w, -, h⟩
+        exact absurd h (by simp)
+      · intro h
+        exact absurd h (by simp)
+    | _ => simp [optWordOf, OptWordMatches]
+  | some w =>
+    cases j with
+    | str s =>
+      simp only [optWordOf, OptWordMatches, bind_eq_ok, wordOf_eq_ok, pure_eq_ok,
+        Option.some.injEq]
+      constructor
+      · rintro ⟨w', ⟨h1, h2⟩, rfl⟩
+        exact ⟨h1, h2⟩
+      · rintro ⟨h1, h2⟩
+        exact ⟨w, ⟨h1, h2⟩, rfl⟩
+    | _ => simp [optWordOf, OptWordMatches]
+
+def encodeOptWord : Option Nat → Json
+  | none => .null
+  | some w => .str (hexWord w)
+
+/-- `"arithmetic"`: the arithmetic of Julia's run. -/
+inductive Arithmetic where
+  | binary64
+  | exactRational
+  deriving DecidableEq
+
+def arithmeticString : Arithmetic → String
+  | .binary64 => "binary64"
+  | .exactRational => "exact_rational"
+
+def arithmeticOf (j : Json) : Except String Arithmetic := do
+  let s ← strOf j
+  if s = "binary64" then pure .binary64
+  else if s = "exact_rational" then pure .exactRational
+  else throw s!"\"{s}\" is not \"binary64\" or \"exact_rational\""
+
+theorem arithmeticOf_eq_ok {j : Json} {a : Arithmetic} :
+    arithmeticOf j = .ok a ↔ j = .str (arithmeticString a) := by
+  unfold arithmeticOf
+  rw [bind_eq_ok]
+  constructor
+  · rintro ⟨s, hs, h⟩
+    rw [strOf_eq_ok] at hs
+    subst hs
+    split_ifs at h with h1 h2
+    · subst h1
+      rw [pure_eq_ok] at h
+      subst h
+      rfl
+    · subst h2
+      rw [pure_eq_ok] at h
+      subst h
+      rfl
+  · rintro rfl
+    refine ⟨_, strOf_eq_ok.2 rfl, ?_⟩
+    cases a <;> simp [arithmeticString] <;> rfl
+
+/-- `"data"`: which cells Julia's run read, the binary64 words or the rationals. -/
+inductive DataKind where
+  | f64
+  | q
+  deriving DecidableEq
+
+def dataString : DataKind → String
+  | .f64 => "f64"
+  | .q => "q"
+
+def dataOf (j : Json) : Except String DataKind := do
+  let s ← strOf j
+  if s = "f64" then pure .f64
+  else if s = "q" then pure .q
+  else throw s!"\"{s}\" is not \"f64\" or \"q\""
+
+theorem dataOf_eq_ok {j : Json} {a : DataKind} : dataOf j = .ok a ↔ j = .str (dataString a) := by
+  unfold dataOf
+  rw [bind_eq_ok]
+  constructor
+  · rintro ⟨s, hs, h⟩
+    rw [strOf_eq_ok] at hs
+    subst hs
+    split_ifs at h with h1 h2
+    · subst h1
+      rw [pure_eq_ok] at h
+      subst h
+      rfl
+    · subst h2
+      rw [pure_eq_ok] at h
+      subst h
+      rfl
+  · rintro rfl
+    refine ⟨_, strOf_eq_ok.2 rfl, ?_⟩
+    cases a <;> simp [dataString] <;> rfl
+
+/-- A solution number: `{"f64"}` or `{"q", "f64"}`, never `{"q"}` alone. -/
+def Value.IsSolutionNumber : Value → Prop
+  | .q _ _ => False
+  | _ => True
+
+instance (x : Value) : Decidable x.IsSolutionNumber := by
+  cases x <;> unfold Value.IsSolutionNumber <;> infer_instance
+
+def solNumberOf (j : Json) : Except String Value := do
+  let x ← decodeValue j
+  require x.IsSolutionNumber "a solution number has the key \"f64\""
+  pure x
+
+theorem solNumberOf_eq_ok {j : Json} {x : Value} :
+    solNumberOf j = .ok x ↔ ValueMatches j x ∧ x.IsSolutionNumber := by
+  unfold solNumberOf
+  simp only [bind_eq_ok, decodeValue_eq_ok, require_eq_ok, pure_eq_ok]
+  constructor
+  · rintro ⟨x', hx, _, hs, rfl⟩
+    exact ⟨hx, hs⟩
+  · rintro ⟨hx, hs⟩
+    exact ⟨x, hx, (), hs, rfl⟩
+```
+
+## `"backend"`
+
+```lean
+/-- `"backend"`: the DVE backend Julia ran. -/
+structure Backend where
+  name : String
+  order : String
+  stable : Bool
+  atol : Option Nat
+  constancy : Nat
+  deriving DecidableEq
+
+/-- The backend name the profile records. -/
+def backendName : String := "DecisionVariableElimination"
+
+def decodeBackend (j : Json) : Except String Backend := do
+  let o ← object "backend" 5 j
+  let n ← get o "name" strOf
+  require (n = backendName) s!"the backend is \"{n}\", expected \"{backendName}\""
+  let ord ← get o "order" strOf
+  let st ← get o "stable" boolOf
+  let a ← get o "atol_f64" optWordOf
+  let k ← get o "constancy_atol_f64" wordOf
+  pure ⟨n, ord, st, a, k⟩
+
+def BackendMatches (j : Json) (b : Backend) : Prop :=
+  ∃ o, j = .obj o ∧ o.size = 5 ∧ o["name"]? = some (.str b.name) ∧ b.name = backendName ∧
+    o["order"]? = some (.str b.order) ∧ o["stable"]? = some (.bool b.stable) ∧
+    (∃ v, o["atol_f64"]? = some v ∧ OptWordMatches v b.atol) ∧
+    o["constancy_atol_f64"]? = some (.str (hexWord b.constancy)) ∧ b.constancy < 2 ^ 64
+
+theorem decodeBackend_eq_ok {j : Json} {b : Backend} :
+    decodeBackend j = .ok b ↔ BackendMatches j b := by
+  unfold decodeBackend BackendMatches
+  simp only [bind_eq_ok, object_eq_ok, get_eq_ok fun _ _ => strOf_eq_ok, require_eq_ok,
+    get_eq_ok fun _ _ => boolOf_eq_ok, get_eq_ok fun _ _ => optWordOf_eq_ok,
+    get_eq_ok fun _ _ => wordOf_eq_ok, pure_eq_ok]
+  constructor
+  · rintro ⟨o, ⟨rfl, hs⟩, n, ⟨_, hn, rfl⟩, _, hname, ord, ⟨_, hord, rfl⟩, st, ⟨_, hst, rfl⟩,
+      a, ha, k, ⟨_, hk, rfl, hkl⟩, rfl⟩
+    exact ⟨o, rfl, hs, hn, hname, hord, hst, ha, hk, hkl⟩
+  · rintro ⟨o, rfl, hs, hn, hname, hord, hst, ha, hk, hkl⟩
+    exact ⟨o, ⟨rfl, hs⟩, _, ⟨_, hn, rfl⟩, (), hname, _, ⟨_, hord, rfl⟩, _, ⟨_, hst, rfl⟩, _, ha,
+      _, ⟨_, hk, rfl, hkl⟩, rfl⟩
+```
+
+## Policies
+
+```lean
+/-- The state IDs of variable `v`, in `state_position` order (`[]` out of range). -/
+def stateIds (c : Certificate) (v : Nat) : List Nat :=
+  ((c.vars[v]?).map fun e => e.states.map StateEntry.id).getD []
+
+/-- One recorded policy entry: zero-based coordinates along the axes, the chosen action's state
+ID (as written) and the row's score. -/
+structure PolicyEntry where
+  coords : List Nat
+  action : Nat
+  score : Value
+  deriving DecidableEq
+
+def decodePolicyEntry (states : List Nat) (j : Json) : Except String PolicyEntry := do
+  let o ← object "policy entry" 3 j
+  let at_ ← getArr o "at" (fun _ => natOf)
+  let a ← get o "action" idOf
+  require (a ∈ states) s!"the action state {a} is not a state of the action variable"
+  let s ← get o "score" solNumberOf
+  pure ⟨at_, a, s⟩
+
+def PolicyEntryMatches (states : List Nat) (j : Json) (e : PolicyEntry) : Prop :=
+  ∃ o, j = .obj o ∧ o.size = 3 ∧
+    (∃ v, o["at"]? = some v ∧ ArrayMatches (fun _ x c => x = natJson c) v e.coords) ∧
+    o["action"]? = some (.str (toString e.action)) ∧ 1 ≤ e.action ∧ e.action ∈ states ∧
+    ∃ v, o["score"]? = some v ∧ ValueMatches v e.score ∧ e.score.IsSolutionNumber
+
+theorem decodePolicyEntry_eq_ok {states : List Nat} {j : Json} {e : PolicyEntry} :
+    decodePolicyEntry states j = .ok e ↔ PolicyEntryMatches states j e := by
+  unfold decodePolicyEntry PolicyEntryMatches
+  simp only [bind_eq_ok, object_eq_ok, getArr_eq_ok fun _ _ _ => natOf_eq_ok,
+    get_eq_ok fun _ _ => idOf_eq_ok, require_eq_ok, get_eq_ok fun _ _ => solNumberOf_eq_ok,
+    pure_eq_ok]
+  constructor
+  · rintro ⟨o, ⟨rfl, hs⟩, c, hc, a, ⟨_, ha, rfl, h1⟩, _, hmem, s, hsc, rfl⟩
+    exact ⟨o, rfl, hs, hc, ha, h1, hmem, hsc⟩
+  · rintro ⟨o, rfl, hs, hc, ha, h1, hmem, hsc⟩
+    exact ⟨o, ⟨rfl, hs⟩, _, hc, _, ⟨_, ha, rfl, h1⟩, (), hmem, _, hsc, rfl⟩
+
+/-- One recorded policy: the zero-based decision and action-variable indices, the axes and the
+scope (zero-based variable indices) and the entries. -/
+structure PolicyRecord where
+  decision : Nat
+  action : Nat
+  axes : List Nat
+  scope : List Nat
+  entries : List PolicyEntry
+  deriving DecidableEq
+
+/-- The information slots of decision `k`, as variable indices. -/
+def infoVars (c : Certificate) (k : Nat) : Option (List Nat) :=
+  (c.decisions[k]?).map fun e => e.information.map Slot.var
+
+/-- Row `k` of `"policies"`: decision `k`, its action, its information slots as axes, and entries
+covering the axes' configurations in lexicographic order. -/
+def decodePolicy (c : Certificate) (k : Nat) (j : Json) : Except String PolicyRecord := do
+  let o ← object "policy" 5 j
+  let d ← get o "decision" (refOf c.decisions.length)
+  require (d = k) s!"the policy of row {k} is for decision {d + 1}"
+  let a ← get o "action" (refOf c.vars.length)
+  require ((c.decisions[k]?).map DecisionEntry.action = some a)
+    s!"variable {a + 1} is not the action of decision {k + 1}"
+  let ax ← getArr o "axes" (fun _ => refOf c.vars.length)
+  require (infoVars c k = some ax) s!"the axes are not the information slots of decision {k + 1}"
+  let sc ← getArr o "scope" (fun _ => refOf c.vars.length)
+  let es ← getArr o "entries" (fun _ => decodePolicyEntry (stateIds c a))
+  require (es.map PolicyEntry.coords = lexCoords (ax.map (certDim c)))
+    "the entries do not list every configuration once, lexicographically"
+  pure ⟨d, a, ax, sc, es⟩
+
+/-- A variable reference: the one-based ID string of an in-range index. -/
+def VarRef (nv : Nat) (x : Json) (i : Nat) : Prop := x = .str (toString (i + 1)) ∧ i < nv
+
+def PolicyMatches (c : Certificate) (k : Nat) (j : Json) (p : PolicyRecord) : Prop :=
+  ∃ o, j = .obj o ∧ o.size = 5 ∧
+    o["decision"]? = some (.str (toString (p.decision + 1))) ∧ p.decision < c.decisions.length ∧
+    p.decision = k ∧
+    o["action"]? = some (.str (toString (p.action + 1))) ∧ p.action < c.vars.length ∧
+    (c.decisions[k]?).map DecisionEntry.action = some p.action ∧
+    (∃ v, o["axes"]? = some v ∧ ArrayMatches (fun _ => VarRef c.vars.length) v p.axes) ∧
+    infoVars c k = some p.axes ∧
+    (∃ v, o["scope"]? = some v ∧ ArrayMatches (fun _ => VarRef c.vars.length) v p.scope) ∧
+    (∃ v, o["entries"]? = some v ∧
+      ArrayMatches (fun _ => PolicyEntryMatches (stateIds c p.action)) v p.entries) ∧
+    p.entries.map PolicyEntry.coords = lexCoords (p.axes.map (certDim c))
+
+theorem decodePolicy_eq_ok {c : Certificate} {k : Nat} {j : Json} {p : PolicyRecord} :
+    decodePolicy c k j = .ok p ↔ PolicyMatches c k j p := by
+  unfold decodePolicy PolicyMatches VarRef
+  simp only [bind_eq_ok, object_eq_ok, get_eq_ok fun _ _ => refOf_eq_ok, require_eq_ok,
+    getArr_eq_ok fun _ _ _ => refOf_eq_ok, getArr_eq_ok fun _ _ _ => decodePolicyEntry_eq_ok,
+    pure_eq_ok]
+  constructor
+  · rintro ⟨o, ⟨rfl, hs⟩, d, ⟨_, hd, rfl, hdl⟩, _, hdk, a, ⟨_, ha, rfl, hal⟩, _, hact, ax, hax,
+      _, hinfo, sc, hsc, es, hes, _, hcov, rfl⟩
+    exact ⟨o, rfl, hs, hd, hdl, hdk, ha, hal, hact, hax, hinfo, hsc, hes, hcov⟩
+  · rintro ⟨o, rfl, hs, hd, hdl, hdk, ha, hal, hact, hax, hinfo, hsc, hes, hcov⟩
+    exact ⟨o, ⟨rfl, hs⟩, _, ⟨_, hd, rfl, hdl⟩, (), hdk, _, ⟨_, ha, rfl, hal⟩, (), hact, _, hax,
+      (), hinfo, _, hsc, _, hes, (), hcov, rfl⟩
+```
+
+## `"solution"`
+
+```lean
+/-- **Julia's recorded solution**, as `export_dve_certificate(m; solution = …)` writes it.
+Variable references are zero-based indices. -/
+structure Solution where
+  backend : Backend
+  arithmetic : Arithmetic
+  data : DataKind
+  exactFallback : Bool
+  conditionedOn : String
+  juliaVersion : String
+  eliminationOrder : List Nat
+  value : Value
+  policies : List PolicyRecord
+  deriving DecidableEq
+
+/-- The evidence the run conditions on. -/
+def conditionedOnHard : String := "evidence.hard"
+
+/-- The nine keys of `"solution"`. -/
+def solutionKeys : List String :=
+  ["backend", "arithmetic", "data", "exact_fallback", "conditioned_on", "julia_version",
+    "elimination_order", "value", "policies"]
+
+/-- **The solution decoder**, in the context of the decoded version-1 fields `c`. -/
+def decodeSolution (c : Certificate) (j : Json) : Except String Solution := do
+  let o ← object "solution" 9 j
+  let b ← get o "backend" decodeBackend
+  let ar ← get o "arithmetic" arithmeticOf
+  let da ← get o "data" dataOf
+  let ef ← get o "exact_fallback" boolOf
+  let co ← get o "conditioned_on" strOf
+  require (co = conditionedOnHard) s!"conditioned_on is \"{co}\", expected \"{conditionedOnHard}\""
+  let jv ← get o "julia_version" strOf
+  let eo ← getArr o "elimination_order" (fun _ => refOf c.vars.length)
+  let v ← get o "value" solNumberOf
+  let ps ← getArr o "policies" (decodePolicy c)
+  require (ps.length = c.decisions.length) "there is not one policy per decision"
+  pure ⟨b, ar, da, ef, co, jv, eo, v, ps⟩
+
+/-- **The document is the solution `s`** of the certificate `c`, key for key. -/
+def SolutionMatches (c : Certificate) (j : Json) (s : Solution) : Prop :=
+  ∃ o, j = .obj o ∧ o.size = 9 ∧
+    (∃ v, o["backend"]? = some v ∧ BackendMatches v s.backend) ∧
+    o["arithmetic"]? = some (.str (arithmeticString s.arithmetic)) ∧
+    o["data"]? = some (.str (dataString s.data)) ∧
+    o["exact_fallback"]? = some (.bool s.exactFallback) ∧
+    o["conditioned_on"]? = some (.str s.conditionedOn) ∧ s.conditionedOn = conditionedOnHard ∧
+    o["julia_version"]? = some (.str s.juliaVersion) ∧
+    (∃ v, o["elimination_order"]? = some v ∧
+      ArrayMatches (fun _ => VarRef c.vars.length) v s.eliminationOrder) ∧
+    (∃ v, o["value"]? = some v ∧ ValueMatches v s.value ∧ s.value.IsSolutionNumber) ∧
+    (∃ v, o["policies"]? = some v ∧ ArrayMatches (PolicyMatches c) v s.policies) ∧
+    s.policies.length = c.decisions.length
+
+/-- **Faithfulness of the solution decoder.** -/
+theorem decodeSolution_eq_ok {c : Certificate} {j : Json} {s : Solution} :
+    decodeSolution c j = .ok s ↔ SolutionMatches c j s := by
+  unfold decodeSolution SolutionMatches VarRef
+  simp only [bind_eq_ok, object_eq_ok, get_eq_ok fun _ _ => decodeBackend_eq_ok,
+    get_eq_ok fun _ _ => arithmeticOf_eq_ok, get_eq_ok fun _ _ => dataOf_eq_ok,
+    get_eq_ok fun _ _ => boolOf_eq_ok, get_eq_ok fun _ _ => strOf_eq_ok, require_eq_ok,
+    getArr_eq_ok fun _ _ _ => refOf_eq_ok, get_eq_ok fun _ _ => solNumberOf_eq_ok,
+    getArr_eq_ok fun _ _ _ => decodePolicy_eq_ok, pure_eq_ok]
+  constructor
+  · rintro ⟨o, ⟨rfl, hs⟩, b, hb, ar, ⟨_, har, rfl⟩, da, ⟨_, hda, rfl⟩, ef, ⟨_, hef, rfl⟩,
+      co, ⟨_, hco, rfl⟩, _, hcoe, jv, ⟨_, hjv, rfl⟩, eo, heo, v, hv, ps, hps, _, hlen, rfl⟩
+    exact ⟨o, rfl, hs, hb, har, hda, hef, hco, hcoe, hjv, heo, hv, hps, hlen⟩
+  · rintro ⟨o, rfl, hs, hb, har, hda, hef, hco, hcoe, hjv, heo, hv, hps, hlen⟩
+    exact ⟨o, ⟨rfl, hs⟩, _, hb, _, ⟨_, har, rfl⟩, _, ⟨_, hda, rfl⟩, _, ⟨_, hef, rfl⟩,
+      _, ⟨_, hco, rfl⟩, (), hcoe, _, ⟨_, hjv, rfl⟩, _, heo, _, hv, _, hps, (), hlen, rfl⟩
+```
+
+## The version-2 certificate
+
+```lean
+/-- The twelve version-1 fields other than `"format"` and `"version"`, read by the decoders of
+`decodeCertificate`. -/
+def decodeBody (o : JsonObject) : Except String Certificate := do
+  let prov ← get o "provenance" decodeProvenance
+  let num ← get o "numeric" decodeNumeric
+  let tol ← get o "runtime_tolerances" decodeTolerances
+  let pool ← getArr o "reference_pool" decodePoolEntry
+  let vars ← getArr o "variables" (decodeVariable pool.length)
+  let decs ← getArr o "decisions" (decodeDecision vars.length)
+  let topo ← getArr o "topological_order" (fun _ => refOf vars.length)
+  let dord ← getArr o "decision_order" (fun _ => refOf decs.length)
+  let mechs ← getArr o "mechanisms" (decodeMechanism vars.length pool.length)
+  let prec ← getArr o "precedence" (decodePrecedence decs.length)
+  let us ← getArr o "utilities" (decodeUtility vars.length pool.length)
+  let hard ← get o "evidence" (decodeEvidence vars.length)
+  pure ⟨prov, num, tol, pool, vars, topo, dord, mechs, decs, prec, us, hard⟩
+
+/-- The twelve version-1 fields of `o` hold `c`'s values, as in `CertificateMatches`. -/
+def BodyMatches (o : JsonObject) (c : Certificate) : Prop :=
+  (∃ v, o["provenance"]? = some v ∧ ProvenanceMatches v c.provenance) ∧
+    (∃ v, o["numeric"]? = some v ∧ NumericMatches v c.numeric) ∧
+    (∃ v, o["runtime_tolerances"]? = some v ∧ TolerancesMatches v c.tolerances) ∧
+    (∃ v, o["reference_pool"]? = some v ∧ ArrayMatches PoolMatches v c.pool) ∧
+    (∃ v, o["variables"]? = some v ∧
+      ArrayMatches (VariableMatches c.pool.length) v c.vars) ∧
+    (∃ v, o["decisions"]? = some v ∧
+      ArrayMatches (DecisionMatches c.vars.length) v c.decisions) ∧
+    (∃ v, o["topological_order"]? = some v ∧
+      ArrayMatches (fun _ x i => x = .str (toString (i + 1)) ∧ i < c.vars.length) v
+        c.topological) ∧
+    (∃ v, o["decision_order"]? = some v ∧
+      ArrayMatches (fun _ x i => x = .str (toString (i + 1)) ∧ i < c.decisions.length) v
+        c.decisionOrder) ∧
+    (∃ v, o["mechanisms"]? = some v ∧
+      ArrayMatches (MechanismMatches c.vars.length c.pool.length) v c.mechanisms) ∧
+    (∃ v, o["precedence"]? = some v ∧
+      ArrayMatches (PrecedenceMatches c.decisions.length) v c.precedence) ∧
+    (∃ v, o["utilities"]? = some v ∧
+      ArrayMatches (UtilityMatches c.vars.length c.pool.length) v c.utilities) ∧
+    ∃ v, o["evidence"]? = some v ∧ EvidenceMatches c.vars.length v c.hard
+
+theorem decodeBody_eq_ok {o : JsonObject} {c : Certificate} :
+    decodeBody o = .ok c ↔ BodyMatches o c := by
+  unfold decodeBody BodyMatches
+  simp only [bind_eq_ok,
+    get_eq_ok fun _ _ => decodeProvenance_eq_ok, get_eq_ok fun _ _ => decodeNumeric_eq_ok,
+    get_eq_ok fun _ _ => decodeTolerances_eq_ok,
+    getArr_eq_ok fun _ _ _ => decodePoolEntry_eq_ok,
+    getArr_eq_ok fun _ _ _ => decodeVariable_eq_ok,
+    getArr_eq_ok fun _ _ _ => decodeDecision_eq_ok,
+    getArr_eq_ok fun _ _ _ => refOf_eq_ok,
+    getArr_eq_ok fun _ _ _ => decodeMechanism_eq_ok,
+    getArr_eq_ok fun _ _ _ => decodePrecedence_eq_ok,
+    getArr_eq_ok fun _ _ _ => decodeUtility_eq_ok,
+    get_eq_ok fun _ _ => decodeEvidence_eq_ok, pure_eq_ok]
+  constructor
+  · rintro ⟨prov, hprov, num, hnum, tol, htol, pool, hpool, vars, hvars, decs, hdecs, topo, htopo,
+      dord, hdord, mechs, hmechs, prec, hprec, us, hus, hard, hhard, rfl⟩
+    exact ⟨hprov, hnum, htol, hpool, hvars, hdecs, htopo, hdord, hmechs, hprec, hus, hhard⟩
+  · rintro ⟨hprov, hnum, htol, hpool, hvars, hdecs, htopo, hdord, hmechs, hprec, hus, hhard⟩
+    exact ⟨_, hprov, _, hnum, _, htol, _, hpool, _, hvars, _, hdecs, _, htopo, _, hdord, _, hmechs,
+      _, hprec, _, hus, _, hhard, rfl⟩
+
+/-- **The version-1 layout is the envelope plus `BodyMatches`.** -/
+theorem certificateMatches_iff_body {j : Json} {c : Certificate} :
+    CertificateMatches j c ↔ ∃ o, j = .obj o ∧ o.size = 14 ∧
+      o["format"]? = some (.str certFormat) ∧ o["version"]? = some (natJson 1) ∧
+      BodyMatches o c := by
+  unfold CertificateMatches BodyMatches
+  rfl
+
+/-- The fifteen top-level keys of version 2. -/
+def certKeysV2 : List String := certKeys ++ ["solution"]
+
+/-- **The version-2 decoder**: exactly fifteen keys, the format, `"version": 2`, the twelve
+version-1 fields (`decodeBody`) and the solution. -/
+def decodeCertificateV2 (j : Json) : Except String (Certificate × Solution) := do
+  let o ← object "certificate" 15 j
+  let fmt ← get o "format" strOf
+  require (fmt = certFormat) s!"format is \"{fmt}\", expected \"{certFormat}\""
+  let ver ← get o "version" natOf
+  require (ver = 2) s!"version is {ver}, expected 2"
+  let c ← decodeBody o
+  let s ← get o "solution" (decodeSolution c)
+  pure (c, s)
+
+/-- **The document is the version-2 certificate `(c, s)`.** -/
+def CertificateV2Matches (j : Json) (c : Certificate) (s : Solution) : Prop :=
+  ∃ o, j = .obj o ∧ o.size = 15 ∧ o["format"]? = some (.str certFormat) ∧
+    o["version"]? = some (natJson 2) ∧ BodyMatches o c ∧
+    ∃ v, o["solution"]? = some v ∧ SolutionMatches c v s
+
+/-- **Faithfulness of the version-2 decoder.** -/
+theorem decodeCertificateV2_eq_ok {j : Json} {c : Certificate} {s : Solution} :
+    decodeCertificateV2 j = .ok (c, s) ↔ CertificateV2Matches j c s := by
+  unfold decodeCertificateV2 CertificateV2Matches
+  simp only [bind_eq_ok, object_eq_ok, get_eq_ok fun _ _ => strOf_eq_ok,
+    get_eq_ok fun _ _ => natOf_eq_ok, require_eq_ok, decodeBody_eq_ok,
+    get_eq_ok fun _ _ => decodeSolution_eq_ok, pure_eq_ok, Prod.mk.injEq]
+  constructor
+  · rintro ⟨o, ⟨rfl, hs⟩, fmt, ⟨_, hfmt, rfl⟩, _, rfl, ver, ⟨_, hver, rfl⟩, _, rfl, c', hb, s',
+      hsol, rfl, rfl⟩
+    exact ⟨o, rfl, hs, hfmt, hver, hb, hsol⟩
+  · rintro ⟨o, rfl, hs, hfmt, hver, hb, hsol⟩
+    exact ⟨o, ⟨rfl, hs⟩, _, ⟨_, hfmt, rfl⟩, (), rfl, _, ⟨_, hver, rfl⟩, (), rfl, _, hb, _, hsol,
+      rfl, rfl⟩
+```
+
+## One decoder for both versions
+
+```lean
+/-- **Both versions**: version 1 decodes with `decodeCertificate` and no solution, version 2 with
+`decodeCertificateV2`; any other version is an error. -/
+def decodeAnyCertificate (j : Json) : Except String (Certificate × Option Solution) := do
+  let o ← anyObject "certificate" j
+  let ver ← get o "version" natOf
+  if ver = 1 then do
+    let c ← decodeCertificate j
+    pure (c, none)
+  else if ver = 2 then do
+    let cs ← decodeCertificateV2 j
+    pure (cs.1, some cs.2)
+  else throw s!"version is {ver}, expected 1 or 2"
+
+theorem decodeCertificate_version {o : JsonObject} {c : Certificate}
+    (h : decodeCertificate (.obj o) = .ok c) :
+    o.size = 14 ∧ o["version"]? = some (natJson 1) := by
+  obtain ⟨o', ho, hs, -, hv, -⟩ := decodeCertificate_eq_ok.1 h
+  cases ho
+  exact ⟨hs, hv⟩
+
+theorem decodeCertificateV2_version {o : JsonObject} {c : Certificate} {s : Solution}
+    (h : decodeCertificateV2 (.obj o) = .ok (c, s)) :
+    o.size = 15 ∧ o["version"]? = some (natJson 2) := by
+  obtain ⟨o', ho, hs, -, hv, -⟩ := decodeCertificateV2_eq_ok.1 h
+  cases ho
+  exact ⟨hs, hv⟩
+
+theorem natJson_injective {m n : Nat} (h : natJson m = natJson n) : m = n := by
+  unfold natJson at h
+  simp only [Json.num.injEq, Lean.JsonNumber.mk.injEq, Nat.cast_inj, and_true] at h
+  exact h
+
+/-- **Version 1 decodes exactly as before**, with no solution. -/
+theorem decodeAnyCertificate_v1 {j : Json} {c : Certificate} :
+    decodeAnyCertificate j = .ok (c, none) ↔ decodeCertificate j = .ok c := by
+  constructor
+  · intro h
+    unfold decodeAnyCertificate at h
+    rw [bind_eq_ok] at h
+    obtain ⟨o, ho, h⟩ := h
+    rw [anyObject_eq_ok] at ho
+    subst ho
+    rw [bind_eq_ok] at h
+    obtain ⟨ver, -, h⟩ := h
+    split_ifs at h with h1 h2
+    · rw [bind_eq_ok] at h
+      obtain ⟨c', hc, h⟩ := h
+      rw [pure_eq_ok, Prod.mk.injEq] at h
+      rw [hc, h.1]
+    · rw [bind_eq_ok] at h
+      obtain ⟨cs, -, h⟩ := h
+      rw [pure_eq_ok, Prod.mk.injEq] at h
+      exact absurd h.2 (by simp)
+  · intro h
+    obtain ⟨o, ho, -, -, hv, -⟩ := decodeCertificate_eq_ok.1 h
+    subst ho
+    unfold decodeAnyCertificate
+    rw [bind_eq_ok]
+    refine ⟨o, anyObject_eq_ok.2 rfl, ?_⟩
+    rw [bind_eq_ok]
+    refine ⟨1, (get_eq_ok fun _ _ => natOf_eq_ok).2 ⟨_, hv, rfl⟩, ?_⟩
+    rw [if_pos rfl, bind_eq_ok]
+    exact ⟨c, h, rfl⟩
+
+/-- **Version 2 decodes with its solution.** -/
+theorem decodeAnyCertificate_v2 {j : Json} {c : Certificate} {s : Solution} :
+    decodeAnyCertificate j = .ok (c, some s) ↔ decodeCertificateV2 j = .ok (c, s) := by
+  constructor
+  · intro h
+    unfold decodeAnyCertificate at h
+    rw [bind_eq_ok] at h
+    obtain ⟨o, ho, h⟩ := h
+    rw [anyObject_eq_ok] at ho
+    subst ho
+    rw [bind_eq_ok] at h
+    obtain ⟨ver, -, h⟩ := h
+    split_ifs at h with h1 h2
+    · rw [bind_eq_ok] at h
+      obtain ⟨c', -, h⟩ := h
+      rw [pure_eq_ok, Prod.mk.injEq] at h
+      exact absurd h.2 (by simp)
+    · rw [bind_eq_ok] at h
+      obtain ⟨cs, hcs, h⟩ := h
+      rw [pure_eq_ok, Prod.mk.injEq, Option.some.injEq] at h
+      rw [hcs, ← h.1, ← h.2]
+  · intro h
+    obtain ⟨o, ho, -, -, hv, -⟩ := decodeCertificateV2_eq_ok.1 h
+    subst ho
+    unfold decodeAnyCertificate
+    rw [bind_eq_ok]
+    refine ⟨o, anyObject_eq_ok.2 rfl, ?_⟩
+    rw [bind_eq_ok]
+    refine ⟨2, (get_eq_ok fun _ _ => natOf_eq_ok).2 ⟨_, hv, rfl⟩, ?_⟩
+    rw [if_neg (by decide), if_pos rfl, bind_eq_ok]
+    exact ⟨(c, s), h, rfl⟩
+
+/-- Every successful decode is one of the two versions. -/
+theorem decodeAnyCertificate_cases {j : Json} {c : Certificate} {s : Option Solution}
+    (h : decodeAnyCertificate j = .ok (c, s)) :
+    (s = none ∧ decodeCertificate j = .ok c) ∨
+      ∃ s', s = some s' ∧ decodeCertificateV2 j = .ok (c, s') := by
+  cases s with
+  | none => exact Or.inl ⟨rfl, decodeAnyCertificate_v1.1 h⟩
+  | some s' => exact Or.inr ⟨s', rfl, decodeAnyCertificate_v2.1 h⟩
+
+/-- **Version 2 is not accepted with the version-1 key count.** -/
+theorem decodeAnyCertificate_error_of_v2_with_v1_keys {o : JsonObject}
+    (hv : o["version"]? = some (natJson 2)) (hs : o.size = 14) (c : Certificate)
+    (s : Option Solution) : decodeAnyCertificate (.obj o) ≠ .ok (c, s) := fun h => by
+  rcases decodeAnyCertificate_cases h with ⟨-, h1⟩ | ⟨s', -, h2⟩
+  · have := (decodeCertificate_version h1).2
+    rw [hv] at this
+    exact absurd (natJson_injective (Option.some.inj this)) (by decide)
+  · have := (decodeCertificateV2_version h2).1
+    omega
+
+/-- **Version 1 is not accepted with the version-2 key count.** -/
+theorem decodeAnyCertificate_error_of_v1_with_v2_keys {o : JsonObject}
+    (hv : o["version"]? = some (natJson 1)) (hs : o.size = 15) (c : Certificate)
+    (s : Option Solution) : decodeAnyCertificate (.obj o) ≠ .ok (c, s) := fun h => by
+  rcases decodeAnyCertificate_cases h with ⟨-, h1⟩ | ⟨s', -, h2⟩
+  · have := (decodeCertificate_version h1).1
+    omega
+  · have := (decodeCertificateV2_version h2).2
+    rw [hv] at this
+    exact absurd (natJson_injective (Option.some.inj this)) (by decide)
+```
+
+## Well-formedness: references in range and coverage
+
+```lean
+/-- **A well-formed policy** of row `k`: the conditions the decoder checks. -/
+structure PolicyRecord.WellFormed (c : Certificate) (k : Nat) (p : PolicyRecord) : Prop where
+  decision : p.decision = k ∧ p.decision < c.decisions.length
+  action : p.action < c.vars.length ∧
+    (c.decisions[k]?).map DecisionEntry.action = some p.action
+  axes : (∀ v ∈ p.axes, v < c.vars.length) ∧ infoVars c k = some p.axes
+  scope : ∀ v ∈ p.scope, v < c.vars.length
+  states : ∀ e ∈ p.entries, 1 ≤ e.action ∧ e.action ∈ stateIds c p.action
+  scores : ∀ e ∈ p.entries, e.score.InRange ∧ e.score.IsSolutionNumber
+  coverage : p.entries.map PolicyEntry.coords = lexCoords (p.axes.map (certDim c))
+
+/-- **A well-formed solution** of the certificate `c`. -/
+structure Solution.WellFormed (c : Certificate) (s : Solution) : Prop where
+  backend : (∀ w, s.backend.atol = some w → w < 2 ^ 64) ∧ s.backend.constancy < 2 ^ 64 ∧
+    s.backend.name = backendName
+  conditioned : s.conditionedOn = conditionedOnHard
+  order : ∀ v ∈ s.eliminationOrder, v < c.vars.length
+  value : s.value.InRange ∧ s.value.IsSolutionNumber
+  length : s.policies.length = c.decisions.length
+  policies : ∀ (k : Nat) (hk : k < s.policies.length), s.policies[k].WellFormed c k
+
+theorem PolicyMatches.wellFormed {c : Certificate} {k : Nat} {j : Json} {p : PolicyRecord}
+    (h : PolicyMatches c k j p) : p.WellFormed c k := by
+  obtain ⟨o, -, -, -, hdl, hdk, -, hal, hact, ⟨_, -, hax⟩, hinfo, ⟨_, -, hsc⟩, ⟨_, -, hes⟩,
+    hcov⟩ := h
+  refine ⟨⟨hdk, hdl⟩, ⟨hal, hact⟩, ⟨hax.forall fun _ _ _ hm => hm.2, hinfo⟩,
+    hsc.forall fun _ _ _ hm => hm.2, ?_, ?_, hcov⟩
+  · exact hes.forall fun _ _ _ hm => by
+      obtain ⟨_, -, -, -, -, h1, hmem, -⟩ := hm
+      exact ⟨h1, hmem⟩
+  · exact hes.forall fun _ _ _ hm => by
+      obtain ⟨_, -, -, -, -, -, -, _, -, hv, hn⟩ := hm
+      exact ⟨hv.inRange, hn⟩
+
+/-- **References in range.** A decoded solution names existing decisions, action variables and
+action states; its axes are the decision's information slots; its elimination order names
+existing variables. -/
+theorem decodeSolution_wellFormed {c : Certificate} {j : Json} {s : Solution}
+    (h : decodeSolution c j = .ok s) : s.WellFormed c := by
+  obtain ⟨o, -, -, ⟨_, -, hb⟩, -, -, -, -, hcoe, -, ⟨_, -, heo⟩, ⟨_, -, hv, hvn⟩,
+    ⟨_, -, hps⟩, hlen⟩ := decodeSolution_eq_ok.1 h
+  obtain ⟨_, -, -, -, hname, -, -, ⟨_, -, hatol⟩, -, hk⟩ := hb
+  refine ⟨⟨fun w hw => ?_, hk, hname⟩, hcoe, heo.forall fun _ _ _ hm => hm.2, ⟨hv.inRange, hvn⟩,
+    hlen, fun k hk => ?_⟩
+  · rw [hw] at hatol
+    exact hatol.2
+  · obtain ⟨_, -, -, hrows⟩ := hps
+    obtain ⟨_, -, hm⟩ := hrows k hk
+    exact hm.wellFormed
+
+/-- The version-1 fields of a version-2 document have every reference in range (the proof of
+`decodeCertificate_inRange`, from `BodyMatches`). -/
+theorem BodyMatches.inRange {o : JsonObject} {c : Certificate} (hb : BodyMatches o c) :
+    c.InRange := by
+  obtain ⟨-, -, ⟨_, -, htol⟩, -, ⟨_, -, hvars⟩, ⟨_, -, hdecs⟩, ⟨_, -, htopo⟩,
+    ⟨_, -, hdord⟩, ⟨_, -, hmechs⟩, ⟨_, -, hprec⟩, ⟨_, -, hus⟩, ⟨_, -, hev⟩⟩ := hb
+  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
+  · obtain ⟨_, -, -, -, h1, -, h2⟩ := htol
+    exact ⟨h1, h2⟩
+  · exact hvars.forall fun _ _ _ hm => by
+      obtain ⟨_, -, -, -, -, -, -, hsr, ⟨_, -, hst⟩⟩ := hm
+      exact ⟨hsr, hst.forall fun _ _ _ hs => by
+        obtain ⟨_, -, -, -, h1, -⟩ := hs
+        exact h1⟩
+  · exact htopo.forall fun _ _ _ hm => hm.2
+  · exact hdord.forall fun _ _ _ hm => hm.2
+  · exact hmechs.forall fun _ _ _ hm => by
+      obtain ⟨_, -, -, -, -, -, ht, -, hk, ⟨_, -, hp⟩, ⟨_, -, hcpt⟩, ⟨_, -, hf⟩⟩ := hm
+      exact ⟨ht, hk, hp.forall fun _ _ _ hs => hs.inRange, hcpt.inRange, hf.inRange⟩
+  · exact hdecs.forall fun _ _ _ hm => by
+      obtain ⟨_, -, -, -, -, -, ha, ⟨_, -, hi⟩⟩ := hm
+      exact ⟨ha, hi.forall fun _ _ _ hs => hs.inRange⟩
+  · exact hprec.forall fun _ _ _ hm => by
+      obtain ⟨_, -, -, -, -, he, -, hl⟩ := hm
+      exact ⟨he, hl⟩
+  · exact hus.forall fun _ _ _ hm => by
+      obtain ⟨_, -, -, -, -, -, hu, ⟨_, -, hi⟩, ⟨_, -, ht⟩⟩ := hm
+      exact ⟨hu, hi.forall fun _ _ _ hs => hs.inRange, ht.inRange⟩
+  · obtain ⟨_, -, -, -, ⟨_, -, hh⟩⟩ := hev
+    exact hh.forall fun _ _ _ hm => by
+      obtain ⟨_, -, -, -, h1, -⟩ := hm
+      exact h1
+
+/-- **A decoded version-2 certificate** has every version-1 reference in range and a well-formed
+solution. -/
+theorem decodeCertificateV2_wellFormed {j : Json} {c : Certificate} {s : Solution}
+    (h : decodeCertificateV2 j = .ok (c, s)) : c.InRange ∧ s.WellFormed c := by
+  obtain ⟨o, -, -, -, -, hb, v, -, hsol⟩ := decodeCertificateV2_eq_ok.1 h
+  exact ⟨hb.inRange, decodeSolution_wellFormed (decodeSolution_eq_ok.2 hsol)⟩
+
+/-- `lexCoords` lists coordinate tuples in strictly increasing lexicographic order. -/
+theorem lexCoords_pairwise_lex : ∀ ds : List Nat,
+    (lexCoords ds).Pairwise (List.Lex (· < ·))
+  | [] => by simp [lexCoords]
+  | n :: ns => by
+    simp only [lexCoords]
+    rw [List.pairwise_flatMap]
+    refine ⟨fun i _ => ?_, ?_⟩
+    · rw [List.pairwise_map]
+      exact (lexCoords_pairwise_lex ns).imp fun h => List.Lex.cons h
+    · refine List.Pairwise.imp ?_ (List.pairwise_lt_range (n := n))
+      intro i j hij x hx y hy
+      obtain ⟨a, -, rfl⟩ := List.mem_map.1 hx
+      obtain ⟨b, -, rfl⟩ := List.mem_map.1 hy
+      exact List.Lex.rel hij
+
+theorem lex_lt_ne {a b : List Nat} (h : List.Lex (· < ·) a b) : a ≠ b := by
+  rintro rfl
+  exact List.lex_irrefl (fun x => Nat.lt_irrefl x) _ h
+
+/-- `lexCoords` has no repeated tuple. -/
+theorem lexCoords_nodup (ds : List Nat) : (lexCoords ds).Nodup :=
+  (lexCoords_pairwise_lex ds).imp lex_lt_ne
+
+/-- **Coverage.** The `at` lists of a decoded policy enumerate every configuration of the axes'
+state counts exactly once, in lexicographic order with the rightmost coordinate fastest: they are
+`lexCoords` of the extents, which lists exactly the in-range tuples (`mem_lexCoords`), without
+repetition (`lexCoords_nodup`) and in strictly increasing lexicographic order
+(`lexCoords_pairwise_lex`). -/
+theorem decodeSolution_coverage {c : Certificate} {j : Json} {s : Solution}
+    (h : decodeSolution c j = .ok s) (k : Nat) (hk : k < s.policies.length) :
+    let p := s.policies[k]
+    (∀ l, l ∈ p.entries.map PolicyEntry.coords ↔
+        List.Forall₂ (· < ·) l (p.axes.map (certDim c))) ∧
+      (p.entries.map PolicyEntry.coords).Nodup ∧
+      (p.entries.map PolicyEntry.coords).Pairwise (List.Lex (· < ·)) := by
+  intro p
+  have hcov := ((decodeSolution_wellFormed h).policies k hk).coverage
+  refine ⟨fun l => ?_, ?_, ?_⟩
+  · rw [hcov, mem_lexCoords]
+  · rw [hcov]
+    exact lexCoords_nodup _
+  · rw [hcov]
+    exact lexCoords_pairwise_lex _
+```
+
+## Shapes and failures
+
+```lean
+/-- The JSON type each solution key must have. -/
+def SolutionKeyShape : String → Json → Prop
+  | "backend", v => ∃ o, v = .obj o
+  | "value", v => ∃ o, v = .obj o
+  | "exact_fallback", v => ∃ b, v = .bool b
+  | "elimination_order", v => ∃ a, v = .arr a
+  | "policies", v => ∃ a, v = .arr a
+  | _, v => ∃ s, v = .str s
+
+theorem ValueMatches.isObject {j : Json} {x : Value} (h : ValueMatches j x) : ∃ o, j = .obj o := by
+  cases x with
+  | f64 w =>
+    obtain ⟨o, rfl, -⟩ := h
+    exact ⟨o, rfl⟩
+  | q n d =>
+    obtain ⟨o, rfl, -⟩ := h
+    exact ⟨o, rfl⟩
+  | qf64 n d w =>
+    obtain ⟨o, rfl, -⟩ := h
+    exact ⟨o, rfl⟩
+
+/-- A decoded solution object has every key, each of its JSON type. -/
+theorem decodeSolution_shape {c : Certificate} {o : JsonObject} {s : Solution}
+    (h : decodeSolution c (.obj o) = .ok s) :
+    ∀ k ∈ solutionKeys, ∃ v, o[k]? = some v ∧ SolutionKeyShape k v := by
+  obtain ⟨o', ho, -, ⟨vb, hb, hbm⟩, har, hda, hef, hco, -, hjv, ⟨ve, he, hem⟩, ⟨vv, hv, hvm, -⟩,
+    ⟨vp, hp, hpm⟩, -⟩ := decodeSolution_eq_ok.1 h
+  cases ho
+  intro k hk
+  simp only [solutionKeys, List.mem_cons, List.not_mem_nil, or_false] at hk
+  rcases hk with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl
+  · obtain ⟨ob, rfl, -⟩ := hbm
+    exact ⟨_, hb, ob, rfl⟩
+  · exact ⟨_, har, _, rfl⟩
+  · exact ⟨_, hda, _, rfl⟩
+  · exact ⟨_, hef, _, rfl⟩
+  · exact ⟨_, hco, _, rfl⟩
+  · exact ⟨_, hjv, _, rfl⟩
+  · obtain ⟨a, rfl, -⟩ := hem
+    exact ⟨_, he, a, rfl⟩
+  · exact ⟨_, hv, hvm.isObject⟩
+  · obtain ⟨a, rfl, -⟩ := hpm
+    exact ⟨_, hp, a, rfl⟩
+
+/-- **Failure: a missing solution key.** -/
+theorem decodeSolution_error_of_missing_key {c : Certificate} {o : JsonObject} {k : String}
+    (hk : k ∈ solutionKeys) (h : o[k]? = none) (s : Solution) :
+    decodeSolution c (.obj o) ≠ .ok s := fun hd => by
+  obtain ⟨v, hv, -⟩ := decodeSolution_shape hd k hk
+  rw [h] at hv
+  cases hv
+
+/-- **Failure: an ill-typed solution key.** -/
+theorem decodeSolution_error_of_ill_typed {c : Certificate} {o : JsonObject} {k : String}
+    {v : Json} (hk : k ∈ solutionKeys) (h : o[k]? = some v) (hty : ¬ SolutionKeyShape k v)
+    (s : Solution) : decodeSolution c (.obj o) ≠ .ok s := fun hd => by
+  obtain ⟨v', hv', hs⟩ := decodeSolution_shape hd k hk
+  rw [h, Option.some.injEq] at hv'
+  subst hv'
+  exact hty hs
+
+/-- **Failure: a document whose solution is not an object.** -/
+theorem decodeSolution_error_of_not_object {c : Certificate} {j : Json} (h : ∀ o, j ≠ .obj o)
+    (s : Solution) : decodeSolution c j ≠ .ok s := fun hd => by
+  obtain ⟨o, ho, -⟩ := decodeSolution_eq_ok.1 hd
+  exact h o ho
+
+/-- **Failure: a missing top-level key of version 2**, `"solution"` included. -/
+theorem decodeCertificateV2_error_of_missing_key {o : JsonObject} {k : String}
+    (hk : k ∈ certKeysV2) (h : o[k]? = none) (c : Certificate) (s : Solution) :
+    decodeCertificateV2 (.obj o) ≠ .ok (c, s) := fun hd => by
+  obtain ⟨o', ho, -, hf, hv, ⟨⟨_, hp, -⟩, ⟨_, hn, -⟩, ⟨_, ht, -⟩, ⟨_, hpool, -⟩, ⟨_, hvars, -⟩,
+    ⟨_, hdecs, -⟩, ⟨_, htopo, -⟩, ⟨_, hdord, -⟩, ⟨_, hmechs, -⟩, ⟨_, hprec, -⟩, ⟨_, hus, -⟩,
+    ⟨_, hev, -⟩⟩, ⟨_, hsol, -⟩⟩ := decodeCertificateV2_eq_ok.1 hd
+  cases ho
+  simp only [certKeysV2, certKeys, List.cons_append, List.nil_append, List.mem_cons,
+    List.not_mem_nil, or_false] at hk
+  rcases hk with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl |
+    rfl <;> simp_all
+```
+
+## Encoding and the round trip
+
+```lean
+def encodeBackend (b : Backend) : Json :=
+  Json.mkObj [("name", .str b.name), ("order", .str b.order), ("stable", .bool b.stable),
+    ("atol_f64", encodeOptWord b.atol), ("constancy_atol_f64", .str (hexWord b.constancy))]
+
+def encodePolicyEntry (e : PolicyEntry) : Json :=
+  Json.mkObj [("at", encodeArray (fun _ c => natJson c) e.coords),
+    ("action", .str (toString e.action)), ("score", encodeValue e.score)]
+
+def encodePolicy (p : PolicyRecord) : Json :=
+  Json.mkObj [("decision", .str (toString (p.decision + 1))),
+    ("action", .str (toString (p.action + 1))),
+    ("axes", encodeArray (fun _ i => .str (toString (i + 1))) p.axes),
+    ("scope", encodeArray (fun _ i => .str (toString (i + 1))) p.scope),
+    ("entries", encodeArray (fun _ => encodePolicyEntry) p.entries)]
+
+/-- **The solution encoder.** -/
+def encodeSolution (s : Solution) : Json :=
+  Json.mkObj [("backend", encodeBackend s.backend),
+    ("arithmetic", .str (arithmeticString s.arithmetic)), ("data", .str (dataString s.data)),
+    ("exact_fallback", .bool s.exactFallback), ("conditioned_on", .str s.conditionedOn),
+    ("julia_version", .str s.juliaVersion),
+    ("elimination_order", encodeArray (fun _ i => .str (toString (i + 1))) s.eliminationOrder),
+    ("value", encodeValue s.value),
+    ("policies", encodeArray (fun _ => encodePolicy) s.policies)]
+
+/-- **The version-2 encoder**: the version-1 fields of `encodeCertificate`, `"version": 2` and
+the solution. -/
+def encodeCertificateV2 (c : Certificate) (s : Solution) : Json :=
+  Json.mkObj [("format", .str certFormat), ("version", natJson 2),
+    ("provenance", encodeProvenance c.provenance), ("numeric", encodeNumeric c.numeric),
+    ("runtime_tolerances", encodeTolerances c.tolerances),
+    ("reference_pool", encodeArray encodePoolEntry c.pool),
+    ("variables", encodeArray encodeVariable c.vars),
+    ("topological_order", encodeArray (fun _ i => .str (toString (i + 1))) c.topological),
+    ("decision_order", encodeArray (fun _ i => .str (toString (i + 1))) c.decisionOrder),
+    ("mechanisms", encodeArray encodeMechanism c.mechanisms),
+    ("decisions", encodeArray encodeDecision c.decisions),
+    ("precedence", encodeArray encodePrecedence c.precedence),
+    ("utilities", encodeArray encodeUtility c.utilities),
+    ("evidence", encodeEvidence c.hard),
+    ("solution", encodeSolution s)]
+
+theorem optWordMatches_encode (a : Option Nat) (ha : ∀ w, a = some w → w < 2 ^ 64) :
+    OptWordMatches (encodeOptWord a) a := by
+  cases a with
+  | none => rfl
+  | some w => exact ⟨rfl, ha w rfl⟩
+
+theorem backendMatches_encode (b : Backend) (hb : (∀ w, b.atol = some w → w < 2 ^ 64) ∧
+    b.constancy < 2 ^ 64 ∧ b.name = backendName) : BackendMatches (encodeBackend b) b :=
+  ⟨_, rfl, mkObj_size (by simp), mkObj_getElem? (by simp) (by simp), hb.2.2,
+    mkObj_getElem? (by simp) (by simp), mkObj_getElem? (by simp) (by simp),
+    ⟨_, mkObj_getElem? (by simp) (by simp), optWordMatches_encode _ hb.1⟩,
+    mkObj_getElem? (by simp) (by simp), hb.2.1⟩
+
+theorem policyEntryMatches_encode {states : List Nat} (e : PolicyEntry)
+    (he : 1 ≤ e.action ∧ e.action ∈ states) (hs : e.score.InRange ∧ e.score.IsSolutionNumber) :
+    PolicyEntryMatches states (encodePolicyEntry e) e :=
+  ⟨_, rfl, mkObj_size (by simp),
+    ⟨_, mkObj_getElem? (by simp) (by simp),
+      arrayMatches_encode (enc := fun _ c => natJson c) fun _ _ => rfl⟩,
+    mkObj_getElem? (by simp) (by simp), he.1, he.2,
+    ⟨_, mkObj_getElem? (by simp) (by simp), valueMatches_encode _ hs.1, hs.2⟩⟩
+
+theorem varRefs_encode {nv : Nat} (l : List Nat) (hl : ∀ v ∈ l, v < nv) :
+    ArrayMatches (fun _ => VarRef nv) (encodeArray (fun _ i => .str (toString (i + 1))) l) l :=
+  arrayMatches_encode (enc := fun _ i => .str (toString (i + 1))) fun _ hk =>
+    ⟨rfl, hl _ (getElem_mem' hk)⟩
+
+theorem policyMatches_encode {c : Certificate} {k : Nat} (p : PolicyRecord)
+    (hp : p.WellFormed c k) : PolicyMatches c k (encodePolicy p) p :=
+  ⟨_, rfl, mkObj_size (by simp), mkObj_getElem? (by simp) (by simp), hp.decision.2,
+    hp.decision.1, mkObj_getElem? (by simp) (by simp), hp.action.1, hp.action.2,
+    ⟨_, mkObj_getElem? (by simp) (by simp), varRefs_encode _ hp.axes.1⟩, hp.axes.2,
+    ⟨_, mkObj_getElem? (by simp) (by simp), varRefs_encode _ hp.scope⟩,
+    ⟨_, mkObj_getElem? (by simp) (by simp),
+      arrayMatches_encode (enc := fun _ => encodePolicyEntry) fun _ hk =>
+        policyEntryMatches_encode _ (hp.states _ (getElem_mem' hk))
+          (hp.scores _ (getElem_mem' hk))⟩,
+    hp.coverage⟩
+
+theorem solutionMatches_encode {c : Certificate} (s : Solution) (hs : s.WellFormed c) :
+    SolutionMatches c (encodeSolution s) s :=
+  ⟨_, rfl, mkObj_size (by simp),
+    ⟨_, mkObj_getElem? (by simp) (by simp), backendMatches_encode _ hs.backend⟩,
+    mkObj_getElem? (by simp) (by simp), mkObj_getElem? (by simp) (by simp),
+    mkObj_getElem? (by simp) (by simp), mkObj_getElem? (by simp) (by simp), hs.conditioned,
+    mkObj_getElem? (by simp) (by simp),
+    ⟨_, mkObj_getElem? (by simp) (by simp), varRefs_encode _ hs.order⟩,
+    ⟨_, mkObj_getElem? (by simp) (by simp), valueMatches_encode _ hs.value.1, hs.value.2⟩,
+    ⟨_, mkObj_getElem? (by simp) (by simp),
+      arrayMatches_encode (enc := fun _ => encodePolicy) fun k hk =>
+        policyMatches_encode _ (hs.policies k hk)⟩,
+    hs.length⟩
+
+/-- **Round trip of the solution.** -/
+theorem decodeSolution_encode {c : Certificate} (s : Solution) (hs : s.WellFormed c) :
+    decodeSolution c (encodeSolution s) = .ok s :=
+  decodeSolution_eq_ok.2 (solutionMatches_encode s hs)
+
+/-- **Round trip of the version-2 certificate.** -/
+theorem decodeCertificateV2_encode (c : Certificate) (s : Solution) (hc : c.InRange)
+    (hs : s.WellFormed c) : decodeCertificateV2 (encodeCertificateV2 c s) = .ok (c, s) :=
+  decodeCertificateV2_eq_ok.2 ⟨_, rfl, mkObj_size (by simp),
+    mkObj_getElem? (by simp) (by simp), mkObj_getElem? (by simp) (by simp),
+    ⟨⟨_, mkObj_getElem? (by simp) (by simp), provenanceMatches_encode _⟩,
+    ⟨_, mkObj_getElem? (by simp) (by simp), numericMatches_encode _⟩,
+    ⟨_, mkObj_getElem? (by simp) (by simp), tolerancesMatches_encode _ hc.tolerances⟩,
+    ⟨_, mkObj_getElem? (by simp) (by simp),
+      arrayMatches_encode (enc := encodePoolEntry) fun k _ => poolMatches_encode k _⟩,
+    ⟨_, mkObj_getElem? (by simp) (by simp),
+      arrayMatches_encode (enc := encodeVariable) fun k hk =>
+        variableMatches_encode k _ (hc.vars _ (getElem_mem' hk))⟩,
+    ⟨_, mkObj_getElem? (by simp) (by simp),
+      arrayMatches_encode (enc := encodeDecision) fun k hk =>
+        decisionMatches_encode k _ (hc.decisions _ (getElem_mem' hk))⟩,
+    ⟨_, mkObj_getElem? (by simp) (by simp),
+      arrayMatches_encode (enc := fun _ i => .str (toString (i + 1))) fun k hk =>
+        ⟨rfl, hc.topological _ (getElem_mem' hk)⟩⟩,
+    ⟨_, mkObj_getElem? (by simp) (by simp),
+      arrayMatches_encode (enc := fun _ i => .str (toString (i + 1))) fun k hk =>
+        ⟨rfl, hc.decisionOrder _ (getElem_mem' hk)⟩⟩,
+    ⟨_, mkObj_getElem? (by simp) (by simp),
+      arrayMatches_encode (enc := encodeMechanism) fun k hk =>
+        mechanismMatches_encode k _ (hc.mechanisms _ (getElem_mem' hk))⟩,
+    ⟨_, mkObj_getElem? (by simp) (by simp),
+      arrayMatches_encode (enc := encodePrecedence) fun k hk =>
+        precedenceMatches_encode k _ (hc.precedence _ (getElem_mem' hk))⟩,
+    ⟨_, mkObj_getElem? (by simp) (by simp),
+      arrayMatches_encode (enc := encodeUtility) fun k hk =>
+        utilityMatches_encode k _ (hc.utilities _ (getElem_mem' hk))⟩,
+    ⟨_, mkObj_getElem? (by simp) (by simp), evidenceMatches_encode _ hc.hard⟩⟩,
+    ⟨_, mkObj_getElem? (by simp) (by simp), solutionMatches_encode _ hs⟩⟩
+
+end InfluenceDiagramsProofs.DVECertificate
+```
+
+
+<!-- InfluenceDiagramsProofs/Finite/DVE/SolutionRun.lean -->
+
+# A computable exact run of the certificate's DVE
+
+```lean
+import InfluenceDiagramsProofs.Finite.DVE.SolutionJson
+```
+
+`certificate_tables`, `certificate_tables_optimal` and `certificate_approx_optimal` speak about
+`DVE.solveRepPlanWith (r.selector h.valid) keep (certKernel r h.valid c) … plan`: the bucket
+driver over `ℝ` with Julia's sum-out representative `keep`, on the certificate's exact numbers.
+That run is a noncomputable function of real-valued valuations, so it cannot be compared with
+Julia's recorded solution as it stands. This module computes it.
+
+* `QVal` is a valuation over `ℚ` (scope, probability and utility functions) that also carries
+  `uvars`, the variables of Julia's utility potential `ψ` (`ψ.vars`): `qcombine` takes unions,
+  `qsumOut a` keeps `ψ` exactly when `a ∉ uvars` (Julia's `sum_out` branch `x in v.ψ.vars`) and
+  otherwise divides, `qmaxOut a` maximizes. `Rel q v` says that the real valuation `v` is `q` read
+  in `ℝ`; `rel_combine`, `rel_collect`, `rel_sumOut` and `rel_maxOut` show that every step
+  preserves it, `rel_sumOut` for the representative `keep = (a ∉ uvars)`, given `UDep q` (the
+  utility function depends only on `uvars`, which every step preserves).
+* `TVal` stores a valuation as tables over its scope (`tab`, read back by `view`;
+  `view_tab`: reading back gives the function tabulated), so each step is computed once.
+* `runT` runs a plan on tables, `scoreT` returns the score row the run maximizes for a decision,
+  `valueT` the value, and `keepOfT` the representative choice of every summed variable.
+* `planOf` builds a `DVE.Plan` from an elimination order (Julia's `elimination_order`), checking
+  that each decision is eliminated when exactly its information set remains.
+
+**Result.** `exactRun_spec`: for a certificate that matches the checked diagram and has
+nonnegative cells, and any plan, the real run with `keep := keepOfT plan` has value
+`valueT plan` and score rows `scoreT plan` read in `ℝ`. The tables and the value are therefore
+computed exactly, as rationals, by this module.
+
+```lean
+set_option autoImplicit false
+
+namespace InfluenceDiagramsProofs.DVECertificate
+
+open BayesianNetworksProofs BayesianNetworksProofs.FinBayesNet FinInfluenceDiagram
+open BayesianNetworksProofs.Raw InfluenceDiagramsProofs.Records Spec
+```
+
+## Rational valuations
+
+```lean
+/-- A valuation over `ℚ`: its scope, the variables of its utility potential (Julia's
+`ψ.vars`), and its probability and utility functions. -/
+structure QVal (bn : FinBayesNet) where
+  scope : Finset bn.V
+  uvars : Finset bn.V
+  prob : bn.Assignment → ℚ
+  util : bn.Assignment → ℚ
+
+section QVal
+
+variable {bn : FinBayesNet}
+
+def qunit : QVal bn := ⟨∅, ∅, fun _ => 1, fun _ => 0⟩
+
+def qcombine (v w : QVal bn) : QVal bn :=
+  ⟨v.scope ∪ w.scope, v.uvars ∪ w.uvars, fun x => v.prob x * w.prob x, fun x => v.util x + w.util x⟩
+
+def qcollect : List (QVal bn) → QVal bn
+  | [] => qunit
+  | v :: vs => qcombine v (qcollect vs)
+
+/-- `0 / 0 := 0`, as Julia's `_divide`. -/
+def ratioQ (n p : ℚ) : ℚ := if p = 0 then 0 else n / p
+
+/-- Julia's `sum_out`: divide when `a` is a variable of the utility potential, keep it
+otherwise. -/
+def qsumOut (a : bn.V) (v : QVal bn) : QVal bn where
+  scope := v.scope.erase a
+  uvars := if a ∈ v.uvars then v.scope.erase a else v.uvars
+  prob x := ∑ b, v.prob (Function.update x a b)
+  util x := if a ∈ v.uvars then
+      ratioQ (∑ b, v.prob (Function.update x a b) * v.util (Function.update x a b))
+        (∑ b, v.prob (Function.update x a b))
+    else v.util x
+
+/-- Julia's `max_out`: the maximum over `a` of each potential. -/
+def qmaxOut (a : bn.V) (v : QVal bn) : QVal bn where
+  scope := v.scope.erase a
+  uvars := v.uvars.erase a
+  prob x := Finset.univ.sup' Finset.univ_nonempty fun b => v.prob (Function.update x a b)
+  util x := Finset.univ.sup' Finset.univ_nonempty fun b => v.util (Function.update x a b)
+
+/-- `f` reads only the variables of `S`. -/
+def DepQ (S : Finset bn.V) (f : bn.Assignment → ℚ) : Prop :=
+  ∀ x y : bn.Assignment, (∀ w ∈ S, x w = y w) → f x = f y
+
+/-- The utility function reads only `uvars`. -/
+def UDep (q : QVal bn) : Prop := DepQ q.uvars q.util
+
+/-- **The real valuation `v` is `q` read in `ℝ`.** -/
+def Rel (q : QVal bn) (v : DVE.Valuation bn) : Prop :=
+  q.scope = v.scope ∧ (∀ x, v.prob x = (q.prob x : ℝ)) ∧ ∀ x, v.util x = (q.util x : ℝ)
+
+theorem Rel.depProb {q : QVal bn} {v : DVE.Valuation bn} (h : Rel q v) : DepQ q.scope q.prob :=
+  fun x y hxy => by
+    have := v.prob_local x y (fun w hw => hxy w (by rw [h.1]; exact hw))
+    rw [h.2.1, h.2.1] at this
+    exact_mod_cast this
+
+theorem Rel.depUtil {q : QVal bn} {v : DVE.Valuation bn} (h : Rel q v) : DepQ q.scope q.util :=
+  fun x y hxy => by
+    have := v.util_local x y (fun w hw => hxy w (by rw [h.1]; exact hw))
+    rw [h.2.2, h.2.2] at this
+    exact_mod_cast this
+
+theorem rel_unit : Rel (qunit : QVal bn) DVE.Valuation.unit :=
+  ⟨rfl, fun _ => by simp [qunit, DVE.Valuation.unit], fun _ => by simp [qunit, DVE.Valuation.unit]⟩
+
+theorem rel_combine {q q' : QVal bn} {v v' : DVE.Valuation bn} (h : Rel q v) (h' : Rel q' v') :
+    Rel (qcombine q q') (DVE.Valuation.combine v v') := by
+  refine ⟨?_, fun x => ?_, fun x => ?_⟩
+  · change q.scope ∪ q'.scope = v.scope ∪ v'.scope
+    rw [h.1, h'.1]
+  · change v.prob x * v'.prob x = ((q.prob x * q'.prob x : ℚ) : ℝ)
+    rw [h.2.1, h'.2.1]
+    push_cast
+    rfl
+  · change v.util x + v'.util x = ((q.util x + q'.util x : ℚ) : ℝ)
+    rw [h.2.2, h'.2.2]
+    push_cast
+    rfl
+
+theorem rel_collect {qs : List (QVal bn)} {vs : List (DVE.Valuation bn)}
+    (h : List.Forall₂ Rel qs vs) : Rel (qcollect qs) (DVE.Valuation.collect vs) := by
+  induction h with
+  | nil => exact rel_unit
+  | cons hr _ ih => exact rel_combine hr ih
+
+theorem udep_unit : UDep (qunit : QVal bn) := fun _ _ _ => rfl
+
+theorem udep_combine {q q' : QVal bn} (h : UDep q) (h' : UDep q') : UDep (qcombine q q') :=
+  fun x y hxy => by
+    change q.util x + q'.util x = q.util y + q'.util y
+    rw [h x y (fun w hw => hxy w (Finset.mem_union_left _ hw)),
+      h' x y (fun w hw => hxy w (Finset.mem_union_right _ hw))]
+
+theorem udep_collect {qs : List (QVal bn)} (h : ∀ q ∈ qs, UDep q) : UDep (qcollect qs) := by
+  induction qs with
+  | nil => exact udep_unit
+  | cons q qs ih =>
+    exact udep_combine (h q List.mem_cons_self) (ih fun q' hq' => h q' (List.mem_cons_of_mem _ hq'))
+
+theorem ratio_cast (n p : ℚ) : DVE.Valuation.ratio (n : ℝ) (p : ℝ) = ((ratioQ n p : ℚ) : ℝ) := by
+  unfold DVE.Valuation.ratio ratioQ
+  by_cases hp : p = 0
+  · simp [hp]
+  · have hp' : (p : ℝ) ≠ 0 := by exact_mod_cast hp
+    rw [if_neg hp', if_neg hp]
+    push_cast
+    rfl
+
+theorem update_agree_of_notMem {S : Finset bn.V} {a : bn.V} (ha : a ∉ S) (x : bn.Assignment)
+    (b : bn.states a) : ∀ w ∈ S, Function.update x a b w = x w := by
+  intro w hw
+  exact Function.update_of_ne (fun he => ha (by rw [← he]; exact hw)) _ _
+
+/-- **Julia's `sum_out` is the real step `sumOutKeep (a ∉ uvars)`.** -/
+theorem rel_sumOut {q : QVal bn} {v : DVE.Valuation bn} (h : Rel q v) (hu : UDep q) (a : bn.V) :
+    Rel (qsumOut a q) (DVE.Valuation.sumOutKeep (decide (a ∉ q.uvars)) a v) := by
+  have hprob : ∀ x, (DVE.Valuation.sumOut a v).prob x =
+      ((∑ b, q.prob (Function.update x a b) : ℚ) : ℝ) := by
+    intro x
+    change ∑ b, v.prob (Function.update x a b) = _
+    push_cast
+    exact Finset.sum_congr rfl fun b _ => h.2.1 _
+  refine ⟨?_, fun x => hprob x, fun x => ?_⟩
+  · change q.scope.erase a = v.scope.erase a
+    rw [h.1]
+  · by_cases ha : a ∈ q.uvars
+    · have hk : decide (a ∉ q.uvars) = false := by simp [ha]
+      change (if decide (a ∉ q.uvars) = true ∧ (DVE.Valuation.sumOut a v).prob x = 0 then
+          v.util (Function.update x a (Classical.choice (bn.nonemptyS a)))
+        else (DVE.Valuation.sumOut a v).util x) = _
+      rw [hk, if_neg (by simp)]
+      change DVE.Valuation.ratio (∑ b, v.weight (Function.update x a b))
+        (∑ b, v.prob (Function.update x a b)) = ((qsumOut a q).util x : ℝ)
+      have hw : ∑ b, v.weight (Function.update x a b) =
+          ((∑ b, q.prob (Function.update x a b) * q.util (Function.update x a b) : ℚ) : ℝ) := by
+        push_cast
+        exact Finset.sum_congr rfl fun b _ => by rw [DVE.Valuation.weight, h.2.1, h.2.2]
+      have hp : ∑ b, v.prob (Function.update x a b) =
+          ((∑ b, q.prob (Function.update x a b) : ℚ) : ℝ) := hprob x
+      rw [hw, hp, ratio_cast]
+      simp only [qsumOut, if_pos ha]
+    · have hk : decide (a ∉ q.uvars) = true := by simp [ha]
+      have hconst : ∀ b, q.util (Function.update x a b) = q.util x := fun b =>
+        hu _ _ (update_agree_of_notMem ha x b)
+      change (if decide (a ∉ q.uvars) = true ∧ (DVE.Valuation.sumOut a v).prob x = 0 then
+          v.util (Function.update x a (Classical.choice (bn.nonemptyS a)))
+        else (DVE.Valuation.sumOut a v).util x) = _
+      have hq : (qsumOut a q).util x = q.util x := by simp only [qsumOut, if_neg ha]
+      rw [hk, hq]
+      by_cases hz : (DVE.Valuation.sumOut a v).prob x = 0
+      · rw [if_pos ⟨rfl, hz⟩, h.2.2, hconst]
+      · rw [if_neg (fun hh => hz hh.2)]
+        change DVE.Valuation.ratio (∑ b, v.weight (Function.update x a b))
+          (∑ b, v.prob (Function.update x a b)) = _
+        have hz' : ∑ b, v.prob (Function.update x a b) ≠ 0 := hz
+        have hw : ∑ b, v.weight (Function.update x a b) =
+            (∑ b, v.prob (Function.update x a b)) * (q.util x : ℝ) := by
+          rw [Finset.sum_mul]
+          exact Finset.sum_congr rfl fun b _ => by rw [DVE.Valuation.weight, h.2.2, hconst]
+        rw [hw, DVE.Valuation.ratio, if_neg hz', mul_div_cancel_left₀ _ hz']
+
+theorem udep_sumOut {q : QVal bn} {v : DVE.Valuation bn} (hu : UDep q) (a : bn.V)
+    (hr : Rel (qsumOut a q) v) : UDep (qsumOut a q) := by
+  by_cases ha : a ∈ q.uvars
+  · intro x y hxy
+    apply hr.depUtil x y
+    intro w hw
+    apply hxy
+    change w ∈ (if a ∈ q.uvars then q.scope.erase a else q.uvars)
+    rw [if_pos ha]
+    exact hw
+  · intro x y hxy
+    have hxy' : ∀ w ∈ q.uvars, x w = y w := by
+      intro w hw
+      apply hxy
+      change w ∈ (if a ∈ q.uvars then q.scope.erase a else q.uvars)
+      rw [if_neg ha]
+      exact hw
+    simp only [qsumOut, if_neg ha]
+    exact hu x y hxy'
+
+/-- A real function that is a rational one read in `ℝ` attains the rational maximum at
+`argmax`. -/
+theorem argmax_cast {A : Type} [Fintype A] [Nonempty A] (f : A → ℝ) (g : A → ℚ)
+    (hfg : ∀ b, f b = g b) : f (DVE.Valuation.argmax f) =
+      ((Finset.univ.sup' Finset.univ_nonempty g : ℚ) : ℝ) := by
+  apply le_antisymm
+  · rw [hfg]
+    exact_mod_cast Finset.le_sup' g (Finset.mem_univ _)
+  · obtain ⟨b, -, hb⟩ := Finset.exists_mem_eq_sup' (Finset.univ_nonempty (α := A)) g
+    rw [hb, ← hfg]
+    exact DVE.Valuation.le_argmax f b
+
+/-- **Julia's `max_out` is the real step `maxOut`.** -/
+theorem rel_maxOut {q : QVal bn} {v : DVE.Valuation bn} (h : Rel q v) (a : bn.V) :
+    Rel (qmaxOut a q) (DVE.Valuation.maxOut a v) := by
+  refine ⟨?_, fun x => ?_, fun x => ?_⟩
+  · change q.scope.erase a = v.scope.erase a
+    rw [h.1]
+  · change (fun b => v.prob (Function.update x a b))
+      (DVE.Valuation.argmax fun b => v.prob (Function.update x a b)) = _
+    exact argmax_cast _ _ fun b => h.2.1 _
+  · change (fun b => v.util (Function.update x a b))
+      (DVE.Valuation.argmax fun b => v.util (Function.update x a b)) = _
+    exact argmax_cast _ _ fun b => h.2.2 _
+
+theorem udep_maxOut {q : QVal bn} (hu : UDep q) (a : bn.V) : UDep (qmaxOut a q) := by
+  intro x y hxy
+  show Finset.univ.sup' Finset.univ_nonempty (fun b => q.util (Function.update x a b)) =
+    Finset.univ.sup' Finset.univ_nonempty (fun b => q.util (Function.update y a b))
+  congr 1
+  funext b
+  apply hu
+  intro w hw
+  by_cases hwa : w = a
+  · subst hwa
+    simp
+  · rw [Function.update_of_ne hwa, Function.update_of_ne hwa]
+    exact hxy w (Finset.mem_erase.2 ⟨hwa, hw⟩)
+
+end QVal
+```
+
+## Permutations and filters
+
+```lean
+theorem collect_perm {bn : FinBayesNet} {vs ws : List (DVE.Valuation bn)} (h : vs.Perm ws) :
+    DVE.Valuation.collect vs = DVE.Valuation.collect ws := by
+  induction h with
+  | nil => rfl
+  | cons x _ ih =>
+    change DVE.Valuation.combine x _ = DVE.Valuation.combine x _
+    rw [ih]
+  | swap x y l =>
+    apply DVE.Valuation.ext'
+    · change y.scope ∪ (x.scope ∪ _) = x.scope ∪ (y.scope ∪ _)
+      exact Finset.union_left_comm _ _ _
+    · funext z
+      change y.prob z * (x.prob z * _) = x.prob z * (y.prob z * _)
+      ring
+    · funext z
+      change y.util z + (x.util z + _) = x.util z + (y.util z + _)
+      ring
+  | trans _ _ ih1 ih2 => exact ih1.trans ih2
+
+theorem forall₂_filter {α β : Type} {R : α → β → Prop} {p : α → Bool} {q : β → Bool}
+    {l₁ : List α} {l₂ : List β} (h : List.Forall₂ R l₁ l₂) (hpq : ∀ a b, R a b → p a = q b) :
+    List.Forall₂ R (l₁.filter p) (l₂.filter q) := by
+  induction h with
+  | nil => exact List.Forall₂.nil
+  | @cons a b l₁ l₂ hr _ ih =>
+    rw [List.filter_cons, List.filter_cons, hpq a b hr]
+    by_cases hq : q b = true
+    · rw [if_pos hq, if_pos hq]
+      exact List.Forall₂.cons hr ih
+    · rw [if_neg hq, if_neg hq]
+      exact ih
+```
+
+## Tables over a checked diagram
+
+```lean
+theorem getD_of_lt {α : Type} {l : List α} {i : Nat} {d : α} (hi : i < l.length) :
+    l.getD i d = l[i] := by
+  rw [List.getD_eq_getElem?_getD, List.getElem?_eq_getElem hi, Option.getD_some]
+
+/-- The elements of a finite set of `Fin n`, in increasing order. -/
+def finsetList {n : Nat} (F : Finset (Fin n)) : List (Fin n) := (List.finRange n).filter (· ∈ F)
+
+theorem mem_finsetList {n : Nat} {F : Finset (Fin n)} {v : Fin n} : v ∈ finsetList F ↔ v ∈ F := by
+  simp [finsetList]
+
+/-- A valuation stored as tables: `keys` lists the coordinates of `vars` (the scope), and
+`probT`, `utilT` the values at those coordinates. -/
+structure TVal (r : Diagram) where
+  scope : Finset (Fin r.nv)
+  vars : List (Fin r.nv)
+  uvars : Finset (Fin r.nv)
+  keys : List (List Nat)
+  probT : List ℚ
+  utilT : List ℚ
+
+variable (r : Diagram) (h : r.Valid)
+
+/-- The coordinates of an assignment along a list of variables. -/
+def keyOf (S : List (Fin r.nv)) (x : (r.compile h).Assignment) : List Nat :=
+  S.map fun v => (x v).val
+
+/-- The assignment with the given coordinates along `S` (state `0` elsewhere). -/
+def decodeKey (S : List (Fin r.nv)) (k : List Nat) : (r.compile h).Assignment := fun v =>
+  if hk : k.getD (S.idxOf v) 0 < r.stateCount v then ⟨_, hk⟩ else ⟨0, h.nonempty_states v⟩
+
+/-- Tabulate a valuation over its scope. -/
+def tab (q : QVal (r.compile h).toFinBayesNet) : TVal r :=
+  let S := finsetList q.scope
+  let keys := lexCoords (S.map r.stateCount)
+  ⟨q.scope, S, q.uvars, keys, keys.map fun k => q.prob (decodeKey r h S k),
+    keys.map fun k => q.util (decodeKey r h S k)⟩
+
+/-- Read a tabulated valuation back. -/
+def view (t : TVal r) : QVal (r.compile h).toFinBayesNet :=
+  ⟨t.scope, t.uvars, fun x => t.probT.getD (t.keys.idxOf (keyOf r h t.vars x)) 0,
+    fun x => t.utilT.getD (t.keys.idxOf (keyOf r h t.vars x)) 0⟩
+
+theorem decodeKey_keyOf (S : List (Fin r.nv)) (x : (r.compile h).Assignment) :
+    ∀ v ∈ S, decodeKey r h S (keyOf r h S x) v = x v := by
+  intro v hv
+  have hi : S.idxOf v < S.length := List.idxOf_lt_length_of_mem hv
+  have hk : (keyOf r h S x).getD (S.idxOf v) 0 = (x v).val := by
+    have hlen : S.idxOf v < (keyOf r h S x).length := by simpa [keyOf] using hi
+    rw [getD_of_lt hlen]
+    simp only [keyOf, List.getElem_map]
+    exact congrArg (fun w => (x w).val) (List.getElem_idxOf hi)
+  unfold decodeKey
+  rw [dif_pos (by rw [hk]; exact (x v).isLt)]
+  exact Fin.ext hk
+
+theorem keyOf_mem (S : List (Fin r.nv)) (x : (r.compile h).Assignment) :
+    keyOf r h S x ∈ lexCoords (S.map r.stateCount) := by
+  rw [mem_lexCoords]
+  unfold keyOf
+  rw [List.forall₂_map_left_iff, List.forall₂_map_right_iff, List.forall₂_same]
+  intro v _
+  exact (x v).isLt
+
+theorem tab_read {q : QVal (r.compile h).toFinBayesNet} (f : (r.compile h).Assignment → ℚ)
+    (hf : DepQ q.scope f) (x : (r.compile h).Assignment) :
+    ((lexCoords ((finsetList q.scope).map r.stateCount)).map
+        fun k => f (decodeKey r h (finsetList q.scope) k)).getD
+      ((lexCoords ((finsetList q.scope).map r.stateCount)).idxOf
+        (keyOf r h (finsetList q.scope) x)) 0 = f x := by
+  have hmem := keyOf_mem r h (finsetList q.scope) x
+  have hlt := List.idxOf_lt_length_of_mem hmem
+  rw [getD_of_lt (by simpa using hlt), List.getElem_map, List.getElem_idxOf]
+  apply hf
+  intro w hw
+  exact decodeKey_keyOf r h _ x w (mem_finsetList.2 hw)
+
+/-- **Reading a tabulation back gives the tabulated valuation**, when its functions read only
+its scope. -/
+theorem view_tab (q : QVal (r.compile h).toFinBayesNet) (hp : DepQ q.scope q.prob)
+    (hu : DepQ q.scope q.util) : view r h (tab r h q) = q := by
+  cases q with
+  | mk scope uvars prob util =>
+    simp only [view, tab, QVal.mk.injEq, true_and]
+    exact ⟨funext fun x => tab_read r h prob hp x, funext fun x => tab_read r h util hu x⟩
+```
+
+## The run on tables
+
+```lean
+/-- The bucket of `a`: the tables whose scope contains `a`. -/
+def bucketT (a : Fin r.nv) (ts : List (TVal r)) : List (TVal r) :=
+  ts.filter fun t => decide (a ∈ t.scope)
+
+def outsideT (a : Fin r.nv) (ts : List (TVal r)) : List (TVal r) :=
+  ts.filter fun t => decide (a ∉ t.scope)
+
+/-- The combined bucket of `a`. -/
+def bucketQ (a : Fin r.nv) (ts : List (TVal r)) : QVal (r.compile h).toFinBayesNet :=
+  qcollect ((bucketT r a ts).map (view r h))
+
+def chanceStepT (a : Fin r.nv) (ts : List (TVal r)) : List (TVal r) :=
+  tab r h (qsumOut a (bucketQ r h a ts)) :: outsideT r a ts
+
+def decisionStepT (a : Fin r.nv) (ts : List (TVal r)) : List (TVal r) :=
+  tab r h (qmaxOut a (bucketQ r h a ts)) :: outsideT r a ts
+
+/-- **The run on tables.** -/
+def runT : {R : Finset (Fin r.nv)} → DVE.Plan (r.compile h) R → List (TVal r) → List (TVal r)
+  | _, .done, ts => ts
+  | _, .chance v _ _ next, ts => runT next (chanceStepT r h v ts)
+  | _, .decision d _ _ next, ts => runT next (decisionStepT r h (r.decisions d).action ts)
+
+/-- **The representative choice of the run**: at the step that sums `v`, keep the utility
+potential exactly when `v` is not one of its variables (Julia's `sum_out`). -/
+def keepOfT : {R : Finset (Fin r.nv)} → DVE.Plan (r.compile h) R → List (TVal r) →
+    Fin r.nv → Bool
+  | _, .done, _ => fun _ => false
+  | _, .chance v _ _ next, ts =>
+    Function.update (keepOfT next (chanceStepT r h v ts)) v
+      (decide (v ∉ (bucketQ r h v ts).uvars))
+  | _, .decision d _ _ next, ts => keepOfT next (decisionStepT r h (r.decisions d).action ts)
+
+/-- **The score row the run maximizes for `d`**: the bucket utility when `d` is eliminated. -/
+def scoreT : {R : Finset (Fin r.nv)} → DVE.Plan (r.compile h) R → List (TVal r) →
+    (d : Fin r.nd) → (r.compile h).Assignment →
+      Fin (r.stateCount (r.decisions d).action) → ℚ
+  | _, .done, _, _ => fun _ _ => 0
+  | _, .chance v _ _ next, ts, d => scoreT next (chanceStepT r h v ts) d
+  | _, .decision d' _ _ next, ts, d =>
+    if d' = d then fun x b =>
+      (bucketQ r h (r.decisions d).action ts).util
+        (Function.update x (r.decisions d).action b)
+    else scoreT next (decisionStepT r h (r.decisions d').action ts) d
+
+/-- A fixed assignment: state `0` everywhere. -/
+def zeroAssignment : (r.compile h).Assignment := fun v => ⟨0, h.nonempty_states v⟩
+
+/-- **The value of the run**: the utility of the final valuations. -/
+def valueT {R : Finset (Fin r.nv)} (plan : DVE.Plan (r.compile h) R) (ts : List (TVal r)) : ℚ :=
+  (qcollect ((runT r h plan ts).map (view r h))).util (zeroAssignment r h)
+```
+
+## The plan of an elimination order
+
+```lean
+/-- **The plan of an elimination order**: each variable in turn, a decision's action exactly when
+the remaining variables are its information set and the action. `none` if the order is not such
+a plan. -/
+def planOf : List (Fin r.nv) → (R : Finset (Fin r.nv)) → Option (DVE.Plan (r.compile h) R)
+  | [], R => if hR : R = ∅ then some (hR ▸ DVE.Plan.done) else none
+  | v :: vs, R =>
+    if hv : v ∈ R then
+      match hd : (List.finRange r.nd).find? (fun d => decide ((r.decisions d).action = v)) with
+      | some d =>
+        if hi : R.erase (r.decisions d).action = (r.compile h).info d then
+          (planOf vs (R.erase (r.decisions d).action)).map fun next =>
+            DVE.Plan.decision (id := r.compile h) d
+              (by
+                have hdv : (r.decisions d).action = v := by
+                  simpa using List.find?_some hd
+                change (r.decisions d).action ∈ R
+                rw [hdv]
+                exact hv) hi next
+        else none
+      | none =>
+        (planOf vs (R.erase v)).map fun next =>
+          DVE.Plan.chance (id := r.compile h) v hv
+            (fun d hdv => by
+              have := List.find?_eq_none.1 hd d (List.mem_finRange d)
+              simp only [decide_eq_true_eq] at this
+              exact this hdv) next
+    else none
+
+/-- Zero-based variable indices to `Fin`, if all are in range. -/
+def toFinList : List Nat → Option (List (Fin r.nv))
+  | [] => some []
+  | v :: vs => if hv : v < r.nv then (toFinList vs).map (⟨v, hv⟩ :: ·) else none
+```
+
+## Simulation
+
+```lean
+/-- **The tables simulate the real valuations**, up to their order. -/
+def Sim (ts : List (TVal r)) (vs : List (DVE.Valuation (r.compile h).toFinBayesNet)) : Prop :=
+  (∃ ws, ws.Perm vs ∧ List.Forall₂ (fun t v => Rel (view r h t) v) ts ws) ∧
+    ∀ t ∈ ts, UDep (view r h t)
+
+theorem Sim.bucket {ts : List (TVal r)} {vs : List (DVE.Valuation (r.compile h).toFinBayesNet)}
+    (hs : Sim r h ts vs) (a : Fin r.nv) :
+    Rel (bucketQ r h a ts) (DVE.Valuation.collect (DVE.Valuation.bucket a vs)) ∧
+      UDep (bucketQ r h a ts) := by
+  obtain ⟨⟨ws, hperm, hf⟩, hu⟩ := hs
+  have hfB : List.Forall₂ (fun t v => Rel (view r h t) v) (bucketT r a ts)
+      (DVE.Valuation.bucket a ws) :=
+    forall₂_filter hf fun t v hr => by
+      change decide (a ∈ (view r h t).scope) = _
+      rw [hr.1]
+  have hcp : DVE.Valuation.collect (DVE.Valuation.bucket a ws) =
+      DVE.Valuation.collect (DVE.Valuation.bucket a vs) :=
+    collect_perm (hperm.filter _)
+  refine ⟨?_, ?_⟩
+  · rw [← hcp]
+    exact rel_collect (List.forall₂_map_left_iff.2 hfB)
+  · apply udep_collect
+    intro q hq
+    obtain ⟨t, ht, rfl⟩ := List.mem_map.1 hq
+    exact hu t (List.mem_of_mem_filter ht)
+
+theorem Sim.outside {ts : List (TVal r)} {vs : List (DVE.Valuation (r.compile h).toFinBayesNet)}
+    (hs : Sim r h ts vs) (a : Fin r.nv) :
+    ∃ ws, ws.Perm (DVE.Valuation.outside a vs) ∧
+      List.Forall₂ (fun t v => Rel (view r h t) v) (outsideT r a ts) ws := by
+  obtain ⟨⟨ws, hperm, hf⟩, -⟩ := hs
+  refine ⟨DVE.Valuation.outside a ws, hperm.filter _, forall₂_filter hf fun t v hr => ?_⟩
+  change decide (a ∉ (view r h t).scope) = _
+  rw [hr.1]
+
+theorem Sim.chance {ts : List (TVal r)} {vs : List (DVE.Valuation (r.compile h).toFinBayesNet)}
+    (hs : Sim r h ts vs) (a : Fin r.nv) (k : Bool) (hk : k = decide (a ∉ (bucketQ r h a ts).uvars)) :
+    Sim r h (chanceStepT r h a ts) (DVE.Valuation.chanceStepKeep k a vs) := by
+  obtain ⟨hrel, hud⟩ := hs.bucket r h a
+  have hrs := rel_sumOut hrel hud a
+  rw [← hk] at hrs
+  have hview := view_tab r h _ hrs.depProb hrs.depUtil
+  obtain ⟨ws, hperm, hf⟩ := hs.outside r h a
+  refine ⟨⟨_ :: ws, List.Perm.cons _ hperm, List.Forall₂.cons (by rw [hview]; exact hrs) hf⟩, ?_⟩
+  intro t ht
+  rcases List.mem_cons.1 ht with rfl | ht
+  · rw [hview]
+    exact udep_sumOut hud a hrs
+  · exact hs.2 t (List.mem_of_mem_filter ht)
+
+theorem Sim.decision {ts : List (TVal r)} {vs : List (DVE.Valuation (r.compile h).toFinBayesNet)}
+    (hs : Sim r h ts vs) (a : Fin r.nv) :
+    Sim r h (decisionStepT r h a ts) (DVE.Valuation.decisionStep a vs) := by
+  obtain ⟨hrel, hud⟩ := hs.bucket r h a
+  have hrs := rel_maxOut hrel a
+  have hview := view_tab r h _ hrs.depProb hrs.depUtil
+  obtain ⟨ws, hperm, hf⟩ := hs.outside r h a
+  refine ⟨⟨_ :: ws, List.Perm.cons _ hperm, List.Forall₂.cons (by rw [hview]; exact hrs) hf⟩, ?_⟩
+  intro t ht
+  rcases List.mem_cons.1 ht with rfl | ht
+  · rw [hview]
+    exact udep_maxOut hud a
+  · exact hs.2 t (List.mem_of_mem_filter ht)
+
+/-- **The simulation theorem.** If the tables simulate the real valuations and `keep` is the
+run's representative choice on the remaining variables, then after the plan they still do, and
+every decision's score row is the rational one read in `ℝ`. -/
+theorem sim_runRep {R : Finset (r.compile h).V} (plan : DVE.Plan (r.compile h) R)
+    (s : DVE.State (r.compile h) R) (ts : List (TVal r)) (keep : Fin r.nv → Bool)
+    (hs : Sim r h ts s.valuations) (hk : ∀ v ∈ R, keep v = keepOfT r h plan ts v) :
+    Sim r h (runT r h plan ts) (DVE.runRepState keep plan s).valuations ∧
+      ∀ (d : Fin r.nd) x b, DVE.decisionScoreRep keep plan s d x b =
+        (scoreT r h plan ts d x b : ℝ) := by
+  induction plan generalizing ts with
+  | done => exact ⟨hs, fun _ _ _ => by simp [DVE.decisionScoreRep, scoreT]⟩
+  | @chance R v hv hc next ih =>
+    have hkv : keep v = decide (v ∉ (bucketQ r h v ts).uvars) := by
+      rw [hk v hv]
+      simp only [keepOfT, Function.update_self]
+    have hs' := hs.chance r h v (keep v) hkv
+    have hk' : ∀ w ∈ R.erase v, keep w = keepOfT r h next (chanceStepT r h v ts) w := by
+      intro w hw
+      rw [hk w (Finset.mem_of_mem_erase hw)]
+      simp only [keepOfT]
+      exact Function.update_of_ne (Finset.ne_of_mem_erase hw) _ _
+    refine ih (s.chanceKeep keep v) (chanceStepT r h v ts) ?_ ?_
+    · exact hs'
+    · exact hk'
+  | @decision R d' hd hi next ih =>
+    have hs' := hs.decision r h (r.decisions d').action
+    have hk' : ∀ w ∈ R.erase ((r.compile h).action d'),
+        keep w = keepOfT r h next (decisionStepT r h (r.decisions d').action ts) w := by
+      intro w hw
+      rw [hk w (Finset.mem_of_mem_erase hw)]
+      rfl
+    obtain ⟨hrun, hscore⟩ := ih (s.decision d') (decisionStepT r h (r.decisions d').action ts)
+      hs' hk'
+    refine ⟨hrun, fun d x b => ?_⟩
+    simp only [DVE.decisionScoreRep, scoreT]
+    by_cases hdd : d' = d
+    · subst hdd
+      rw [if_pos rfl, if_pos rfl]
+      exact (hs.bucket r h _).1.2.2 _
+    · rw [if_neg hdd, if_neg hdd]
+      exact hscore d x b
+```
+
+## The certificate's run
+
+```lean
+variable (c : Certificate)
+
+/-- The certificate's kernel over `ℚ`. -/
+def certKernelQ (m : Fin r.nm) (x : (r.compile h).Assignment)
+    (a : Fin (r.stateCount (r.mechanisms m).target)) : ℚ :=
+  match c.mechanisms[m.val]? with
+  | some e => cellValue e.cpt (coordsOf r h x (e.parents.map Slot.var) ++ [a.val])
+  | none => 0
+
+/-- The certificate's utilities over `ℚ`. -/
+def certUtilityQ (j : Fin r.nu) (x : (r.compile h).Assignment) : ℚ :=
+  match c.utilities[j.val]? with
+  | some e => cellValue e.table (coordsOf r h x (e.inputs.map Slot.var))
+  | none => 0
+
+theorem certKernel_eq_cast (m : Fin r.nm) (x : (r.compile h).Assignment)
+    (a : Fin (r.stateCount (r.mechanisms m).target)) :
+    certKernel r h c m x a = (certKernelQ r h c m x a : ℝ) := by
+  unfold certKernel certKernelQ
+  cases c.mechanisms[m.val]? with
+  | none => simp
+  | some e => simp
+
+theorem certUtility_eq_cast (j : Fin r.nu) (x : (r.compile h).Assignment) :
+    certUtility r h c j x = (certUtilityQ r h c j x : ℝ) := by
+  unfold certUtility certUtilityQ
+  cases c.utilities[j.val]? with
+  | none => simp
+  | some e => simp
+
+/-- The initial valuation of mechanism `m`: `(κ_m, 0)`. -/
+def chanceQ (m : Fin r.nm) : QVal (r.compile h).toFinBayesNet :=
+  ⟨insert ((r.compile h).target m) ((r.compile h).parents m), ∅,
+    fun x => certKernelQ r h c m x (x ((r.compile h).target m)), fun _ => 0⟩
+
+/-- The initial valuation of utility `j`: `(1, u_j)`. -/
+def utilityQ (j : Fin r.nu) : QVal (r.compile h).toFinBayesNet :=
+  ⟨(r.compile h).uscope j, (r.compile h).uscope j, fun _ => 1, certUtilityQ r h c j⟩
+
+/-- **The initial tables**: the mechanisms, then the utilities, in part order. -/
+def initT : List (TVal r) :=
+  (List.finRange r.nm).map (fun m => tab r h (chanceQ r h c m)) ++
+    (List.finRange r.nu).map (fun j => tab r h (utilityQ r h c j))
+
+theorem finRange_perm_toList (n : Nat) : (List.finRange n).Perm (Finset.univ : Finset (Fin n)).toList :=
+  (List.perm_ext_iff_of_nodup (List.nodup_finRange n) (Finset.nodup_toList _)).2 fun a => by simp
+
+theorem sim_initial (hm : Matches r c) (hn : Nonneg c) :
+    Sim r h (initT r h c) (DVE.initial (certKernel r h c) (certKernel_local hm h)
+      (certKernel_nonneg hn h) (certUtility r h c) (certUtility_local hm h)).valuations := by
+  have hrc : ∀ m, Rel (chanceQ r h c m) (DVE.chanceValuation (certKernel r h c)
+      (certKernel_local hm h) (certKernel_nonneg hn h) m) := fun m =>
+    ⟨rfl, fun x => certKernel_eq_cast r h c m x _, fun x => by simp [chanceQ, DVE.chanceValuation]⟩
+  have hru : ∀ j, Rel (utilityQ r h c j) (DVE.utilityValuation (certUtility r h c)
+      (certUtility_local hm h) j) := fun j =>
+    ⟨rfl, fun x => by simp [utilityQ, DVE.utilityValuation], fun x => certUtility_eq_cast r h c j x⟩
+  refine ⟨⟨(List.finRange r.nm).map (DVE.chanceValuation (certKernel r h c) (certKernel_local hm h)
+      (certKernel_nonneg hn h)) ++
+    (List.finRange r.nu).map (DVE.utilityValuation (certUtility r h c) (certUtility_local hm h)),
+    List.Perm.append ((finRange_perm_toList r.nm).map _) ((finRange_perm_toList r.nu).map _),
+    ?_⟩, ?_⟩
+  · refine List.rel_append ?_ ?_
+    · rw [List.forall₂_map_left_iff, List.forall₂_map_right_iff, List.forall₂_same]
+      intro m _
+      rw [view_tab r h _ (hrc m).depProb (hrc m).depUtil]
+      exact hrc m
+    · rw [List.forall₂_map_left_iff, List.forall₂_map_right_iff, List.forall₂_same]
+      intro j _
+      rw [view_tab r h _ (hru j).depProb (hru j).depUtil]
+      exact hru j
+  · intro t ht
+    rcases List.mem_append.1 ht with ht | ht
+    · obtain ⟨m, -, rfl⟩ := List.mem_map.1 ht
+      rw [view_tab r h _ (hrc m).depProb (hrc m).depUtil]
+      exact fun _ _ _ => rfl
+    · obtain ⟨j, -, rfl⟩ := List.mem_map.1 ht
+      rw [view_tab r h _ (hru j).depProb (hru j).depUtil]
+      exact (hru j).depUtil
+
+/-- **The exact run is computed.** For a certificate that matches the checked diagram and has
+nonnegative cells, and for any plan, the representative run with `keep := keepOfT plan` (Julia's
+`sum_out` branch) and any selector has the value `valueT` and the score rows `scoreT`, read in
+`ℝ`. -/
+theorem exactRun_spec (hm : Matches r c) (hn : Nonneg c) (sel : DVE.Selector (r.compile h))
+    (plan : DVE.Plan (r.compile h) Finset.univ) :
+    (DVE.solveRepPlanWith sel (keepOfT r h plan (initT r h c)) (certKernel r h c)
+        (certKernel_local hm h) (certKernel_nonneg hn h) (certUtility r h c)
+        (certUtility_local hm h) plan).value = (valueT r h plan (initT r h c) : ℝ) ∧
+      ∀ (d : Fin r.nd) x b, DVE.solveRepPlanScore (keepOfT r h plan (initT r h c))
+          (certKernel r h c) (certKernel_local hm h) (certKernel_nonneg hn h)
+          (certUtility r h c) (certUtility_local hm h) plan d x b =
+        (scoreT r h plan (initT r h c) d x b : ℝ) := by
+  obtain ⟨hsim, hscore⟩ := sim_runRep r h plan _ (initT r h c) (keepOfT r h plan (initT r h c))
+    (sim_initial r h c hm hn) (fun _ _ => rfl)
+  refine ⟨?_, hscore⟩
+  unfold DVE.solveRepPlanWith valueT
+  simp only
+  rw [DVE.runRepWith_state]
+  obtain ⟨⟨ws, hperm, hf⟩, -⟩ := hsim
+  have hrel := rel_collect (List.forall₂_map_left_iff.2 hf)
+  rw [collect_perm hperm] at hrel
+  rw [← hrel.2.2]
+  apply DVE.Valuation.util_local
+  intro w hw
+  have := (DVE.runRepState (keepOfT r h plan (initT r h c)) plan
+    (DVE.initial (certKernel r h c) (certKernel_local hm h) (certKernel_nonneg hn h)
+      (certUtility r h c) (certUtility_local hm h))).supported hw
+  simp at this
+
+end InfluenceDiagramsProofs.DVECertificate
+```
+
+
+<!-- InfluenceDiagramsProofs/Finite/DVE/SolutionCheck.lean -->
+
+# Checking Julia's recorded solution against the exact run
+
+```lean
+import InfluenceDiagramsProofs.Finite.DVE.SolutionRun
+```
+
+A version-2 certificate records the policy tables, scores and value of one Julia DVE run
+(`Finite/DVE/SolutionJson.lean`). This module compares them with the exact run of
+`Finite/DVE/SolutionRun.lean` on the certificate's data, the run `certificate_tables` speaks about,
+on Julia's own elimination order (`solutionPlan`), with Julia's representative choice
+(`keepOfT`) and the first-label selector `r.selector`.
+
+**The comparison** reads entry `e` of the policy of decision `d` at the assignment of its
+coordinates (`entryAssignment`); `rowScore` is the exact run's score row there (`scoreT` through
+`bucketAt`), and `entryIndex` the recorded action's position among the action's states.
+
+* `EntryAction f i`: `i` maximizes `f` and is the least maximizer (the first-label rule);
+  `EntryScore f i q`: the score at `i` is `q`; `EntryWithin f i τ`: `f b ≤ f i + τ` for every `b`.
+* **Exact runs** (`arithmetic = "exact_rational"`): `solutionMatches` (decidable, `Bool`) holds when
+  there is no evidence row, the run read the certificate's own numbers (`DataConsistent`: data `q`
+  for `rational_exact`, `f64` for `binary64_exact`), Julia's order is a plan, every recorded action
+  is the least-position maximizer of the exact score row, every recorded score is that row's
+  maximum exactly, and the recorded value is the exact value.
+* **Binary64 runs**: `solutionWithin τ τv` holds when every recorded action is within `τ` of its
+  exact row maximum and the recorded value within `τv` of the exact value; `actionsAgree` when every
+  recorded action is exactly the exact run's.
+
+**Theorems.**
+
+* `recorded_eq_run`: if the recorded actions agree with the exact run (`actionsAgree`), Julia's
+  recorded strategy `recordedStrategy` (deterministic, reading each recorded table at the
+  information coordinates) **is** the exact run's strategy, for the representative `keepOfT` and
+  the plan of Julia's order.
+* `recorded_solution_optimal` (the headline for exact runs): if `solutionMatches` holds, the
+  recorded tables are the run's, on every information row the recorded action is the
+  least-position maximizer of the run's own score, and the recorded value is the run's value;
+  if moreover every CPT row sums to exactly one, the recorded strategy is optimal and the recorded
+  value is the optimum (`optimalValue`).
+* `recorded_solution_approx_optimal`: under `solutionMatches` and `certificateEpsilon c < 1`, the
+  recorded strategy and value carry the bounds of `certificate_approx_optimal`: within `2 e` and
+  `e` of the optimum of the row-normalised model, `e = approxError ε n Umax`.
+* `recorded_binary64_approx_optimal` (binary64 runs): under `solutionWithin τ τv`, every recorded
+  action is within `τ` of the maximum of the run's score row on every information row, and the
+  recorded value is within `τv + e` of the optimum of the row-normalised model; if moreover
+  `actionsAgree`, the recorded strategy is the run's and is within `2 e` of that optimum.
+
+**Not proved.** That a binary64 run whose actions differ from the exact ones at near-ties (each
+within `τ` of its row maximum) loses at most a function of `τ` in expected utility: the loss
+bound needs a step-by-step invariant through the driver that is not formalized, so for such a
+run only the per-row `τ` statement and the value bound are theorems. Evidence is not modelled:
+the checks require that the certificate has no evidence row. Trusted: `Lean.Json.parse`,
+Julia's exporter and its Float64 run, which is compared, not proved.
+
+```lean
+set_option autoImplicit false
+
+namespace InfluenceDiagramsProofs.DVECertificate
+
+open BayesianNetworksProofs BayesianNetworksProofs.FinBayesNet FinInfluenceDiagram
+open BayesianNetworksProofs.Raw InfluenceDiagramsProofs.Records Spec
+
+variable (r : Diagram) (h : r.Valid)
+```
+
+## The bucket of a decision
+
+```lean
+/-- The bucket of `d`'s action when the plan eliminates it. -/
+def bucketAt : {R : Finset (Fin r.nv)} → DVE.Plan (r.compile h) R → List (TVal r) → Fin r.nd →
+    Option (List (TVal r))
+  | _, .done, _, _ => none
+  | _, .chance v _ _ next, ts, d => bucketAt next (chanceStepT r h v ts) d
+  | _, .decision d' _ _ next, ts, d =>
+    if d' = d then some (bucketT r (r.decisions d).action ts)
+    else bucketAt next (decisionStepT r h (r.decisions d').action ts) d
+
+theorem scoreT_of_bucketAt {R : Finset (r.compile h).V} (plan : DVE.Plan (r.compile h) R)
+    (ts : List (TVal r)) (d : Fin r.nd) (B : List (TVal r)) (hB : bucketAt r h plan ts d = some B)
+    (x : (r.compile h).Assignment) (b : Fin (r.stateCount (r.decisions d).action)) :
+    scoreT r h plan ts d x b =
+      (qcollect (B.map (view r h))).util (Function.update x (r.decisions d).action b) := by
+  induction plan generalizing ts with
+  | done => simp [bucketAt] at hB
+  | @chance R v hv hc next ih => exact ih _ hB
+  | @decision R d' hd hi next ih =>
+    simp only [bucketAt] at hB
+    simp only [scoreT]
+    by_cases hdd : d' = d
+    · subst hdd
+      rw [if_pos rfl] at hB ⊢
+      cases hB
+      rfl
+    · rw [if_neg hdd] at hB ⊢
+      exact ih _ hB
+```
+
+## Entries
+
+```lean
+/-- The assignment of an entry: the coordinates `coords` along `axes`, state `0` elsewhere. -/
+def entryAssignment (axes coords : List Nat) : (r.compile h).Assignment := fun v =>
+  if hk : coords.getD (axes.idxOf v.val) 0 < r.stateCount v then ⟨_, hk⟩ else ⟨0, h.nonempty_states v⟩
+
+/-- The recorded action's position among the action variable's states (its zero-based
+`state_position`). -/
+def entryIndex (c : Certificate) (p : PolicyRecord) (e : PolicyEntry) : Nat :=
+  (stateIds c p.action).idxOf e.action
+
+/-- The exact run's score row at entry `e` of the policy of `d`, from the bucket `B`. -/
+def rowScore (B : List (TVal r)) (d : Fin r.nd) (p : PolicyRecord) (e : PolicyEntry)
+    (b : Fin (r.stateCount (r.decisions d).action)) : ℚ :=
+  (qcollect (B.map (view r h))).util
+    (Function.update (entryAssignment r h p.axes e.coords) (r.decisions d).action b)
+
+/-- `i` is the least maximizer of `f`. -/
+def EntryAction {n : Nat} (f : Fin n → ℚ) (i : Nat) : Prop :=
+  ∃ hi : i < n, (∀ b, f b ≤ f ⟨i, hi⟩) ∧ ∀ b : Fin n, (∀ c, f c ≤ f b) → i ≤ b.val
+
+/-- The score at `i` is `q`. -/
+def EntryScore {n : Nat} (f : Fin n → ℚ) (i : Nat) (q : ℚ) : Prop :=
+  ∃ hi : i < n, f ⟨i, hi⟩ = q
+
+/-- `i` is within `τ` of the maximum of `f`. -/
+def EntryWithin {n : Nat} (f : Fin n → ℚ) (i : Nat) (τ : ℚ) : Prop :=
+  ∃ hi : i < n, ∀ b, f b ≤ f ⟨i, hi⟩ + τ
+
+instance {n : Nat} (f : Fin n → ℚ) (i : Nat) : Decidable (EntryAction f i) := by
+  unfold EntryAction; infer_instance
+
+instance {n : Nat} (f : Fin n → ℚ) (i : Nat) (q : ℚ) : Decidable (EntryScore f i q) := by
+  unfold EntryScore; infer_instance
+
+instance {n : Nat} (f : Fin n → ℚ) (i : Nat) (τ : ℚ) : Decidable (EntryWithin f i τ) := by
+  unfold EntryWithin; infer_instance
+
+variable (c : Certificate) (s : Solution)
+
+/-- Every entry of every decision's policy satisfies `P` against the exact score row. -/
+def AllEntries {R : Finset (Fin r.nv)} (plan : DVE.Plan (r.compile h) R)
+    (P : (d : Fin r.nd) → PolicyRecord → PolicyEntry →
+      (Fin (r.stateCount (r.decisions d).action) → ℚ) → Prop) : Prop :=
+  ∀ d : Fin r.nd, OptHolds (fun p => OptHolds (fun B => ∀ e ∈ p.entries, P d p e (rowScore r h B d p e))
+    (bucketAt r h plan (initT r h c) d)) s.policies[d.val]?
+
+instance {R : Finset (Fin r.nv)} (plan : DVE.Plan (r.compile h) R)
+    (P : (d : Fin r.nd) → PolicyRecord → PolicyEntry →
+      (Fin (r.stateCount (r.decisions d).action) → ℚ) → Prop)
+    [∀ d p e f, Decidable (P d p e f)] : Decidable (AllEntries r h c s plan P) := by
+  unfold AllEntries; infer_instance
+
+/-- The plan of Julia's recorded elimination order. -/
+def solutionPlan : Option (DVE.Plan (r.compile h) Finset.univ) :=
+  (toFinList r s.eliminationOrder).bind fun o => planOf r h o Finset.univ
+
+/-- The run read the certificate's own numbers: the rationals of a `rational_exact` certificate,
+the binary64 words of a `binary64_exact` one. -/
+def DataConsistent : Prop :=
+  (s.data = .q ∧ c.numeric.mode = "rational_exact") ∨
+    (s.data = .f64 ∧ c.numeric.mode = "binary64_exact")
+
+instance : Decidable (DataConsistent c s) := by unfold DataConsistent; infer_instance
+
+/-- **Every recorded action is the exact run's** (least-position maximizer of its score row). -/
+def ActionsAgreeWith (plan : DVE.Plan (r.compile h) Finset.univ) : Prop :=
+  c.hard = [] ∧ AllEntries r h c s plan fun _ p e f => EntryAction f (entryIndex c p e)
+
+/-- **The exact comparison**, on a plan. -/
+def SolutionMatchesWith (plan : DVE.Plan (r.compile h) Finset.univ) : Prop :=
+  ActionsAgreeWith r h c s plan ∧ s.arithmetic = .exactRational ∧ DataConsistent c s ∧
+    AllEntries r h c s plan (fun _ p e f => EntryScore f (entryIndex c p e) e.score.toRat) ∧
+    s.value.toRat = valueT r h plan (initT r h c)
+
+/-- **The binary64 comparison**, on a plan, with tolerances `τ` (actions) and `τv` (value). -/
+def SolutionWithinWith (τ τv : ℚ) (plan : DVE.Plan (r.compile h) Finset.univ) : Prop :=
+  c.hard = [] ∧ AllEntries r h c s plan (fun _ p e f => EntryWithin f (entryIndex c p e) τ) ∧
+    |s.value.toRat - valueT r h plan (initT r h c)| ≤ τv
+
+instance (plan : DVE.Plan (r.compile h) Finset.univ) : Decidable (ActionsAgreeWith r h c s plan) := by
+  unfold ActionsAgreeWith; infer_instance
+
+instance (plan : DVE.Plan (r.compile h) Finset.univ) :
+    Decidable (SolutionMatchesWith r h c s plan) := by
+  unfold SolutionMatchesWith; infer_instance
+
+instance (τ τv : ℚ) (plan : DVE.Plan (r.compile h) Finset.univ) :
+    Decidable (SolutionWithinWith r h c s τ τv plan) := by
+  unfold SolutionWithinWith; infer_instance
+
+/-- **The checker for exact runs** (decidable). -/
+def solutionMatches : Bool :=
+  match solutionPlan r h s with
+  | some plan => decide (SolutionMatchesWith r h c s plan)
+  | none => false
+
+/-- Every recorded action is the exact run's. -/
+def actionsAgree : Bool :=
+  match solutionPlan r h s with
+  | some plan => decide (ActionsAgreeWith r h c s plan)
+  | none => false
+
+/-- **The checker for binary64 runs** (decidable), with tolerances `τ` and `τv`. -/
+def solutionWithin (τ τv : ℚ) : Bool :=
+  match solutionPlan r h s with
+  | some plan => decide (SolutionWithinWith r h c s τ τv plan)
+  | none => false
+
+theorem solutionMatches_spec (hsm : solutionMatches r h c s = true) :
+    ∃ plan, solutionPlan r h s = some plan ∧ SolutionMatchesWith r h c s plan := by
+  unfold solutionMatches at hsm
+  split at hsm
+  · rename_i plan hp
+    exact ⟨plan, hp, of_decide_eq_true hsm⟩
+  · cases hsm
+
+theorem actionsAgree_spec (hsm : actionsAgree r h c s = true) :
+    ∃ plan, solutionPlan r h s = some plan ∧ ActionsAgreeWith r h c s plan := by
+  unfold actionsAgree at hsm
+  split at hsm
+  · rename_i plan hp
+    exact ⟨plan, hp, of_decide_eq_true hsm⟩
+  · cases hsm
+
+theorem solutionWithin_spec {τ τv : ℚ} (hsm : solutionWithin r h c s τ τv = true) :
+    ∃ plan, solutionPlan r h s = some plan ∧ SolutionWithinWith r h c s τ τv plan := by
+  unfold solutionWithin at hsm
+  split at hsm
+  · rename_i plan hp
+    exact ⟨plan, hp, of_decide_eq_true hsm⟩
+  · cases hsm
+```
+
+## Julia's recorded strategy
+
+```lean
+/-- `x` on the information set of `d`, state `0` elsewhere. -/
+def infoProject (d : Fin r.nd) (x : (r.compile h).Assignment) : (r.compile h).Assignment :=
+  fun v => if v ∈ (r.compile h).info d then x v else ⟨0, h.nonempty_states v⟩
+
+/-- The recorded entry of `d` at the coordinates of `x`, and its action position. -/
+def recordedIndex (d : Fin r.nd) (x : (r.compile h).Assignment) : Option Nat :=
+  (s.policies[d.val]?).bind fun p =>
+    (p.entries.find? fun e => decide (e.coords = coordsOf r h x p.axes)).map (entryIndex c p)
+
+/-- The action Julia recorded for `d` on the information row of `x`. -/
+def recordedAction (d : Fin r.nd) (x : (r.compile h).Assignment) :
+    Fin (r.stateCount (r.decisions d).action) :=
+  match recordedIndex r h c s d (infoProject r h d x) with
+  | some i => if hi : i < r.stateCount (r.decisions d).action then ⟨i, hi⟩
+    else ⟨0, h.nonempty_states _⟩
+  | none => ⟨0, h.nonempty_states _⟩
+
+theorem infoProject_local (d : Fin r.nd) (x x' : (r.compile h).Assignment)
+    (hx : ∀ p ∈ (r.compile h).info d, x p = x' p) : infoProject r h d x = infoProject r h d x' := by
+  funext v
+  unfold infoProject
+  split_ifs with hv
+  · exact hx v hv
+  · rfl
+
+/-- **Julia's recorded strategy**: each decision deterministically reads its recorded table at
+the coordinates of its information variables. -/
+def recordedStrategy : Strategy (r.compile h) ℝ := fun d =>
+  Policy.ofFun (recordedAction r h c s d) fun x x' hx => by
+    unfold recordedAction
+    rw [infoProject_local r h d x x' hx]
+
+theorem recordedStrategy_deterministic : (recordedStrategy r h c s).Deterministic :=
+  fun _ => ⟨_, _, rfl⟩
+```
+
+## Information sets are the recorded axes
+
+```lean
+theorem certDim_lt {c : Certificate} (hm : Matches r c) (v : Fin r.nv) (x : (r.compile h).Assignment) :
+    (x v).val < certDim c v.val := by
+  rw [certDim_eq hm, dim, dif_pos v.isLt]
+  exact (x v).isLt
+
+/-- Every information variable of `d` is one of the recorded axes. -/
+theorem info_mem_axes {r : Diagram} (hf : r.FullValid) {c : Certificate} (hm : Matches r c)
+    (d : Fin r.nd) {axes : List Nat} (hax : infoVars c d.val = some axes) (v : Fin r.nv)
+    (hv : v ∈ (r.compile hf.valid).info d) : v.val ∈ axes := by
+  obtain ⟨f, hf1, rfl⟩ := Finset.mem_image.1 hv
+  have hfd : (r.information f).decision = d := (Finset.mem_filter.1 hf1).2
+  have hinfo := hm.information hf d
+  have hdec := hm.decisions d
+  unfold infoVars at hax
+  cases hc : c.decisions[d.val]? with
+  | none => rw [hc] at hax; cases hax
+  | some e =>
+    rw [hc] at hax hinfo hdec
+    simp only [Option.map_some, Option.some.injEq] at hax
+    subst hax
+    change DecisionOk r d e at hdec
+    have hlen := hdec.2.2.1
+    have hpos := hf.information_positions.1 f
+    have hcard : Fintype.card {f' : Fin r.nf // (r.information f').decision = (r.information f).decision} =
+        (Finset.univ.filter fun f' => (r.information f').decision = d).card := by
+      rw [Fintype.card_subtype, hfd]
+    have hj : (r.information f).position < e.information.length := by
+      rw [hlen, ← hcard]
+      exact hpos
+    have := hinfo _ hj f hfd rfl
+    rw [← this]
+    exact List.mem_map.2 ⟨_, List.getElem_mem hj, rfl⟩
+
+theorem entryAssignment_coordsOf (axes : List Nat) (x : (r.compile h).Assignment) (v : Fin r.nv)
+    (hv : v.val ∈ axes) : entryAssignment r h axes (coordsOf r h x axes) v = x v := by
+  have hi : axes.idxOf v.val < axes.length := List.idxOf_lt_length_of_mem hv
+  have hget : axes[axes.idxOf v.val] = v.val := List.getElem_idxOf hi
+  have hk : (coordsOf r h x axes).getD (axes.idxOf v.val) 0 = (x v).val := by
+    have hlen : axes.idxOf v.val < (coordsOf r h x axes).length := by simpa [coordsOf] using hi
+    rw [getD_of_lt hlen]
+    simp only [coordsOf, List.getElem_map]
+    have hlt : axes[axes.idxOf v.val] < r.nv := by rw [hget]; exact v.isLt
+    rw [dif_pos hlt]
+    have : (⟨axes[axes.idxOf v.val], hlt⟩ : Fin r.nv) = v := Fin.ext hget
+    rw [this]
+  unfold entryAssignment
+  rw [dif_pos (by rw [hk]; exact (x v).isLt)]
+  exact Fin.ext hk
+```
+
+## The run's tables at the recorded entries
+
+```lean
+section Run
+
+variable {r : Diagram} (hf : r.FullValid) {c : Certificate} (s : Solution)
+
+/-- The exact run on Julia's plan. -/
+noncomputable abbrev runOf (hm : Matches r c) (hn : Nonneg c)
+    (plan : DVE.Plan (r.compile hf.valid) Finset.univ) :=
+  DVE.solveRepPlanWith (r.selector hf.valid) (keepOfT r hf.valid plan (initT r hf.valid c))
+    (certKernel r hf.valid c) (certKernel_local hm hf.valid) (certKernel_nonneg hn hf.valid)
+    (certUtility r hf.valid c) (certUtility_local hm hf.valid) plan
+
+/-- The exact run's score rows on Julia's plan. -/
+noncomputable abbrev scoreOf (hm : Matches r c) (hn : Nonneg c)
+    (plan : DVE.Plan (r.compile hf.valid) Finset.univ) :=
+  DVE.solveRepPlanScore (keepOfT r hf.valid plan (initT r hf.valid c))
+    (certKernel r hf.valid c) (certKernel_local hm hf.valid) (certKernel_nonneg hn hf.valid)
+    (certUtility r hf.valid c) (certUtility_local hm hf.valid) plan
+
+/-- **At every information row, the recorded entry and the exact score row.** For every decision
+`d` and assignment `x`, the entry of `d`'s recorded table at the coordinates of `x` exists,
+`recordedIndex` reads it, and the run's score row at `x` is that entry's `rowScore`. -/
+theorem entry_of_row (hm : Matches r c) (hn : Nonneg c) (hs : s.WellFormed c)
+    (plan : DVE.Plan (r.compile hf.valid) Finset.univ) (d : Fin r.nd) (p : PolicyRecord)
+    (hp : s.policies[d.val]? = some p) (B : List (TVal r))
+    (hB : bucketAt r hf.valid plan (initT r hf.valid c) d = some B)
+    (x : (r.compile hf.valid).Assignment) :
+    ∃ e ∈ p.entries, recordedIndex r hf.valid c s d (infoProject r hf.valid d x) =
+        some (entryIndex c p e) ∧
+      ∀ b, scoreOf hf hm hn plan d x b = (rowScore r hf.valid B d p e b : ℝ) := by
+  have hd : d.val < s.policies.length := by
+    rw [hs.length, hm.decisions_length]
+    exact d.isLt
+  have hpk : s.policies[d.val] = p := by
+    rw [List.getElem?_eq_getElem hd, Option.some.injEq] at hp
+    exact hp
+  have hwf := hs.policies d.val hd
+  rw [hpk] at hwf
+  set x' := infoProject r hf.valid d x
+  have hmem : coordsOf r hf.valid x' p.axes ∈ p.entries.map PolicyEntry.coords := by
+    rw [hwf.coverage, mem_lexCoords, coordsOf, List.forall₂_map_left_iff,
+      List.forall₂_map_right_iff, List.forall₂_same]
+    intro v hv
+    have hlt : v < r.nv := by
+      have := hwf.axes.1 v hv
+      rwa [hm.vars_length] at this
+    rw [dif_pos hlt]
+    exact certDim_lt r hf.valid hm ⟨v, hlt⟩ x'
+  obtain ⟨e0, he0, he0c⟩ := List.mem_map.1 hmem
+  have hfind : (p.entries.find? fun e => decide (e.coords = coordsOf r hf.valid x' p.axes)).isSome := by
+    rw [List.find?_isSome]
+    exact ⟨e0, he0, by simpa using he0c⟩
+  obtain ⟨e, he⟩ := Option.isSome_iff_exists.1 hfind
+  have hemem : e ∈ p.entries := List.mem_of_find?_eq_some he
+  have hec : e.coords = coordsOf r hf.valid x' p.axes := by simpa using List.find?_some he
+  refine ⟨e, hemem, ?_, fun b => ?_⟩
+  · unfold recordedIndex
+    rw [hp, Option.bind_some, he, Option.map_some]
+  · -- the run's score row is local on the information set
+    have hinj := ((r.compile hf.valid).closed_iff.1 hf.closed).2.1
+    have hloc := DVE.decisionScoreRep_local (keepOfT r hf.valid plan (initT r hf.valid c)) hinj plan
+      (DVE.initial (certKernel r hf.valid c) (certKernel_local hm hf.valid)
+        (certKernel_nonneg hn hf.valid) (certUtility r hf.valid c) (certUtility_local hm hf.valid))
+      d (Finset.mem_univ _)
+    have hax : infoVars c d.val = some p.axes := hwf.axes.2
+    have hxy : DVE.decisionScoreRep (keepOfT r hf.valid plan (initT r hf.valid c)) plan
+        (DVE.initial (certKernel r hf.valid c) (certKernel_local hm hf.valid)
+          (certKernel_nonneg hn hf.valid) (certUtility r hf.valid c)
+          (certUtility_local hm hf.valid)) d x =
+        DVE.decisionScoreRep (keepOfT r hf.valid plan (initT r hf.valid c)) plan
+        (DVE.initial (certKernel r hf.valid c) (certKernel_local hm hf.valid)
+          (certKernel_nonneg hn hf.valid) (certUtility r hf.valid c)
+          (certUtility_local hm hf.valid)) d (entryAssignment r hf.valid p.axes e.coords) := by
+      apply hloc
+      intro v hv
+      rw [hec, entryAssignment_coordsOf r hf.valid p.axes x' v (info_mem_axes hf hm d hax v hv)]
+      change x v = if v ∈ (r.compile hf.valid).info d then x v else _
+      rw [if_pos hv]
+    change DVE.decisionScoreRep _ plan _ d x b = _
+    rw [hxy]
+    have := (exactRun_spec r hf.valid c hm hn (r.selector hf.valid) plan).2 d
+      (entryAssignment r hf.valid p.axes e.coords) b
+    unfold DVE.solveRepPlanScore at this
+    rw [this, scoreT_of_bucketAt r hf.valid plan _ d B hB]
+    rfl
+
+theorem policy_ext {id : FinInfluenceDiagram} {d : id.D} {p q : Policy id ℝ d}
+    (hk : p.kernel = q.kernel) : p = q := by
+  cases p
+  cases q
+  cases hk
+  rfl
+
+/-- **The recorded strategy is the exact run's**, when the recorded actions agree. -/
+theorem recorded_eq_run (hm : Matches r c) (hn : Nonneg c) (hs : s.WellFormed c)
+    (plan : DVE.Plan (r.compile hf.valid) Finset.univ)
+    (hagree : ActionsAgreeWith r hf.valid c s plan) :
+    recordedStrategy r hf.valid c s = (runOf hf hm hn plan).strategy := by
+  funext d
+  apply policy_ext
+  funext x a
+  obtain ⟨t, hkt, hmax, hleast⟩ := certificate_tables r hf c hm hn
+    (keepOfT r hf.valid plan (initT r hf.valid c)) plan d x
+  have hag := hagree.2 d
+  cases hp : s.policies[d.val]? with
+  | none => rw [hp] at hag; exact hag.elim
+  | some p =>
+    rw [hp] at hag
+    change OptHolds _ _ at hag
+    cases hB : bucketAt r hf.valid plan (initT r hf.valid c) d with
+    | none => rw [hB] at hag; exact hag.elim
+    | some B =>
+      rw [hB] at hag
+      change ∀ e ∈ p.entries, _ at hag
+      obtain ⟨e, he, hidx, hscore⟩ := entry_of_row hf s hm hn hs plan d p hp B hB x
+      simp only [scoreOf] at hscore
+      obtain ⟨hi, hfmax, hfleast⟩ := hag e he
+      have hrec : recordedAction r hf.valid c s d x = ⟨entryIndex c p e, hi⟩ := by
+        unfold recordedAction
+        rw [hidx]
+        simp only [dif_pos hi]
+      have hti : t = ⟨entryIndex c p e, hi⟩ := by
+        have h1 : t.val ≤ entryIndex c p e := by
+          have := hleast ⟨entryIndex c p e, hi⟩ fun b => by
+            rw [hscore, hscore]
+            exact_mod_cast hfmax b
+          rw [Records.Diagram.statePosition_eq, Records.Diagram.statePosition_eq] at this
+          exact this
+        have h2 : entryIndex c p e ≤ t.val := hfleast t fun b => by
+          have := hmax b
+          rw [hscore, hscore] at this
+          exact_mod_cast this
+        exact Fin.ext (le_antisymm h1 h2)
+      change (if a = recordedAction r hf.valid c s d x then (1 : ℝ) else 0) = _
+      rw [hkt a, hrec, hti]
+
+/-- The recorded action is within `τ` of the maximum of the run's score row, when the binary64
+comparison holds. -/
+theorem recorded_within (hm : Matches r c) (hn : Nonneg c) (hs : s.WellFormed c) {τ : ℚ}
+    (plan : DVE.Plan (r.compile hf.valid) Finset.univ)
+    (hw : AllEntries r hf.valid c s plan (fun _ p e f => EntryWithin f (entryIndex c p e) τ))
+    (d : Fin r.nd) (x : (r.compile hf.valid).Assignment) (b) :
+    scoreOf hf hm hn plan d x b ≤
+      scoreOf hf hm hn plan d x (recordedAction r hf.valid c s d x) + τ := by
+  have hag := hw d
+  cases hp : s.policies[d.val]? with
+  | none => rw [hp] at hag; exact hag.elim
+  | some p =>
+    rw [hp] at hag
+    change OptHolds _ _ at hag
+    cases hB : bucketAt r hf.valid plan (initT r hf.valid c) d with
+    | none => rw [hB] at hag; exact hag.elim
+    | some B =>
+      rw [hB] at hag
+      change ∀ e ∈ p.entries, _ at hag
+      obtain ⟨e, he, hidx, hscore⟩ := entry_of_row hf s hm hn hs plan d p hp B hB x
+      obtain ⟨hi, hfw⟩ := hag e he
+      have hrec : recordedAction r hf.valid c s d x = ⟨entryIndex c p e, hi⟩ := by
+        unfold recordedAction
+        rw [hidx]
+        simp only [dif_pos hi]
+      rw [hrec, hscore, hscore]
+      exact_mod_cast hfw b
+
+end Run
+```
+
+## The headline theorems
+
+```lean
+section Headline
+
+variable {r : Diagram} (h : r.FullValid) {c : Certificate} {s : Solution}
+
+/-- **Julia's recorded solution of an exact run is the exact run's, hence optimal.** If the
+certificate matches the checked diagram (`certificateMatches`), its cells are nonnegative, its
+solution decodes (`Solution.WellFormed`) and `solutionMatches` holds, then Julia's elimination
+order is a plan (`solutionPlan`) and, for that plan and the representative choice `keepOfT` (the
+branch of Julia's `sum_out`):
+
+* Julia's recorded strategy is the exact DVE run's strategy on the certificate's data, and the
+  recorded value is that run's value (exactly, as a rational);
+* on every information row the recorded action is the action of least `state_position` among the
+  maximizers of the run's own score (`certificate_tables`);
+* if every CPT row sums to exactly one (`ExactNormalised`), the recorded strategy is
+  deterministic and optimal and the recorded value is the optimum. -/
+theorem recorded_solution_optimal (hm : certificateMatches r h c) (hn : Nonneg c)
+    (hs : s.WellFormed c) (hsm : solutionMatches r h.valid c s = true) :
+    (∃ plan : DVE.Plan (r.compile h.valid) Finset.univ, solutionPlan r h.valid s = some plan ∧
+      let keep := keepOfT r h.valid plan (initT r h.valid c)
+      let sol := DVE.solveRepPlanWith (r.selector h.valid) keep (certKernel r h.valid c)
+        (certKernel_local hm h.valid) (certKernel_nonneg hn h.valid) (certUtility r h.valid c)
+        (certUtility_local hm h.valid) plan
+      recordedStrategy r h.valid c s = sol.strategy ∧ (s.value.toRat : ℝ) = sol.value ∧
+        ∀ (d : (r.compile h.valid).D) (x : (r.compile h.valid).Assignment),
+          (∀ b, DVE.solveRepPlanScore keep (certKernel r h.valid c) (certKernel_local hm h.valid)
+              (certKernel_nonneg hn h.valid) (certUtility r h.valid c)
+              (certUtility_local hm h.valid) plan d x b ≤
+            DVE.solveRepPlanScore keep (certKernel r h.valid c) (certKernel_local hm h.valid)
+              (certKernel_nonneg hn h.valid) (certUtility r h.valid c)
+              (certUtility_local hm h.valid) plan d x (recordedAction r h.valid c s d x)) ∧
+          ∀ b, (∀ c', DVE.solveRepPlanScore keep (certKernel r h.valid c)
+                (certKernel_local hm h.valid) (certKernel_nonneg hn h.valid)
+                (certUtility r h.valid c) (certUtility_local hm h.valid) plan d x c' ≤
+              DVE.solveRepPlanScore keep (certKernel r h.valid c) (certKernel_local hm h.valid)
+                (certKernel_nonneg hn h.valid) (certUtility r h.valid c)
+                (certUtility_local hm h.valid) plan d x b) →
+            r.statePosition h.valid _ (recordedAction r h.valid c s d x) ≤
+              r.statePosition h.valid _ b) ∧
+    (ExactNormalised r c →
+      (recordedStrategy r h.valid c s).Deterministic ∧
+        expectedUtility (certKernel r h.valid c) (recordedStrategy r h.valid c s)
+          (certUtility r h.valid c) = optimalValue (certKernel r h.valid c) (certUtility r h.valid c) ∧
+        (s.value.toRat : ℝ) = optimalValue (certKernel r h.valid c) (certUtility r h.valid c)) := by
+  obtain ⟨plan, hplan, hagree, -, -, -, hval⟩ := solutionMatches_spec r h.valid c s hsm
+  have hrec := recorded_eq_run h s hm hn hs plan hagree
+  have hv : (s.value.toRat : ℝ) = (runOf h hm hn plan).value := by
+    rw [(exactRun_spec r h.valid c hm hn (r.selector h.valid) plan).1, hval]
+  refine ⟨⟨plan, hplan, hrec, hv, fun d x => ?_⟩, fun hex => ?_⟩
+  · obtain ⟨t, hkt, hmax, hleast⟩ := certificate_tables r h c hm hn
+      (keepOfT r h.valid plan (initT r h.valid c)) plan d x
+    have hta : recordedAction r h.valid c s d x = t := by
+      have := congrFun (congrArg (fun σ : Strategy (r.compile h.valid) ℝ => (σ d).kernel x) hrec) t
+      simp only [recordedStrategy, Policy.ofFun_kernel] at this
+      rw [hkt t, if_pos rfl] at this
+      by_contra hne
+      rw [if_neg (Ne.symm hne)] at this
+      exact absurd this (by norm_num)
+    rw [hta]
+    exact ⟨hmax, hleast⟩
+  · have hspec := DVE.solveRepPlanWith_spec (r.selector h.valid)
+      (keepOfT r h.valid plan (initT r h.valid c)) (certKernel r h.valid c) h.closed h.idOrder
+      (certKernel_local hm h.valid) (certKernel_normalised hm hex h.valid)
+      (certKernel_nonneg hn h.valid) (certUtility r h.valid c) (certUtility_local hm h.valid) plan
+    refine ⟨recordedStrategy_deterministic r h.valid c s, ?_, ?_⟩
+    · rw [hrec, hspec.2.1, hspec.2.2]
+    · rw [hv, hspec.2.2]
+
+/-- **Near-optimality of Julia's recorded solution of an exact run**, for a certificate whose
+rows sum to one only up to `ε = certificateEpsilon c < 1`: the recorded strategy and value carry
+the bounds of `certificate_approx_optimal` against the row-normalised model `certNormKernel`, with
+`e = approxError ε n Umax`. -/
+theorem recorded_solution_approx_optimal (hm : certificateMatches r h c) (hn : Nonneg c)
+    (hs : s.WellFormed c) (hsm : solutionMatches r h.valid c s = true)
+    (hε : certificateEpsilon c < 1) :
+    let e : ℝ := approxError (certificateEpsilon c) (certChanceCount c) (certUmax c)
+    (recordedStrategy r h.valid c s).Deterministic ∧
+      (∀ τ : Strategy (r.compile h.valid) ℝ, τ.Nonneg →
+        expectedUtility (certNormKernel r h.valid c) τ (certUtility r h.valid c) ≤
+          expectedUtility (certNormKernel r h.valid c) (recordedStrategy r h.valid c s)
+            (certUtility r h.valid c) + 2 * e) ∧
+      optimalValue (certNormKernel r h.valid c) (certUtility r h.valid c) - 2 * e ≤
+        expectedUtility (certNormKernel r h.valid c) (recordedStrategy r h.valid c s)
+          (certUtility r h.valid c) ∧
+      expectedUtility (certNormKernel r h.valid c) (recordedStrategy r h.valid c s)
+          (certUtility r h.valid c) ≤
+        optimalValue (certNormKernel r h.valid c) (certUtility r h.valid c) ∧
+      |(s.value.toRat : ℝ) - optimalValue (certNormKernel r h.valid c) (certUtility r h.valid c)| ≤
+        e := by
+  intro e
+  obtain ⟨plan, -, hagree, -, -, -, hval⟩ := solutionMatches_spec r h.valid c s hsm
+  have hrec := recorded_eq_run h s hm hn hs plan hagree
+  have hv : (s.value.toRat : ℝ) = (runOf h hm hn plan).value := by
+    rw [(exactRun_spec r h.valid c hm hn (r.selector h.valid) plan).1, hval]
+  have ha := certificate_approx_optimal r h c hm hn hε (r.selector h.valid)
+    (keepOfT r h.valid plan (initT r h.valid c)) plan
+  rw [hrec, hv]
+  exact ha
+
+/-- **Julia's recorded solution of a binary64 run.** Under `solutionWithin τ τv` and
+`certificateEpsilon c < 1`, for the plan of Julia's order (`solutionPlan`) and the representative
+choice `keepOfT`:
+
+* on every information row, the recorded action is within `τ` of the maximum of the exact run's
+  score row;
+* the recorded value is within `τv + e` of the optimum of the row-normalised model;
+* if moreover the recorded actions agree with the exact run's (`actionsAgree`), the recorded
+  strategy is the exact run's and is within `2 e` of that optimum. -/
+theorem recorded_binary64_approx_optimal (hm : certificateMatches r h c) (hn : Nonneg c)
+    (hs : s.WellFormed c) {τ τv : ℚ} (hw : solutionWithin r h.valid c s τ τv = true)
+    (hε : certificateEpsilon c < 1) :
+    let e : ℝ := approxError (certificateEpsilon c) (certChanceCount c) (certUmax c)
+    (∃ plan : DVE.Plan (r.compile h.valid) Finset.univ, solutionPlan r h.valid s = some plan ∧
+      let keep := keepOfT r h.valid plan (initT r h.valid c)
+      ∀ (d : (r.compile h.valid).D) (x : (r.compile h.valid).Assignment) b,
+        DVE.solveRepPlanScore keep (certKernel r h.valid c) (certKernel_local hm h.valid)
+            (certKernel_nonneg hn h.valid) (certUtility r h.valid c) (certUtility_local hm h.valid)
+            plan d x b ≤
+          DVE.solveRepPlanScore keep (certKernel r h.valid c) (certKernel_local hm h.valid)
+            (certKernel_nonneg hn h.valid) (certUtility r h.valid c) (certUtility_local hm h.valid)
+            plan d x (recordedAction r h.valid c s d x) + τ) ∧
+      |(s.value.toRat : ℝ) - optimalValue (certNormKernel r h.valid c) (certUtility r h.valid c)| ≤
+        τv + e ∧
+      (actionsAgree r h.valid c s = true →
+        (recordedStrategy r h.valid c s).Deterministic ∧
+        (∀ τ' : Strategy (r.compile h.valid) ℝ, τ'.Nonneg →
+          expectedUtility (certNormKernel r h.valid c) τ' (certUtility r h.valid c) ≤
+            expectedUtility (certNormKernel r h.valid c) (recordedStrategy r h.valid c s)
+              (certUtility r h.valid c) + 2 * e) ∧
+        optimalValue (certNormKernel r h.valid c) (certUtility r h.valid c) - 2 * e ≤
+          expectedUtility (certNormKernel r h.valid c) (recordedStrategy r h.valid c s)
+            (certUtility r h.valid c)) := by
+  intro e
+  obtain ⟨plan, hplan, -, hwe, hval⟩ := solutionWithin_spec r h.valid c s hw
+  have ha := certificate_approx_optimal r h c hm hn hε (r.selector h.valid)
+    (keepOfT r h.valid plan (initT r h.valid c)) plan
+  refine ⟨⟨plan, hplan, fun d x b => recorded_within h s hm hn hs plan hwe d x b⟩, ?_,
+    fun hag => ?_⟩
+  · have hv := (exactRun_spec r h.valid c hm hn (r.selector h.valid) plan).1
+    have hval' : |(s.value.toRat : ℝ) - (valueT r h.valid plan (initT r h.valid c) : ℝ)| ≤ τv := by
+      exact_mod_cast hval
+    have hrun := ha.2.2.2.2
+    change |(runOf h hm hn plan).value - _| ≤ e at hrun
+    rw [hv] at hrun
+    calc |(s.value.toRat : ℝ) - optimalValue (certNormKernel r h.valid c) (certUtility r h.valid c)|
+        ≤ |(s.value.toRat : ℝ) - (valueT r h.valid plan (initT r h.valid c) : ℝ)| +
+          |(valueT r h.valid plan (initT r h.valid c) : ℝ) -
+            optimalValue (certNormKernel r h.valid c) (certUtility r h.valid c)| :=
+          abs_sub_le _ _ _
+      _ ≤ τv + e := add_le_add hval' hrun
+  · obtain ⟨plan', hplan', hagree⟩ := actionsAgree_spec r h.valid c s hag
+    rw [hplan] at hplan'
+    cases hplan'
+    have hrec := recorded_eq_run h s hm hn hs plan hagree
+    rw [hrec]
+    exact ⟨ha.1, ha.2.1, ha.2.2.1⟩
+
+end Headline
+
+end InfluenceDiagramsProofs.DVECertificate
+```
+
+
 <!-- InfluenceDiagramsProofs/Roadmap.lean -->
 
 # Roadmap and exact scope of the DVE theorem
@@ -11422,19 +13824,31 @@ This is **not** a byte-for-byte verification of Julia. Remaining refinements are
   while no-forgetting stays a hypothesis; `NamesUnique` is the separate `unique_names = true`
   check. The DVE certificate of `export_dve_certificate` is decoded faithfully
   (`Finite/DVE/CertificateJson.lean`, `decodeCertificate_eq_ok`) and checked against the
-  records (`Finite/DVE/CertificateCheck.lean`, `certificateMatches`); it carries model data and
-  no policy, value or plan, so `certificate_solve_spec` and `certificate_tables_optimal` are
+  records (`Finite/DVE/CertificateCheck.lean`, `certificateMatches`); a version-1 certificate
+  carries model data and no policy, value or plan, so `certificate_solve_spec` and
+  `certificate_tables_optimal` are
   about the model its exact numbers define (applicable only when its CPT rows sum to exactly
   one, which Julia's default binary64 words rarely do), not about Julia's computed solution.
   Rows that do not sum to one are covered approximately (`Finite/DVE/CertificateApprox.lean`,
   `certificate_approx_optimal`): with `ε = certificateEpsilon c < 1`, the exact run on the
   certificate's numbers is within `2 n (((1 + ε) / (1 - ε)) ^ n - 1) Umax` of the optimum of the
   row-normalised model. That model is a reference chosen by the proof; the decimal model Julia
-  rounded is not recorded, and Julia's own Float64 run is still not covered.
+  rounded is not recorded. A version-2 certificate also records Julia's solution
+  (`Finite/DVE/SolutionJson.lean`, `decodeCertificateV2_eq_ok`); `Finite/DVE/SolutionRun.lean`
+  computes the exact run on the certificate's numbers over `ℚ` (`exactRun_spec`), on Julia's
+  elimination order when it is a `Plan` and with the representative `keepOfT`, and
+  `Finite/DVE/SolutionCheck.lean` decides `solutionMatches`. For an exact Julia run,
+  `recorded_solution_optimal` makes Julia's recorded strategy and value the run's, hence optimal
+  under exact normalisation, and `recorded_solution_approx_optimal` gives them the bound above.
+  Julia's Float64 run is compared, not proved: `recorded_binary64_approx_optimal` bounds its
+  recorded value and per-row action loss `τ`, and its strategy only when its actions are the exact
+  run's; a different action at a near-tie has no proved expected-utility bound.
   That Julia's action axis lists the
   states in `state_position` order is pinned by a Julia test, and the array layout is the
   `FiniteKernels` `Layout/` result; Julia's execution itself is not proved. That Julia's block
-  schedule is a `Plan`, and which `keep` its run uses, are read off the source, not derived;
+  schedule is a `Plan`, and which `keep` its run uses, are read off the source, not derived (for
+  a version-2 certificate the recorded order is checked to be a `Plan`, and agreement of the
+  recorded scores with the run of `keepOfT` is decided, on that certificate only);
 * zero-probability rows beyond the above. There no semantic score exists, so a zero-reach
   entry is fixed by the representatives and is not claimed independent of the elimination
   plan. Julia's hard-evidence path (sliced factors, absent variables skipped) is proved only

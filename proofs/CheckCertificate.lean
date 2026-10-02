@@ -29,10 +29,44 @@ when the certificate matches, its cells are nonnegative and `certificateEpsilon 
 then the bound on how far the exact DVE run's policy on the certificate's data can fall short of
 the optimum of the row-normalised model.
 
-The exit code is 0 exactly when the certificate matches. The parse and this printing code are
-trusted, not proved; every verdict printed is a `decide` of the proved checker's propositions.
+A version-2 certificate (`export_dve_certificate(m; solution = true)`) is decoded by
+`DVECertificate.decodeAnyCertificate` (`Finite/DVE/SolutionJson.lean`); its recorded solution is
+then compared with the exact run of `Finite/DVE/SolutionRun.lean` on Julia's elimination order
+(`Finite/DVE/SolutionCheck.lean`), printing
+
+    solution: decoded
+    solution arithmetic: binary64|exact_rational
+    solution data: f64|q
+    solution exact fallback: yes|no
+    solution plan: ok|FAIL            (`solutionPlan`: Julia's order is a DVE plan)
+    solution entries: 6
+    exact value: 7.700000e1           (`valueT`)
+    recorded value: 7.700000e1
+    value discrepancy: 0              (|recorded - exact|)
+    actions agree: yes|no             (`actionsAgree`)
+    actions differing: 0
+    action loss: 0                    (largest row maximum minus the score of the recorded action)
+    score discrepancy: 0              (largest |recorded score - row maximum|)
+    solutionMatches: yes|no           (`solutionMatches`, the exact comparison)
+    tolerances tau tauv: 1.000000e-9 1.000000e-9
+    solutionWithin: yes|no            (`solutionWithin tau tauv`, the binary64 comparison)
+    theorem recorded_solution_optimal: applies|does not apply
+    theorem recorded_solution_approx_optimal: applies|does not apply
+    theorem recorded_binary64_approx_optimal: applies|does not apply
+
+The exact comparison is the verdict for a run with `arithmetic = "exact_rational"`, the binary64
+comparison (fixed tolerances `tau = tauv = 10^-9`) for a binary64 run.
+`recorded_solution_optimal` applies to a matching, nonnegative, exactly normalised certificate
+whose solution satisfies `solutionMatches`; `recorded_solution_approx_optimal` replaces exact
+normalisation by `certificateEpsilon < 1`; `recorded_binary64_approx_optimal` needs
+`solutionWithin tau tauv` and `certificateEpsilon < 1`.
+
+The exit code is 0 exactly when the certificate matches and, for version 2, the solution passes
+the comparison of its run's arithmetic. The parse and this printing code are trusted, not proved;
+every verdict printed is a `decide` of a proved checker's propositions, and every number is
+computed by the definitions named.
 -/
-import InfluenceDiagramsProofs.Finite.DVE.CertificateApprox
+import InfluenceDiagramsProofs.Finite.DVE.SolutionCheck
 import Lean.Data.Json.Parser
 
 open BayesianNetworksProofs.Raw InfluenceDiagramsProofs.Records InfluenceDiagramsProofs.DVECertificate
@@ -90,6 +124,47 @@ def components (r : Diagram) (c : Certificate) : List (String × Bool) :=
       (BayesianNetworksProofs.Binary64.field c.tolerances.kernel ≠ 2047 ∧
         BayesianNetworksProofs.Binary64.field c.tolerances.decision ≠ 2047)))]
 
+
+/-- The largest value of a score row (printing only). -/
+def rowMax {n : Nat} (f : Fin n → ℚ) : ℚ :=
+  (List.finRange n).foldr (fun b m => max (f b) m) (if h : 0 < n then f ⟨0, h⟩ else 0)
+
+/-- Per-entry comparison statistics: (entries, differing actions, action loss, score
+discrepancy), computed from the proved definitions `bucketAt`, `rowScore`, `entryIndex`. -/
+def solutionStats (r : Diagram) (h : r.Valid) (c : Certificate) (s : Solution)
+    (plan : InfluenceDiagramsProofs.DVE.Plan (r.compile h) Finset.univ) : Nat × Nat × ℚ × ℚ := Id.run do
+  let ts := initT r h c
+  let mut n := 0
+  let mut bad := 0
+  let mut loss : ℚ := 0
+  let mut disc : ℚ := 0
+  for d in List.finRange r.nd do
+    match s.policies[d.val]?, bucketAt r h plan ts d with
+    | some p, some B =>
+      for e in p.entries do
+        let f := rowScore r h B d p e
+        let i := entryIndex c p e
+        let m := rowMax f
+        n := n + 1
+        if !(decide (EntryAction f i)) then bad := bad + 1
+        if hi : i < r.stateCount (r.decisions d).action then
+          loss := max loss (m - f ⟨i, hi⟩)
+        else loss := max loss 1
+        disc := max disc |e.score.toRat - m|
+    | _, _ => bad := bad + 1
+  return (n, bad, loss, disc)
+
+def arithmeticName : Arithmetic → String
+  | .binary64 => "binary64"
+  | .exactRational => "exact_rational"
+
+def dataName : DataKind → String
+  | .f64 => "f64"
+  | .q => "q"
+
+/-- The fixed tolerances of the binary64 comparison. -/
+def tau : ℚ := 1 / 10 ^ 9
+
 def readJson (path : String) : IO (Except String Lean.Json) := do
   let text ← IO.FS.readFile path
   return Lean.Json.parse text
@@ -113,12 +188,12 @@ def main (args : List String) : IO UInt32 := do
         return 1
       | some ⟨r, h⟩ =>
         IO.println "diagram: valid"
-        match decodeCertificate cj with
+        match decodeAnyCertificate cj with
         | .error e =>
           IO.println s!"certificate: error: {e}"
           return 1
-        | .ok c =>
-          IO.println "certificate: decoded"
+        | .ok (c, sol?) =>
+          IO.println s!"certificate: decoded (version {if sol?.isSome then 2 else 1})"
           for (name, ok) in components r c do
             IO.println s!"{name}: {verdict ok}"
           let m := decide (certificateMatches r h c)
@@ -137,7 +212,47 @@ def main (args : List String) : IO UInt32 := do
           let ok := m && nn && decide (eps < 1)
           IO.println s!"optimality gap 2e: {if eps < 1 then sci (certificateBound c) else "-"}"
           IO.println s!"theorem certificate_approx_optimal: {if ok then "applies" else "does not apply"}"
-          return if m then 0 else 1
+          match sol? with
+          | none => return if m then 0 else 1
+          | some s =>
+            IO.println "solution: decoded"
+            IO.println s!"solution arithmetic: {arithmeticName s.arithmetic}"
+            IO.println s!"solution data: {dataName s.data}"
+            IO.println s!"solution exact fallback: {yesNo s.exactFallback}"
+            -- the run is defined only for nonnegative cells (`certKernel_nonneg`), and the
+            -- theorems only for a matching certificate
+            match solutionPlan r h.valid s with
+            | none =>
+              IO.println "solution plan: FAIL"
+              IO.println "solutionMatches: no"
+              IO.println "solutionWithin: no"
+              return 1
+            | some plan =>
+              IO.println "solution plan: ok"
+              let (ne, bad, loss, disc) := solutionStats r h.valid c s plan
+              let exact := valueT r h.valid plan (initT r h.valid c)
+              let vdisc := |s.value.toRat - exact|
+              IO.println s!"solution entries: {ne}"
+              IO.println s!"exact value: {sci exact}"
+              IO.println s!"recorded value: {sci s.value.toRat}"
+              IO.println s!"value discrepancy: {sci vdisc}"
+              let agree := actionsAgree r h.valid c s
+              IO.println s!"actions agree: {yesNo agree}"
+              IO.println s!"actions differing: {bad}"
+              IO.println s!"action loss: {sci loss}"
+              IO.println s!"score discrepancy: {sci disc}"
+              let sm := solutionMatches r h.valid c s
+              IO.println s!"solutionMatches: {yesNo sm}"
+              IO.println s!"tolerances tau tauv: {sci tau} {sci tau}"
+              let sw := solutionWithin r h.valid c s tau tau
+              IO.println s!"solutionWithin: {yesNo sw}"
+              IO.println s!"theorem recorded_solution_optimal: {if m && nn && en && sm then "applies" else "does not apply"}"
+              IO.println s!"theorem recorded_solution_approx_optimal: {if ok && sm then "applies" else "does not apply"}"
+              IO.println s!"theorem recorded_binary64_approx_optimal: {if ok && sw then "applies" else "does not apply"}"
+              let pass := match s.arithmetic with
+                | .exactRational => sm
+                | .binary64 => sw
+              return if m && pass then 0 else 1
   | _ =>
     IO.eprintln "usage: check_certificate DIAGRAM.json CERTIFICATE.json"
     return 2

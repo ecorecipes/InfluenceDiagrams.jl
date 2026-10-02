@@ -19,3 +19,6 @@ import InfluenceDiagramsProofs.Finite.DVE.CertificateJson
 import InfluenceDiagramsProofs.Finite.DVE.CertificateCheck
 import InfluenceDiagramsProofs.Finite.DVE.Approximate
 import InfluenceDiagramsProofs.Finite.DVE.CertificateApprox
+import InfluenceDiagramsProofs.Finite.DVE.SolutionJson
+import InfluenceDiagramsProofs.Finite.DVE.SolutionRun
+import InfluenceDiagramsProofs.Finite.DVE.SolutionCheck

@@ -104,10 +104,11 @@ within `2 n (((1 + ε) / (1 - ε))^n - 1) Umax` of the optimum of the row-normal
 model, with `n` the number of mechanisms and `Umax` the sum of the utility tables'
 largest absolute cells. The row-normalised model is a reference, chosen because the
 decimal model Julia rounded is not recorded; `lake exe check_certificate` prints
-`ε`, `n`, `Umax` and the gap (`8.9e-14` for the binary64 umbrella). The certificate does not
-carry Julia's solution, so nothing here proves that Julia's solver output equals
-it; JSON parsing and this exporter are trusted. A version-2 certificate records
-that output (next section); the Lean decoder reads version 1 only.
+`ε`, `n`, `Umax` and the gap (`8.9e-14` for the binary64 umbrella). A version-1
+certificate does not carry Julia's solution, so nothing in it ties Julia's solver
+output to these theorems; JSON parsing and this exporter are trusted. A version-2
+certificate records that output (next section), and the Lean decoder reads both
+versions.
 
 ## Recording Julia's solution (version 2)
 
@@ -226,8 +227,34 @@ does.
 
 The [version-2 JSON Schema](dve-certificate-v2.schema.json) is the version-1
 schema with `version` 2 and this `solution` object. The Lean decoder
-(`Finite/DVE/CertificateJson.lean`) accepts exactly the fourteen version-1 keys
-and version 1, so it rejects a version-2 certificate rather than misreading it.
+`decodeAnyCertificate` (`Finite/DVE/SolutionJson.lean`) reads version 1 exactly
+as before and version 2 as the version-1 fields plus `solution`, rejecting a
+version-2 document with the fourteen version-1 keys and a version-1 document with
+fifteen. It is faithful key for key (`decodeCertificateV2_eq_ok`), and decoding
+checks that decision, action and state IDs exist, that `axes` are the decision's
+information slots and that the `at` lists enumerate every configuration once in
+order (`decodeSolution_coverage`).
+
+`lake exe check_certificate` compares a decoded solution with the exact DVE run
+that `certificate_tables` speaks about, computed over the rationals on Julia's
+`elimination_order` (`Finite/DVE/SolutionRun.lean`, `exactRun_spec`), with the
+representative of Julia's `sum_out` branch (`keepOfT`, read off the source). For
+a run in exact arithmetic on the certificate's own numbers, `solutionMatches`
+asks every recorded action to be the least-position maximizer of the exact score
+row, every recorded score to be that row's maximum and the value to be the
+exact value, all exactly. When it holds, `recorded_solution_optimal`
+(`Finite/DVE/SolutionCheck.lean`) proves that Julia's recorded strategy and value
+are the exact run's, hence optimal when every CPT row sums to exactly one, and
+`recorded_solution_approx_optimal` gives them the bound of
+`certificate_approx_optimal` otherwise. A binary64 run is compared within
+tolerances (`solutionWithin τ τv`, printed with `τ = τv = 1e-9`):
+`recorded_binary64_approx_optimal` proves that each recorded action is within `τ`
+of its exact row maximum and the value within `τv + e` of the reference optimum,
+and bounds the strategy only when its actions are the exact run's. A binary64
+action that differs at a near-tie has no proved bound on the lost expected
+utility, the Float64 run itself is not proved, and the checks require a
+certificate without evidence rows. The parse, this exporter and the checker's
+printing code are trusted.
 
 ### Impossible combinations
 

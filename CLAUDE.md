@@ -112,8 +112,19 @@ ordered but neither knows the other's action: that is a forgetting diagram, and 
   `Finite/DVE/CertificateCheck.lean` decides `certificateMatches` against the decoded records;
   `certificate_solve_spec` / `certificate_tables_optimal` hold for the model the certificate's
   exact numbers define when its CPT rows sum to exactly one (rarely true of binary64 words), and
-  `certificate_tables` when they are nonnegative. A v1 certificate has no policy or value, and
-  the decoder rejects v2, so Julia's own solution is not yet covered; `lake exe check_certificate` runs the checker.
+  `certificate_tables` when they are nonnegative. A v1 certificate has no policy or value.
+  `Finite/DVE/SolutionJson.lean` decodes v2 too (`decodeCertificateV2_eq_ok`, round trip, coverage
+  and in-range references; `decodeAnyCertificate` reads v1 exactly as before and rejects either
+  version with the other's key count). `Finite/DVE/SolutionRun.lean` computes the exact run on the
+  certificate's numbers over `ℚ` on tables (`exactRun_spec`: equal to the real run with the
+  representative `keepOfT`, Julia's `sum_out` branch read off the source), and
+  `Finite/DVE/SolutionCheck.lean` decides `solutionMatches` (exact Julia runs: actions, scores and
+  value equal) and `solutionWithin τ τv` (binary64 runs). `recorded_solution_optimal`: under
+  `solutionMatches` Julia's recorded strategy and value are the run's, optimal when exactly
+  normalised; `recorded_solution_approx_optimal` the `certificate_approx_optimal` bound;
+  `recorded_binary64_approx_optimal` the value within `τv + e` and per-row loss `τ`, the strategy
+  bound only when the actions agree (no expected-utility bound for near-tie action changes; no
+  evidence). `lake exe check_certificate` runs the checkers.
   `Finite/DVE/Approximate.lean` and `CertificateApprox.lean` drop exact normalization:
   `certificate_approx_optimal` (matching, nonnegative, `certificateEpsilon c < 1`, the largest
   `|row sum - 1|` over `ℚ`) bounds the exact run on the certificate's numbers by

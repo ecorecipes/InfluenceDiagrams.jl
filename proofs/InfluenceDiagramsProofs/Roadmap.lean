@@ -87,19 +87,31 @@ This is **not** a byte-for-byte verification of Julia. Remaining refinements are
   while no-forgetting stays a hypothesis; `NamesUnique` is the separate `unique_names = true`
   check. The DVE certificate of `export_dve_certificate` is decoded faithfully
   (`Finite/DVE/CertificateJson.lean`, `decodeCertificate_eq_ok`) and checked against the
-  records (`Finite/DVE/CertificateCheck.lean`, `certificateMatches`); it carries model data and
-  no policy, value or plan, so `certificate_solve_spec` and `certificate_tables_optimal` are
+  records (`Finite/DVE/CertificateCheck.lean`, `certificateMatches`); a version-1 certificate
+  carries model data and no policy, value or plan, so `certificate_solve_spec` and
+  `certificate_tables_optimal` are
   about the model its exact numbers define (applicable only when its CPT rows sum to exactly
   one, which Julia's default binary64 words rarely do), not about Julia's computed solution.
   Rows that do not sum to one are covered approximately (`Finite/DVE/CertificateApprox.lean`,
   `certificate_approx_optimal`): with `ε = certificateEpsilon c < 1`, the exact run on the
   certificate's numbers is within `2 n (((1 + ε) / (1 - ε)) ^ n - 1) Umax` of the optimum of the
   row-normalised model. That model is a reference chosen by the proof; the decimal model Julia
-  rounded is not recorded, and Julia's own Float64 run is still not covered.
+  rounded is not recorded. A version-2 certificate also records Julia's solution
+  (`Finite/DVE/SolutionJson.lean`, `decodeCertificateV2_eq_ok`); `Finite/DVE/SolutionRun.lean`
+  computes the exact run on the certificate's numbers over `ℚ` (`exactRun_spec`), on Julia's
+  elimination order when it is a `Plan` and with the representative `keepOfT`, and
+  `Finite/DVE/SolutionCheck.lean` decides `solutionMatches`. For an exact Julia run,
+  `recorded_solution_optimal` makes Julia's recorded strategy and value the run's, hence optimal
+  under exact normalisation, and `recorded_solution_approx_optimal` gives them the bound above.
+  Julia's Float64 run is compared, not proved: `recorded_binary64_approx_optimal` bounds its
+  recorded value and per-row action loss `τ`, and its strategy only when its actions are the exact
+  run's; a different action at a near-tie has no proved expected-utility bound.
   That Julia's action axis lists the
   states in `state_position` order is pinned by a Julia test, and the array layout is the
   `FiniteKernels` `Layout/` result; Julia's execution itself is not proved. That Julia's block
-  schedule is a `Plan`, and which `keep` its run uses, are read off the source, not derived;
+  schedule is a `Plan`, and which `keep` its run uses, are read off the source, not derived (for
+  a version-2 certificate the recorded order is checked to be a `Plan`, and agreement of the
+  recorded scores with the run of `keepOfT` is decided, on that certificate only);
 * zero-probability rows beyond the above. There no semantic score exists, so a zero-reach
   entry is fixed by the representatives and is not claimed independent of the elimination
   plan. Julia's hard-evidence path (sliced factors, absent variables skipped) is proved only

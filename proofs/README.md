@@ -65,7 +65,8 @@ Module order (`MD_FILES` in the `Makefile`, the import order of `InfluenceDiagra
 16. `Finite/DVE/LabelOrder.lean` — checked records order each action space by `state_position`
 17. `Finite/DVE/RecordsValid.lean`, `JsonRecords.lean`, `CertificateJson.lean`, `CertificateCheck.lean` — checked records, the JSON decoders and the certificate checker
 18. `Finite/DVE/Approximate.lean`, `CertificateApprox.lean` — approximate optimality of the exact run on approximately normalised kernels and certificates
-19. `Roadmap.lean` — remaining literal-implementation refinements; no unproved declarations
+19. `Finite/DVE/SolutionJson.lean`, `SolutionRun.lean`, `SolutionCheck.lean` — the version-2 certificate decoder, the computable exact run, and the check of Julia's recorded solution against it
+20. `Roadmap.lean` — remaining literal-implementation refinements; no unproved declarations
 
 ## What is formalised
 
@@ -96,6 +97,9 @@ inherited `FinBayesNet.nonemptyS` fields ensure that every action space is nonem
 | `Finite/DVE/CertificateCheck.lean` | `Matches` / `matches_iff` and `certificateMatches` (decidable), `Matches.stateLabel`, `Matches.information`; `Value.toRat` (exact cell values), `certKernel`, `certUtility`, `certKernel_local`, `certUtility_local`, `certKernel_nonneg`, `certKernel_normalised`, `certOrder` (`IDOrder`), `certNoForgetting` (`NoForgettingOrder`); `certificate_tables`, `certificate_solve_spec`, `certificate_tables_optimal`. |
 | `Finite/DVE/Approximate.lean` | No normalisation of the run's kernel `κ'`: against a normalised reference kernel `κ` with `L ∏ κ ≤ ∏ κ' ≤ H ∏ κ` (`0 < L`) and `|U x| ≤ U`, the invariant `ApproxInv` (mass within `[L, H]` of the reference mass, utility bounded on positive rows, reference values within `e` of the stored utility) holds initially with `e = 0`, is unchanged by a decision step (`ApproxInv.decisionWith`) and grows by `(H / L - 1) U` per chance step (`ApproxInv.chanceOf`, from `reweight_error`); `Plan.chanceCount` / `Plan.chanceCount_eq`, `card_chance_eq`, `approxGap`; `solveRepPlanWith_approx` and `solveRepPlanWith_approx_optimal` (every selector, `keep` and plan). |
 | `Finite/DVE/CertificateApprox.lean` | Computable over `ℚ`: `certDim`, `rowSum`, `certificateEpsilon` (largest `|row sum - 1|`), `certUmax`, `certChanceCount`, `approxError ε n U = n (((1 + ε) / (1 - ε)) ^ n - 1) U`, `certificateBound = 2 approxError`. `certificateEpsilon_eq_zero_iff` (`= 0` iff `ExactNormalised`), `certNormKernel` (rows divided by their sums) with `certNormKernel_local`, `_nonneg`, `_normalised`, `_eq_of_exact`; `certRowSum_dev`, `certKernel_envelope` (joint within `[(1 - ε) ^ n, (1 + ε) ^ n]` of the reference joint), `certUtility_total_le`; `certificate_approx_optimal`, `certificate_solve_approx`, `certificate_approx_exact`. |
+| `Finite/DVE/SolutionJson.lean` | The version-2 decoder: records `Backend`, `Arithmetic`, `DataKind`, `PolicyEntry`, `PolicyRecord`, `Solution` and `…Matches` for every key; `decodeSolution_eq_ok`, `decodeBody` / `BodyMatches` (the twelve version-1 fields, read by the version-1 row decoders; `certificateMatches_iff_body`), `decodeCertificateV2`, `decodeCertificateV2_eq_ok`, `decodeCertificateV2_encode`, `decodeSolution_encode`; `Solution.WellFormed`, `decodeSolution_wellFormed`, `decodeCertificateV2_wellFormed`, `decodeSolution_coverage` with `lexCoords_nodup` and `lexCoords_pairwise_lex`; `decodeSolution_shape`, `decodeSolution_error_of_missing_key`, `_ill_typed`, `_not_object`, `decodeCertificateV2_error_of_missing_key`; `decodeAnyCertificate`, `decodeAnyCertificate_v1`, `_v2`, `_error_of_v2_with_v1_keys`, `_error_of_v1_with_v2_keys`. |
+| `Finite/DVE/SolutionRun.lean` | `QVal` (valuations over `ℚ` with Julia's utility variables `uvars`), `qcombine`, `qcollect`, `qsumOut` (Julia's `sum_out` branch), `qmaxOut`; `Rel` (a real valuation is a rational one read in `ℝ`) with `rel_combine`, `rel_collect`, `rel_sumOut` (against `sumOutKeep (a ∉ uvars)`), `rel_maxOut`, `udep_sumOut`; `collect_perm`; `TVal`, `tab`, `view`, `view_tab` (tables over the scope); `runT`, `keepOfT`, `scoreT`, `valueT`, `planOf` (the `Plan` of an elimination order), `toFinList`; `Sim`, `sim_runRep`, `sim_initial`, `certKernelQ`, `certUtilityQ`, `initT`, `exactRun_spec`. |
+| `Finite/DVE/SolutionCheck.lean` | `bucketAt`, `scoreT_of_bucketAt`, `entryAssignment`, `entryIndex`, `rowScore`; `EntryAction`, `EntryScore`, `EntryWithin`, `AllEntries`, `solutionPlan`, `DataConsistent`, `ActionsAgreeWith`, `SolutionMatchesWith`, `SolutionWithinWith` and the decidable checkers `solutionMatches`, `actionsAgree`, `solutionWithin`; `recordedStrategy` (deterministic), `recordedAction`, `info_mem_axes`, `entry_of_row`, `recorded_eq_run`, `recorded_within`; `recorded_solution_optimal`, `recorded_solution_approx_optimal`, `recorded_binary64_approx_optimal`. |
 | `Roadmap.lean` | Remaining literal-Julia refinements; no unproved declarations. |
 
 `Audit.lean` prints the axioms of every main theorem (and of the definitions `Policy.ofFun`,
@@ -341,10 +345,50 @@ the decimal model Julia rounded, which the certificate does not record; and the 
 the exact run on the certificate's numbers, not Julia's Float64 run. `check_certificate` prints
 `ε`, `n`, `Umax` and `certificateBound c = 2 e` in scientific notation.
 
+`Finite/DVE/SolutionJson.lean` decodes the version-2 certificate: the version-1 fields, with
+`"version": 2`, read by the same row decoders (`decodeBody`, `BodyMatches`;
+`certificateMatches_iff_body` is the version-1 layout in those terms), and `"solution"`, nine keys
+(backend, arithmetic, data, exact fallback, `conditioned_on`, Julia version, elimination order,
+value, policies). Decoding checks the references: policy `k` is decision `k` with its action and
+its information slots as axes, every entry's action is a state ID of the action variable, and
+the `at` lists are `lexCoords` of the axes' state counts, so they list every configuration once,
+lexicographically (`decodeSolution_coverage`). `decodeSolution_eq_ok` and
+`decodeCertificateV2_eq_ok` are faithfulness, `decodeCertificateV2_encode` the round trip,
+`decodeSolution_shape` and its corollaries the failures on a missing or ill-typed solution key.
+`decodeAnyCertificate` reads both versions: version 1 exactly as `decodeCertificate`
+(`decodeAnyCertificate_v1`), and a version-2 document with fourteen keys, or a version-1 document
+with fifteen, is rejected. The checks of the solution need the exact run's tables, which
+`DVE.solveRepPlanWith` defines only as noncomputable real functions. `Finite/DVE/SolutionRun.lean`
+computes them: `QVal` mirrors the valuation algebra over `ℚ`, tracking the variables of Julia's
+utility potential (`uvars`) so that `qsumOut` keeps the potential exactly when Julia's `sum_out`
+does; `rel_sumOut` and `rel_maxOut` show that each step is the real step read in `ℝ`, and
+`TVal` stores each new valuation as a table over its scope (`view_tab`). `sim_runRep` carries
+this through any plan, and `exactRun_spec` states the result: for a matching certificate with
+nonnegative cells, the real run with the representative `keepOfT` has value `valueT` and score
+rows `scoreT`, computed exactly. `planOf` turns Julia's `elimination_order` into a `Plan` when it
+is one. `Finite/DVE/SolutionCheck.lean` compares, at each recorded entry, the recorded action
+with the run's score row there (`rowScore`): `solutionMatches` (no evidence row, an exact Julia
+run on the certificate's own numbers, every recorded action the least-position maximizer, every
+recorded score the row maximum, the recorded value the run's value, all exactly) and
+`solutionWithin τ τv` (every recorded action within `τ` of its row maximum, the value within
+`τv`). `recorded_eq_run`: when the recorded actions agree, `recordedStrategy` (Julia's tables read
+at the information coordinates) is the run's strategy. `recorded_solution_optimal` then gives the
+run's tables, value and least-position rows to Julia's recorded solution, and under
+`ExactNormalised` optimality and the optimal value; `recorded_solution_approx_optimal` gives it
+the bounds of `certificate_approx_optimal`; `recorded_binary64_approx_optimal` proves the per-row
+`τ` statement and `|value - optimalValue| ≤ τv + e` for a binary64 run, and the strategy bounds
+when the actions agree. Not proved: an expected-utility bound for a binary64 run whose actions
+differ from the exact ones at near-ties (the loss of a `τ`-maximizer at each row would need a
+step invariant through the driver with approximate selection), and anything with evidence.
+`check_certificate` prints the comparison: whether the actions agree, the largest action loss,
+score and value discrepancies, `solutionMatches` and `solutionWithin` at `τ = τv = 10^-9`.
+
 Not proved: `Lean.Json.parse` and Julia's JSON3/ACSets writer (trusted; the theorems start from
-a parsed `Json` tree), Julia's `export_dve_certificate` and its `Float64` capture; that Julia's
-solution (policy tables and value, which the certificate does not carry) equals the one the
-certificate theorems describe; the no-forgetting hypothesis of the `_of_fullValid` theorems, and under `Valid` alone the closedness and order
+a parsed `Json` tree), Julia's `export_dve_certificate` and its `Float64` capture; for a version-1
+certificate, which carries no policy table or value, that Julia's solution equals the one the
+certificate theorems describe (for a version-2 certificate it is decided, as above, and Julia's
+Float64 run itself is compared, not proved); the printing code of `check_certificate`; the
+no-forgetting hypothesis of the `_of_fullValid` theorems, and under `Valid` alone the closedness and order
 hypotheses; that Julia's action axis lists `states(id, v)` in `state_position` order (a Julia
 test pins it, and the cross-check agrees on every fixture; the array layout is the
 `FiniteKernels` `Layout/` result); and Julia's execution itself.
