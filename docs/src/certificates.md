@@ -217,7 +217,8 @@ optimality flag, and a consumer must not take it as one. Whether the tables are
 the least-position maximizers, and whether the value is the optimum, is for a
 checker to decide from the certificate's data (`certificate_tables`,
 `certificate_solve_spec`); those theorems need nonnegative cells, exactly
-normalized rows for optimality, and no evidence row. A binary64 run's tables can
+normalized rows for optimality, and no evidence row (with evidence rows, the
+comparison below with the run on the sliced data decides it). A binary64 run's tables can
 differ from the exact ones near ties, and its value carries rounding error. With
 evidence, a table does not read an observed variable, and a row that contradicts
 the evidence repeats the observed row's action. On a zero-probability row the
@@ -250,11 +251,27 @@ are the exact run's, hence optimal when every CPT row sums to exactly one, and
 tolerances (`solutionWithin τ τv`, printed with `τ = τv = 1e-9`):
 `recorded_binary64_approx_optimal` proves that each recorded action is within `τ`
 of its exact row maximum and the value within `τv + e` of the reference optimum,
-and bounds the strategy only when its actions are the exact run's. A binary64
-action that differs at a near-tie has no proved bound on the lost expected
-utility, the Float64 run itself is not proved, and the checks require a
-certificate without evidence rows. The parse, this exporter and the checker's
-printing code are trusted.
+and bounds the strategy when its actions are the exact run's.
+`recorded_binary64_near_optimal` bounds the strategy whatever its actions at
+near-ties: its expected utility under the row-normalised model is within
+`2 e + nd * τ` of that model's optimum and of every nonnegative strategy, `nd`
+the number of decisions (`nd * τ` when every CPT row sums to exactly one). The
+Float64 run itself is not proved.
+
+For a certificate with `evidence.hard` rows, `check_certificate` compares the
+solution with the exact run on the data sliced at the observed states, skipping
+the observed variables as Julia's run does (`Finite/DVE/SolutionEvidence.lean`,
+`exactRunC_spec`), on the recorded `elimination_order` with the observed
+variables put back, and also asks that run's final mass, Julia's evidence
+probability, to be positive (`solutionMatchesE`, `solutionWithinE`). The
+theorems `recorded_solution_optimal_evidence`,
+`recorded_solution_approx_optimal_evidence` and
+`recorded_binary64_near_optimal_evidence` (`Finite/DVE/SolutionCheckEvidence.lean`)
+give the results above for the conditional problem given the hard rows: the
+conditional expected utility and the conditional optimum of the certificate's
+model, or of the row-normalised model with the same `2 e`, `τv + e` and
+`2 e + nd * τ` bounds. The parse, this exporter and the checker's printing code
+are trusted.
 
 ### Impossible combinations
 

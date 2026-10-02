@@ -44,7 +44,7 @@ not derived.
 
 Evidence: these theorems cover the no-evidence driver on any plan. Julia's hard-evidence path
 (sliced factors, absent variables skipped: `runSkipWith`) combined with this representative is
-not modelled here.
+not modelled here; `Finite/DVE/NearOptimalEvidence.lean` combines them (`runRepSkipWith`).
 -/
 
 set_option autoImplicit false

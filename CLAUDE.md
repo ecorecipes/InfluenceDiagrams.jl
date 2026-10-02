@@ -92,10 +92,11 @@ ordered but neither knows the other's action: that is a forgetting diagram, and 
   `Finite/DVE/Representative.lean` models `sum_out` keeping a utility that does not mention
   the summed variable on zero-probability rows (`keep`, every choice): values, masses and
   positive-probability entries are the model's (`solveRepPlanWith_kernel_eq`) and every row
-  is `orderedTable` of the run's own score (`solveRepPlanOrdered_table`); not combined with
-  sliced evidence. `Finite/DVE/LabelOrder.lean` compiles checked raw records (bounded unique
-  state positions) to a diagram whose action order is `state_position`, and proves the entry
-  is the least-position maximizer (`solveRecords_table`, `solveRepRecords_optimal`).
+  is `orderedTable` of the run's own score (`solveRepPlanOrdered_table`);
+  `Finite/DVE/NearOptimalEvidence.lean` combines it with sliced evidence (`runRepSkipWith`).
+  `Finite/DVE/LabelOrder.lean` compiles checked raw records (bounded unique state positions)
+  to a diagram whose action order is `state_position`, and proves the entry is the
+  least-position maximizer (`solveRecords_table`, `solveRepRecords_optimal`).
   `Finite/DVE/RecordsValid.lean` adds `FullValid` (every table checked; the instantiated chance
   part satisfies BN `Raw.Network.Valid`, `FullValid.chance_valid`) and the `_of_fullValid`
   versions of those theorems without the `Closed`/`IDOrder` hypotheses (no-forgetting stays one).
@@ -123,8 +124,17 @@ ordered but neither knows the other's action: that is a forgetting diagram, and 
   `solutionMatches` Julia's recorded strategy and value are the run's, optimal when exactly
   normalised; `recorded_solution_approx_optimal` the `certificate_approx_optimal` bound;
   `recorded_binary64_approx_optimal` the value within `τv + e` and per-row loss `τ`, the strategy
-  bound only when the actions agree (no expected-utility bound for near-tie action changes; no
-  evidence). `lake exe check_certificate` runs the checkers.
+  bound when the actions agree; `recorded_binary64_near_optimal` the strategy within
+  `2 e + nd * τ` of the reference optimum whether or not they agree (`nd` decisions; the step
+  invariant `TolInv` of `Finite/DVE/NearOptimal.lean`: a score is a conditional expected utility
+  given the row, so a `τ`-maximizer loses at most `τ` per decision), `nd * τ` when exactly
+  normalised. Hard evidence: `Finite/DVE/SolutionEvidence.lean` computes the run on the data
+  sliced at the `evidence.hard` rows (`exactRunC_spec`) and `SolutionCheckEvidence.lean` decides
+  `solutionMatchesE` / `solutionWithinE` on Julia's order with the observed variables put back;
+  `recorded_solution_optimal_evidence`, `recorded_solution_approx_optimal_evidence` and
+  `recorded_binary64_near_optimal_evidence` are the same results for the conditional problem
+  (`conditionalEU`, `conditionalOptimalValue`) at positive evidence mass, which the run's
+  positive final mass implies. `lake exe check_certificate` runs the checkers.
   `Finite/DVE/Approximate.lean` and `CertificateApprox.lean` drop exact normalization:
   `certificate_approx_optimal` (matching, nonnegative, `certificateEpsilon c < 1`, the largest
   `|row sum - 1|` over `ℚ`) bounds the exact run on the certificate's numbers by

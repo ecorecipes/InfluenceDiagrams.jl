@@ -1,4 +1,5 @@
 import InfluenceDiagramsProofs.Finite.DVE.SolutionRun
+import InfluenceDiagramsProofs.Finite.DVE.NearOptimal
 
 /-!
 # Checking Julia's recorded solution against the exact run
@@ -42,13 +43,18 @@ coordinates (`entryAssignment`); `rowScore` is the exact run's score row there (
   action is within `τ` of the maximum of the run's score row on every information row, and the
   recorded value is within `τv + e` of the optimum of the row-normalised model; if moreover
   `actionsAgree`, the recorded strategy is the run's and is within `2 e` of that optimum.
+* `recorded_binary64_near_optimal` (binary64 runs, actions need not agree): under
+  `solutionWithin τ τv` and `certificateEpsilon c < 1`, the recorded strategy is within
+  `2 e + nd * τ` of every nonnegative strategy and of the optimum of the row-normalised model,
+  `nd` the number of decisions (`solveRepPlan_near_optimal` of `Finite/DVE/NearOptimal.lean`:
+  each decision step loses at most `τ` times the total mass of its rows, which is one);
+  `recorded_binary64_near_optimal_exact`: on an exactly normalised certificate, within `nd * τ`
+  of the optimum of the certificate's model.
 
-**Not proved.** That a binary64 run whose actions differ from the exact ones at near-ties (each
-within `τ` of its row maximum) loses at most a function of `τ` in expected utility: the loss
-bound needs a step-by-step invariant through the driver that is not formalized, so for such a
-run only the per-row `τ` statement and the value bound are theorems. Evidence is not modelled:
-the checks require that the certificate has no evidence row. Trusted: `Lean.Json.parse`,
-Julia's exporter and its Float64 run, which is compared, not proved.
+**Not proved here.** Evidence: these checks require that the certificate has no evidence row;
+`Finite/DVE/SolutionEvidence.lean` and `SolutionCheckEvidence.lean` treat certificates with hard
+evidence. Trusted: `Lean.Json.parse`, Julia's exporter and its Float64 run, which is compared,
+not proved.
 -/
 
 set_option autoImplicit false
@@ -636,6 +642,80 @@ theorem recorded_binary64_approx_optimal (hm : certificateMatches r h c) (hn : N
     have hrec := recorded_eq_run h s hm hn hs plan hagree
     rw [hrec]
     exact ⟨ha.1, ha.2.1, ha.2.2.1⟩
+
+theorem card_decisions (h : r.Valid) : Fintype.card (r.compile h).D = r.nd := Fintype.card_fin _
+
+/-- **Near-optimality of Julia's recorded solution of a binary64 run, whatever its actions at
+near-ties.** Under `solutionWithin τ τv` and `certificateEpsilon c < 1`, writing `κ̂` for the
+row-normalised model `certNormKernel`, `e = approxError ε n Umax` and `nd` for the number of
+decisions, Julia's recorded strategy (deterministic) satisfies
+
+* `EU κ̂ τ' ≤ EU κ̂ recorded + 2 e + nd * τ` for every nonnegative strategy `τ'`;
+* `optimalValue κ̂ - 2 e - nd * τ ≤ EU κ̂ recorded ≤ optimalValue κ̂`;
+
+and the recorded value is within `τv + e` of `optimalValue κ̂`. No agreement of the recorded
+actions with the exact run's is assumed: each recorded action is only within `τ` of the maximum
+of the exact run's score row, on every information row. -/
+theorem recorded_binary64_near_optimal (hm : certificateMatches r h c) (hn : Nonneg c)
+    (hs : s.WellFormed c) {τ τv : ℚ} (hw : solutionWithin r h.valid c s τ τv = true)
+    (hε : certificateEpsilon c < 1) :
+    let e : ℝ := approxError (certificateEpsilon c) (certChanceCount c) (certUmax c)
+    (recordedStrategy r h.valid c s).Deterministic ∧
+      (∀ τ' : Strategy (r.compile h.valid) ℝ, τ'.Nonneg →
+        expectedUtility (certNormKernel r h.valid c) τ' (certUtility r h.valid c) ≤
+          expectedUtility (certNormKernel r h.valid c) (recordedStrategy r h.valid c s)
+            (certUtility r h.valid c) + 2 * e + r.nd * (τ : ℝ)) ∧
+      optimalValue (certNormKernel r h.valid c) (certUtility r h.valid c) - 2 * e -
+          r.nd * (τ : ℝ) ≤
+        expectedUtility (certNormKernel r h.valid c) (recordedStrategy r h.valid c s)
+          (certUtility r h.valid c) ∧
+      expectedUtility (certNormKernel r h.valid c) (recordedStrategy r h.valid c s)
+          (certUtility r h.valid c) ≤
+        optimalValue (certNormKernel r h.valid c) (certUtility r h.valid c) ∧
+      |(s.value.toRat : ℝ) - optimalValue (certNormKernel r h.valid c) (certUtility r h.valid c)| ≤
+        τv + e := by
+  intro e
+  obtain ⟨plan, -, -, hwe, -⟩ := solutionWithin_spec r h.valid c s hw
+  have hε1 : (certificateEpsilon c : ℝ) < 1 := by exact_mod_cast hε
+  have hL : 0 < (1 - (certificateEpsilon c : ℝ)) ^ certChanceCount c :=
+    pow_pos (by linarith) _
+  have hU : (0 : ℝ) ≤ certUmax c := by exact_mod_cast certUmax_nonneg c
+  have hnear := DVE.solveRepPlan_near_optimal (r.selector h.valid)
+    (keepOfT r h.valid plan (initT r h.valid c)) (certNormKernel r h.valid c)
+    (certKernel r h.valid c) h.closed h.idOrder (certNormKernel_local hm h.valid)
+    (certNormKernel_normalised hm hε h.valid) (certNormKernel_nonneg hn h.valid)
+    (certKernel_local hm h.valid) (certKernel_nonneg hn h.valid) (certUtility r h.valid c)
+    (certUtility_local hm h.valid) plan _ _ _ hL hU (certKernel_envelope hm hn hε h.valid)
+    (certUtility_total_le hm h.valid) (recordedStrategy r h.valid c s)
+    (recordedAction r h.valid c s) (fun d x a => by simp [recordedStrategy]) (τ : ℝ)
+    (fun d x b => recorded_within h s hm hn hs plan hwe d x b)
+  rw [approxGap_eq r h c hm hε plan, card_decisions] at hnear
+  have hval := (recorded_binary64_approx_optimal h hm hn hs hw hε).2.1
+  have hdet := recordedStrategy_deterministic r h.valid c s
+  exact ⟨hdet, hnear.1, hnear.2, expectedUtility_le_optimalValue _ _ _
+    (DVE.deterministic_nonneg _ hdet), hval⟩
+
+/-- **The exactly normalised case.** On a certificate whose CPT rows sum to exactly one, under
+`solutionWithin τ τv`, Julia's recorded strategy is within `nd * τ` of every nonnegative strategy
+and of the optimum of the certificate's own model, and the recorded value within `τv` of that
+optimum. -/
+theorem recorded_binary64_near_optimal_exact (hm : certificateMatches r h c) (hn : Nonneg c)
+    (hs : s.WellFormed c) {τ τv : ℚ} (hw : solutionWithin r h.valid c s τ τv = true)
+    (hex : ExactNormalised r c) :
+    (∀ τ' : Strategy (r.compile h.valid) ℝ, τ'.Nonneg →
+        expectedUtility (certKernel r h.valid c) τ' (certUtility r h.valid c) ≤
+          expectedUtility (certKernel r h.valid c) (recordedStrategy r h.valid c s)
+            (certUtility r h.valid c) + r.nd * (τ : ℝ)) ∧
+      optimalValue (certKernel r h.valid c) (certUtility r h.valid c) - r.nd * (τ : ℝ) ≤
+        expectedUtility (certKernel r h.valid c) (recordedStrategy r h.valid c s)
+          (certUtility r h.valid c) ∧
+      |(s.value.toRat : ℝ) - optimalValue (certKernel r h.valid c) (certUtility r h.valid c)| ≤
+        τv := by
+  obtain ⟨h0, hk, he, -⟩ := certificate_approx_exact r h c hm hex
+  have hε : certificateEpsilon c < 1 := by rw [h0]; norm_num
+  have hnear := recorded_binary64_near_optimal h hm hn hs hw hε
+  simp only [hk, he, Rat.cast_zero, mul_zero, add_zero, sub_zero] at hnear
+  exact ⟨hnear.2.1, hnear.2.2.1, hnear.2.2.2.2⟩
 
 end Headline
 

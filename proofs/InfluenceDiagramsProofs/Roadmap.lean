@@ -104,9 +104,12 @@ This is **not** a byte-for-byte verification of Julia. Remaining refinements are
   `recorded_solution_optimal` makes Julia's recorded strategy and value the run's, hence optimal
   under exact normalisation, and `recorded_solution_approx_optimal` gives them the bound above.
   Julia's Float64 run is compared, not proved: `recorded_binary64_approx_optimal` bounds its
-  recorded value and per-row action loss `τ`, and its strategy only when its actions are the exact
-  run's; a different action at a near-tie has no proved expected-utility bound.
-  That Julia's action axis lists the
+  recorded value and per-row action loss `τ`, and its strategy when its actions are the exact
+  run's; `recorded_binary64_near_optimal` (`Finite/DVE/NearOptimal.lean`) bounds the strategy's
+  expected utility within `2 e + nd * τ` of the reference optimum whatever its actions at
+  near-ties, given that per-row check. Certificates with hard evidence rows are compared with the
+  exact run on the sliced data (`Finite/DVE/SolutionCheckEvidence.lean`), with the same bounds for
+  the conditional problem. That Julia's action axis lists the
   states in `state_position` order is pinned by a Julia test, and the array layout is the
   `FiniteKernels` `Layout/` result; Julia's execution itself is not proved. That Julia's block
   schedule is a `Plan`, and which `keep` its run uses, are read off the source, not derived (for
@@ -114,9 +117,11 @@ This is **not** a byte-for-byte verification of Julia. Remaining refinements are
   recorded scores with the run of `keepOfT` is decided, on that certificate only);
 * zero-probability rows beyond the above. There no semantic score exists, so a zero-reach
   entry is fixed by the representatives and is not claimed independent of the elimination
-  plan. Julia's hard-evidence path (sliced factors, absent variables skipped) is proved only
-  against the model's representative (`Conditioning.lean`); combined with Julia's `keep`
-  representative it is not modelled. The model's empty-bucket decision step adds a unit
+  plan. Julia's hard-evidence path (sliced factors, absent variables skipped) is proved against
+  the model's representative (`Conditioning.lean`) and, combined with Julia's `keep`
+  representative, in `Finite/DVE/NearOptimalEvidence.lean` (`runRepSkipWith`); that Julia's
+  evidence run is this one is read off the source and, for a version-2 certificate, decided by
+  `solutionMatchesE` on that certificate only. The model's empty-bucket decision step adds a unit
   valuation that Julia omits; this changes no value and no table;
 * Float64/tolerance behavior. Small action-dependent evidence probabilities can pass the
   source's tolerance guard and yield a wrong reported value; they are outside the theorem's

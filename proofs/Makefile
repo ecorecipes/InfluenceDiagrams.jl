@@ -49,6 +49,8 @@ MD_FILES = \
     Finite/DVE/RecordsValid.md Finite/DVE/JsonRecords.md Finite/DVE/CertificateJson.md \
     Finite/DVE/CertificateCheck.md Finite/DVE/Approximate.md Finite/DVE/CertificateApprox.md \
     Finite/DVE/SolutionJson.md Finite/DVE/SolutionRun.md Finite/DVE/SolutionCheck.md \
+    Finite/DVE/NearOptimal.md Finite/DVE/NearOptimalEvidence.md \
+    Finite/DVE/SolutionEvidence.md Finite/DVE/SolutionCheckEvidence.md \
     Roadmap.md
 
 JULIAMONO_DIR = $(abspath ../../fonts/JuliaMono)/

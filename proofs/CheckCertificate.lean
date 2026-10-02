@@ -54,19 +54,31 @@ then compared with the exact run of `Finite/DVE/SolutionRun.lean` on Julia's eli
     theorem recorded_solution_approx_optimal: applies|does not apply
     theorem recorded_binary64_approx_optimal: applies|does not apply
 
+    theorem recorded_binary64_near_optimal: applies|does not apply
+    solutionMatchesE: yes|no          (`solutionMatchesE`, the sliced run with hard evidence)
+    solutionWithinE: yes|no           (`solutionWithinE tau tauv`)
+
 The exact comparison is the verdict for a run with `arithmetic = "exact_rational"`, the binary64
 comparison (fixed tolerances `tau = tauv = 10^-9`) for a binary64 run.
 `recorded_solution_optimal` applies to a matching, nonnegative, exactly normalised certificate
 whose solution satisfies `solutionMatches`; `recorded_solution_approx_optimal` replaces exact
-normalisation by `certificateEpsilon < 1`; `recorded_binary64_approx_optimal` needs
-`solutionWithin tau tauv` and `certificateEpsilon < 1`.
+normalisation by `certificateEpsilon < 1`; `recorded_binary64_approx_optimal` and
+`recorded_binary64_near_optimal` need `solutionWithin tau tauv` and `certificateEpsilon < 1`.
+
+A certificate with hard evidence rows is compared with the exact run on its data sliced at the
+observed states (`Finite/DVE/SolutionEvidence.lean`, `Finite/DVE/SolutionCheckEvidence.lean`),
+on Julia's order with the observed variables put back (`solutionPlanE`): the plan, entries,
+values and loss lines then describe that run, `evidence probability` is its final mass
+(`massST`), `solutionMatches`/`solutionWithin` print `solutionMatchesE`/`solutionWithinE`, and
+the theorem lines are `recorded_solution_optimal_evidence`,
+`recorded_solution_approx_optimal_evidence` and `recorded_binary64_near_optimal_evidence`.
 
 The exit code is 0 exactly when the certificate matches and, for version 2, the solution passes
 the comparison of its run's arithmetic. The parse and this printing code are trusted, not proved;
 every verdict printed is a `decide` of a proved checker's propositions, and every number is
 computed by the definitions named.
 -/
-import InfluenceDiagramsProofs.Finite.DVE.SolutionCheck
+import InfluenceDiagramsProofs.Finite.DVE.SolutionCheckEvidence
 import Lean.Data.Json.Parser
 
 open BayesianNetworksProofs.Raw InfluenceDiagramsProofs.Records InfluenceDiagramsProofs.DVECertificate
@@ -132,14 +144,13 @@ def rowMax {n : Nat} (f : Fin n → ℚ) : ℚ :=
 /-- Per-entry comparison statistics: (entries, differing actions, action loss, score
 discrepancy), computed from the proved definitions `bucketAt`, `rowScore`, `entryIndex`. -/
 def solutionStats (r : Diagram) (h : r.Valid) (c : Certificate) (s : Solution)
-    (plan : InfluenceDiagramsProofs.DVE.Plan (r.compile h) Finset.univ) : Nat × Nat × ℚ × ℚ := Id.run do
-  let ts := initT r h c
+    (bk : Fin r.nd → Option (List (TVal r))) : Nat × Nat × ℚ × ℚ := Id.run do
   let mut n := 0
   let mut bad := 0
   let mut loss : ℚ := 0
   let mut disc : ℚ := 0
   for d in List.finRange r.nd do
-    match s.policies[d.val]?, bucketAt r h plan ts d with
+    match s.policies[d.val]?, bk d with
     | some p, some B =>
       for e in p.entries do
         let f := rowScore r h B d p e
@@ -221,34 +232,55 @@ def main (args : List String) : IO UInt32 := do
             IO.println s!"solution exact fallback: {yesNo s.exactFallback}"
             -- the run is defined only for nonnegative cells (`certKernel_nonneg`), and the
             -- theorems only for a matching certificate
-            match solutionPlan r h.valid s with
+            let evid := !c.hard.isEmpty
+            let swE := solutionWithinE r h.valid c s tau tau
+            let smE := solutionMatchesE r h.valid c s
+            let planV : Option (InfluenceDiagramsProofs.DVE.Plan (r.compile h.valid) Finset.univ) :=
+              if evid then solutionPlanE r h.valid c s else solutionPlan r h.valid s
+            match planV with
             | none =>
               IO.println "solution plan: FAIL"
               IO.println "solutionMatches: no"
               IO.println "solutionWithin: no"
+              IO.println s!"solutionMatchesE: {yesNo smE}"
+              IO.println s!"solutionWithinE: {yesNo swE}"
               return 1
             | some plan =>
               IO.println "solution plan: ok"
-              let (ne, bad, loss, disc) := solutionStats r h.valid c s plan
-              let exact := valueT r h.valid plan (initT r h.valid c)
+              let (ne, bad, loss, disc) :=
+                if evid then solutionStats r h.valid c s (bucketAtS r h.valid plan (initCT r h.valid c))
+                else solutionStats r h.valid c s (bucketAt r h.valid plan (initT r h.valid c))
+              let exact := if evid then valueST r h.valid plan (initCT r h.valid c)
+                else valueT r h.valid plan (initT r h.valid c)
               let vdisc := |s.value.toRat - exact|
               IO.println s!"solution entries: {ne}"
+              if evid then
+                IO.println s!"evidence probability: {sci (massST r h.valid plan (initCT r h.valid c))}"
               IO.println s!"exact value: {sci exact}"
               IO.println s!"recorded value: {sci s.value.toRat}"
               IO.println s!"value discrepancy: {sci vdisc}"
-              let agree := actionsAgree r h.valid c s
+              let agree := if evid then actionsAgreeE r h.valid c s else actionsAgree r h.valid c s
               IO.println s!"actions agree: {yesNo agree}"
               IO.println s!"actions differing: {bad}"
               IO.println s!"action loss: {sci loss}"
               IO.println s!"score discrepancy: {sci disc}"
-              let sm := solutionMatches r h.valid c s
+              let sm := if evid then smE else solutionMatches r h.valid c s
               IO.println s!"solutionMatches: {yesNo sm}"
               IO.println s!"tolerances tau tauv: {sci tau} {sci tau}"
-              let sw := solutionWithin r h.valid c s tau tau
+              let sw := if evid then swE else solutionWithin r h.valid c s tau tau
               IO.println s!"solutionWithin: {yesNo sw}"
-              IO.println s!"theorem recorded_solution_optimal: {if m && nn && en && sm then "applies" else "does not apply"}"
-              IO.println s!"theorem recorded_solution_approx_optimal: {if ok && sm then "applies" else "does not apply"}"
-              IO.println s!"theorem recorded_binary64_approx_optimal: {if ok && sw then "applies" else "does not apply"}"
+              let ap (b : Bool) : String := if b then "applies" else "does not apply"
+              if evid then
+                IO.println s!"theorem recorded_solution_optimal_evidence: {ap (m && nn && en && sm)}"
+                IO.println s!"theorem recorded_solution_approx_optimal_evidence: {ap (ok && sm)}"
+                IO.println s!"theorem recorded_binary64_near_optimal_evidence: {ap (ok && sw)}"
+              else
+                IO.println s!"theorem recorded_solution_optimal: {ap (m && nn && en && sm)}"
+                IO.println s!"theorem recorded_solution_approx_optimal: {ap (ok && sm)}"
+                IO.println s!"theorem recorded_binary64_approx_optimal: {ap (ok && sw)}"
+                IO.println s!"theorem recorded_binary64_near_optimal: {ap (ok && sw)}"
+              IO.println s!"solutionMatchesE: {yesNo smE}"
+              IO.println s!"solutionWithinE: {yesNo swE}"
               let pass := match s.arithmetic with
                 | .exactRational => sm
                 | .binary64 => sw

@@ -66,7 +66,9 @@ Module order (`MD_FILES` in the `Makefile`, the import order of `InfluenceDiagra
 17. `Finite/DVE/RecordsValid.lean`, `JsonRecords.lean`, `CertificateJson.lean`, `CertificateCheck.lean` — checked records, the JSON decoders and the certificate checker
 18. `Finite/DVE/Approximate.lean`, `CertificateApprox.lean` — approximate optimality of the exact run on approximately normalised kernels and certificates
 19. `Finite/DVE/SolutionJson.lean`, `SolutionRun.lean`, `SolutionCheck.lean` — the version-2 certificate decoder, the computable exact run, and the check of Julia's recorded solution against it
-20. `Roadmap.lean` — remaining literal-implementation refinements; no unproved declarations
+20. `Finite/DVE/NearOptimal.lean`, `NearOptimalEvidence.lean` — the expected-utility loss of actions within `τ` of every row maximum, without and with hard evidence (Julia's sliced run with the `sum_out` representative)
+21. `Finite/DVE/SolutionEvidence.lean`, `SolutionCheckEvidence.lean` — the computable exact sliced run and the check of a recorded solution with hard evidence rows
+22. `Roadmap.lean` — remaining literal-implementation refinements; no unproved declarations
 
 ## What is formalised
 
@@ -99,7 +101,11 @@ inherited `FinBayesNet.nonemptyS` fields ensure that every action space is nonem
 | `Finite/DVE/CertificateApprox.lean` | Computable over `ℚ`: `certDim`, `rowSum`, `certificateEpsilon` (largest `|row sum - 1|`), `certUmax`, `certChanceCount`, `approxError ε n U = n (((1 + ε) / (1 - ε)) ^ n - 1) U`, `certificateBound = 2 approxError`. `certificateEpsilon_eq_zero_iff` (`= 0` iff `ExactNormalised`), `certNormKernel` (rows divided by their sums) with `certNormKernel_local`, `_nonneg`, `_normalised`, `_eq_of_exact`; `certRowSum_dev`, `certKernel_envelope` (joint within `[(1 - ε) ^ n, (1 + ε) ^ n]` of the reference joint), `certUtility_total_le`; `certificate_approx_optimal`, `certificate_solve_approx`, `certificate_approx_exact`. |
 | `Finite/DVE/SolutionJson.lean` | The version-2 decoder: records `Backend`, `Arithmetic`, `DataKind`, `PolicyEntry`, `PolicyRecord`, `Solution` and `…Matches` for every key; `decodeSolution_eq_ok`, `decodeBody` / `BodyMatches` (the twelve version-1 fields, read by the version-1 row decoders; `certificateMatches_iff_body`), `decodeCertificateV2`, `decodeCertificateV2_eq_ok`, `decodeCertificateV2_encode`, `decodeSolution_encode`; `Solution.WellFormed`, `decodeSolution_wellFormed`, `decodeCertificateV2_wellFormed`, `decodeSolution_coverage` with `lexCoords_nodup` and `lexCoords_pairwise_lex`; `decodeSolution_shape`, `decodeSolution_error_of_missing_key`, `_ill_typed`, `_not_object`, `decodeCertificateV2_error_of_missing_key`; `decodeAnyCertificate`, `decodeAnyCertificate_v1`, `_v2`, `_error_of_v2_with_v1_keys`, `_error_of_v1_with_v2_keys`. |
 | `Finite/DVE/SolutionRun.lean` | `QVal` (valuations over `ℚ` with Julia's utility variables `uvars`), `qcombine`, `qcollect`, `qsumOut` (Julia's `sum_out` branch), `qmaxOut`; `Rel` (a real valuation is a rational one read in `ℝ`) with `rel_combine`, `rel_collect`, `rel_sumOut` (against `sumOutKeep (a ∉ uvars)`), `rel_maxOut`, `udep_sumOut`; `collect_perm`; `TVal`, `tab`, `view`, `view_tab` (tables over the scope); `runT`, `keepOfT`, `scoreT`, `valueT`, `planOf` (the `Plan` of an elimination order), `toFinList`; `Sim`, `sim_runRep`, `sim_initial`, `certKernelQ`, `certUtilityQ`, `initT`, `exactRun_spec`. |
-| `Finite/DVE/SolutionCheck.lean` | `bucketAt`, `scoreT_of_bucketAt`, `entryAssignment`, `entryIndex`, `rowScore`; `EntryAction`, `EntryScore`, `EntryWithin`, `AllEntries`, `solutionPlan`, `DataConsistent`, `ActionsAgreeWith`, `SolutionMatchesWith`, `SolutionWithinWith` and the decidable checkers `solutionMatches`, `actionsAgree`, `solutionWithin`; `recordedStrategy` (deterministic), `recordedAction`, `info_mem_axes`, `entry_of_row`, `recorded_eq_run`, `recorded_within`; `recorded_solution_optimal`, `recorded_solution_approx_optimal`, `recorded_binary64_approx_optimal`. |
+| `Finite/DVE/SolutionCheck.lean` | `bucketAt`, `scoreT_of_bucketAt`, `entryAssignment`, `entryIndex`, `rowScore`; `EntryAction`, `EntryScore`, `EntryWithin`, `AllEntries`, `solutionPlan`, `DataConsistent`, `ActionsAgreeWith`, `SolutionMatchesWith`, `SolutionWithinWith` and the decidable checkers `solutionMatches`, `actionsAgree`, `solutionWithin`; `recordedStrategy` (deterministic), `recordedAction`, `info_mem_axes`, `entry_of_row`, `recorded_eq_run`, `recorded_within`; `recorded_solution_optimal`, `recorded_solution_approx_optimal`, `recorded_binary64_approx_optimal`; `recorded_binary64_near_optimal` (within `2 e + nd τ` of the reference optimum, actions not required to agree) and `recorded_binary64_near_optimal_exact` (within `nd τ` when exactly normalised). |
+| `Finite/DVE/NearOptimal.lean` | `Plan.decisionCount` / `Plan.decisionCount_eq` / `Plan.decisionCount_univ` (one step per decision); `likUtil`, `refMarg_unobserved`, `refMarg_observed`; `TolInv` (against a normalised reference kernel `κ`, a weight `lik` and clamped rows: mass envelope, utility bound, the one-sided bound `(W - e - t) M_σ ≤ V_σ` for a strategy `σ` on the eliminated decisions, dominance with error `e`) with `TolInv.initial`, `TolInv.chanceOf` (`+ (H / L - 1) U` to `e`), `TolInv.observed` (nothing), `TolInv.decisionOf` (`+ τ` to `t` for an action within `τ` of the bucket score's maximum on every row), `TolInv.weaken`; `tolInv_runRep`; `solveRepPlan_tolerant` (`value - e - card D τ ≤ EU κ ρ`), `solveRepPlan_near_optimal` (within `2 e + card D τ` of every nonnegative strategy and of the optimum), `solveRepPlan_tolerant_optimal` (exactly normalised: within `card D τ`). |
+| `Finite/DVE/NearOptimalEvidence.lean` | `State.chanceRepSkip` (skip an absent variable, else `chanceKeep`), `runRepSkipWith`, `runRepSkipState`, `decisionScoreRepSkip` (local), `runRepSkipWith_kernel`, `_deterministic`; `ScopeOK` (observed variables in no scope, the other chance variables covered); `tolInv_runRepSkip`; `solveCondRepPlanWith` / `solveCondRepPlanScore` / `solveCondRepPlanMass` on `initialConditioned`; `TolInv.conditional`, `conditionalEU_le_optimal`, `conditionalOptimal_attained`; `solveCondRepPlan_mass` (final mass in `[L Z, H Z]`), `solveCondRepPlan_tolerant`, `solveCondRepPlan_approx_optimal`, `solveCondRepPlan_near_optimal`, `solveCondRepPlan_spec` (exact data: realized conditional optimum, mass `Z`, tolerant strategies within `card D τ`). |
+| `Finite/DVE/SolutionEvidence.lean` | `qcondition` with `rel_condition`, `udep_condition`; `certObserved`, `certObservedValue`, `mem_certObserved`; `initCT`, `chanceStepTS`, `runST`, `keepOfST`, `scoreST`, `valueST`, `massST`, `bucketAtS`, `scoreST_of_bucketAtS`; `withObserved` (Julia's order with the observed variables put back); `Sim.bucket_nil_iff`, `Sim.chanceSkip`, `sim_runRepSkip`, `sim_initialC`, `exactRunC_spec`; `certHardEvidence` (the hard rows as `HardEvidence`, ancestral set from `topological_order`). |
+| `Finite/DVE/SolutionCheckEvidence.lean` | `AllEntriesE`, `solutionPlanE`, `ActionsAgreeWithE`, `SolutionMatchesWithE`, `SolutionWithinWithE` (both with a positive final mass) and the decidable `solutionMatchesE`, `actionsAgreeE`, `solutionWithinE`; `runOfE`, `scoreOfE`, `tablesE`, `entry_of_rowE`, `recorded_eq_runE`, `recorded_withinE`, `evidenceMass_pos`; `recorded_solution_optimal_evidence`, `recorded_solution_approx_optimal_evidence`, `recorded_binary64_near_optimal_evidence`, `recorded_binary64_near_optimal_evidence_exact`. |
 | `Roadmap.lean` | Remaining literal-Julia refinements; no unproved declarations. |
 
 `Audit.lean` prints the axioms of every main theorem (and of the definitions `Policy.ofFun`,
@@ -219,8 +225,8 @@ entry on a reachable row. On every row, zero-reach rows included, `solveRepPlanO
 proves that the first-label policy is `orderedTable` of the run's own score
 `solveRepPlanScore`; that score may differ from the model's only on zero-reach rows, so the
 whole table is determined by the data and the plan. `solveRepPlanOrdered_optimal` combines
-this with plan independence. Julia's hard-evidence path (`runSkipWith`) combined with `keep` is
-not modelled.
+this with plan independence. Julia's hard-evidence path combined with `keep` is modelled in
+`Finite/DVE/NearOptimalEvidence.lean` (`runRepSkipWith`, below).
 
 ### Action labels in checked state-position order
 
@@ -377,11 +383,43 @@ run's tables, value and least-position rows to Julia's recorded solution, and un
 `ExactNormalised` optimality and the optimal value; `recorded_solution_approx_optimal` gives it
 the bounds of `certificate_approx_optimal`; `recorded_binary64_approx_optimal` proves the per-row
 `τ` statement and `|value - optimalValue| ≤ τv + e` for a binary64 run, and the strategy bounds
-when the actions agree. Not proved: an expected-utility bound for a binary64 run whose actions
-differ from the exact ones at near-ties (the loss of a `τ`-maximizer at each row would need a
-step invariant through the driver with approximate selection), and anything with evidence.
+when the actions agree. `recorded_binary64_near_optimal` bounds the strategy without agreement:
+under `solutionWithin τ τv` and `certificateEpsilon c < 1`, `EU κ̂ τ' ≤ EU κ̂ recorded + 2 e + nd τ`
+for every nonnegative `τ'` and `optimalValue κ̂ - 2 e - nd τ ≤ EU κ̂ recorded`, `nd` the number of
+decisions (`recorded_binary64_near_optimal_exact`: `nd τ` on an exactly normalised certificate).
+The proof is the step invariant `TolInv` of `Finite/DVE/NearOptimal.lean`, run with the recorded
+strategy in place of the run's: a decision's score on an information row is the conditional
+expected utility given that row (a divided utility) of acting there with the run's later
+policies, so a recorded action within `τ` of the row maximum loses at most `τ` times the row's
+mass, and the rows of one decision have total mass one under the reference model. The decisions
+are replaced one at a time in elimination order, the later recorded policies already in place,
+which is why the row condition is needed on every row, including rows the run's own strategy
+reaches with probability zero.
 `check_certificate` prints the comparison: whether the actions agree, the largest action loss,
 score and value discrepancies, `solutionMatches` and `solutionWithin` at `τ = τv = 10^-9`.
+
+**Hard evidence.** Julia's run conditions on the certificate's `evidence.hard` rows: it slices
+every chance factor and utility potential at the observed states and never sums an observed
+variable, which therefore does not appear in the recorded `elimination_order`.
+`Finite/DVE/NearOptimalEvidence.lean` models this run with Julia's representative
+(`runRepSkipWith`: skip a variable no valuation mentions, otherwise `chanceKeep`, from
+`initialConditioned`), and `TolInv` runs through it with the hard-evidence indicator as weight:
+an observed variable is skipped by the run and keeps only its observed state in the reference
+(`TolInv.observed`), so it adds nothing. The resulting bounds are for the conditional problem of
+`Evidence.lean` (`conditionalEU`, `conditionalOptimalValue`) at positive evidence mass, which
+`solveCondRepPlan_mass` derives from a positive final mass of the run (the final mass lies in
+`[L Z, H Z]`). `Finite/DVE/SolutionEvidence.lean` computes that run on the certificate's sliced
+tables (`exactRunC_spec`), and `Finite/DVE/SolutionCheckEvidence.lean` decides
+`solutionMatchesE` and `solutionWithinE` on Julia's order with the observed variables put back
+(`withObserved`: each just before the first decision that does not observe it). Under
+`solutionMatchesE`, `recorded_solution_optimal_evidence` makes the recorded strategy and value
+the sliced run's, with least-position rows, and, when exactly normalised, conditionally optimal;
+`recorded_solution_approx_optimal_evidence` and `recorded_binary64_near_optimal_evidence` give
+the `2 e`, `τv + e` and `2 e + nd τ` bounds against the conditional problem of the row-normalised
+model. `certHardEvidence` shows that the hard rows are evidence on an action-free
+chance-ancestral set: `certificateMatches` puts every evidence variable before every action in
+`topological_order`. `check_certificate` uses these checkers for a certificate with evidence rows
+and prints the run's evidence probability (`massST`).
 
 Not proved: `Lean.Json.parse` and Julia's JSON3/ACSets writer (trusted; the theorems start from
 a parsed `Json` tree), Julia's `export_dve_certificate` and its `Float64` capture; for a version-1
@@ -465,14 +503,18 @@ arrays or a decoded certificate. Tables on zero-probability rows depend on utili
 representatives: the model stores `0` where a chance step's summed probability is zero, while
 Julia's `sum_out` keeps a utility table that does not mention the summed variable;
 `Representative.lean` proves that this changes no value, mass or positive-reach entry and that
-Julia's whole table is `orderedTable` of its own score, without hard evidence.
+Julia's whole table is `orderedTable` of its own score, without hard evidence; with hard
+evidence the sliced run's table is the selector's choice on its own score on every row
+(`runRepSkipWith_kernel`, `tablesE`).
 The exact all-row probability guard is now proved complete, including unreachable bucket rows:
 see `all_guards_complete`, `all_guards_complete_evidence`, `checkedRun_generated_eq` and
 `checkedRun_generated_evidence_eq`. Explicit conditioning is proved
 equivalent to the likelihood factor for values, masses and positive-reach tables (see above);
 zero-probability representatives are not proved entrywise equal. Float64 behaviour is not
 covered: tolerance can admit action-dependent evidence that violates the exact invariant, and
-Float64 rounding can create or break near-ties, which the real order does not see.
+Float64 rounding can create or break near-ties, which the real order does not see. What a
+recorded near-tie action can cost is bounded once the per-row `τ` check holds
+(`recorded_binary64_near_optimal`, `recorded_binary64_near_optimal_evidence`).
 
 ### Exact all-row diagnostic completeness
 

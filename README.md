@@ -131,7 +131,9 @@ policy entry on a row of positive probability, for any elimination plan and any 
 first-label table is `orderedTable` of that run's own bucket-utility score.
 `solveRepPlanWith_spec` proves that the returned strategy still realizes the global optimum.
 Which representative Julia uses at each step is read off the source; the theorems hold for every
-choice. Julia's hard-evidence path combined with this representative is not modelled.
+choice. `Finite/DVE/NearOptimalEvidence.lean` combines this representative with Julia's
+hard-evidence path (sliced factors, absent variables skipped) in one driver,
+`solveCondRepPlanWith`.
 
 `Finite/DVE/LabelOrder.lean` derives the first-label order from checked records instead of
 supplying it: `Records.Diagram` holds raw influence-diagram rows, its check requires bounded,
@@ -218,9 +220,31 @@ recorded strategy and value. A binary64 Julia run is compared, not proved:
 `recorded_binary64_approx_optimal` proves, under `solutionWithin τ τv`, that every recorded action
 is within `τ` of the maximum of its exact score row and the recorded value within `τv + e` of
 the reference optimum, and that the recorded strategy is the exact run's when the recorded
-actions agree with the exact ones (`actionsAgree`). For an action that differs from the exact
-one at a near-tie no bound on the lost expected utility is proved, and evidence is not modelled
-(the checks require a certificate without evidence rows). `keepOfT` follows the branch of
+actions agree with the exact ones (`actionsAgree`).
+`recorded_binary64_near_optimal` proves that if a version-2 certificate matches, its CPT cells
+are nonnegative, its solution is well formed, `solutionWithin τ τv` holds and
+`certificateEpsilon c < 1`, then Julia's recorded strategy is deterministic, its expected
+utility under the row-normalised model is within `2 e + nd * τ` of that model's optimum and of
+every nonnegative strategy, where `nd` is the number of decisions, and the recorded value is
+within `τv + e` of that optimum, whether or not the recorded actions agree with the exact run's.
+The score of a decision on an information row is a conditional expected utility given that row,
+so replacing the decisions by the recorded ones one at a time, from the last to the first,
+loses at most `τ` per decision (`solveRepPlan_tolerant` and `solveRepPlan_near_optimal`,
+`Finite/DVE/NearOptimal.lean`); on an exactly normalised certificate the bound is `nd * τ`
+(`recorded_binary64_near_optimal_exact`).
+`Finite/DVE/SolutionEvidence.lean` and `Finite/DVE/SolutionCheckEvidence.lean` extend the
+comparison to certificates with hard evidence rows: the exact run is computed on the data sliced
+at the observed states, skipping the observed variables as Julia does (`exactRunC_spec`), on
+Julia's order with the observed variables put back (`solutionPlanE`), and `solutionMatchesE`
+and `solutionWithinE` also ask the run's final mass to be positive.
+`recorded_solution_optimal_evidence` proves that under `solutionMatchesE` Julia's recorded
+strategy and value are that run's and its recorded action is the least-position maximizer of the
+run's score on every information row, and that if every CPT row sums to exactly one the evidence
+mass is positive and the recorded strategy and value attain the conditional optimum given the
+hard rows (`conditionalEU`, `conditionalOptimalValue`);
+`recorded_solution_approx_optimal_evidence` and `recorded_binary64_near_optimal_evidence` give
+that conditional problem the bounds above (`2 e` for an exact run; `τv + e` for the value and
+`2 e + nd * τ` for the strategy of a binary64 run). `keepOfT` follows the branch of
 Julia's `sum_out` (keep the utility potential when the summed variable is not one of its
 variables), read off the source; that Julia's run uses it is checked on the cross-check's
 fixtures, not proved.

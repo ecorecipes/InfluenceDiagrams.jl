@@ -5790,7 +5790,7 @@ not derived.
 
 Evidence: these theorems cover the no-evidence driver on any plan. Julia's hard-evidence path
 (sliced factors, absent variables skipped: `runSkipWith`) combined with this representative is
-not modelled here.
+not modelled here; `Finite/DVE/NearOptimalEvidence.lean` combines them (`runRepSkipWith`).
 
 ```lean
 set_option autoImplicit false
@@ -13078,6 +13078,7 @@ end InfluenceDiagramsProofs.DVECertificate
 
 ```lean
 import InfluenceDiagramsProofs.Finite.DVE.SolutionRun
+import InfluenceDiagramsProofs.Finite.DVE.NearOptimal
 ```
 
 A version-2 certificate records the policy tables, scores and value of one Julia DVE run
@@ -13119,13 +13120,18 @@ coordinates (`entryAssignment`); `rowScore` is the exact run's score row there (
   action is within `τ` of the maximum of the run's score row on every information row, and the
   recorded value is within `τv + e` of the optimum of the row-normalised model; if moreover
   `actionsAgree`, the recorded strategy is the run's and is within `2 e` of that optimum.
+* `recorded_binary64_near_optimal` (binary64 runs, actions need not agree): under
+  `solutionWithin τ τv` and `certificateEpsilon c < 1`, the recorded strategy is within
+  `2 e + nd * τ` of every nonnegative strategy and of the optimum of the row-normalised model,
+  `nd` the number of decisions (`solveRepPlan_near_optimal` of `Finite/DVE/NearOptimal.lean`:
+  each decision step loses at most `τ` times the total mass of its rows, which is one);
+  `recorded_binary64_near_optimal_exact`: on an exactly normalised certificate, within `nd * τ`
+  of the optimum of the certificate's model.
 
-**Not proved.** That a binary64 run whose actions differ from the exact ones at near-ties (each
-within `τ` of its row maximum) loses at most a function of `τ` in expected utility: the loss
-bound needs a step-by-step invariant through the driver that is not formalized, so for such a
-run only the per-row `τ` statement and the value bound are theorems. Evidence is not modelled:
-the checks require that the certificate has no evidence row. Trusted: `Lean.Json.parse`,
-Julia's exporter and its Float64 run, which is compared, not proved.
+**Not proved here.** Evidence: these checks require that the certificate has no evidence row;
+`Finite/DVE/SolutionEvidence.lean` and `SolutionCheckEvidence.lean` treat certificates with hard
+evidence. Trusted: `Lean.Json.parse`, Julia's exporter and its Float64 run, which is compared,
+not proved.
 
 ```lean
 set_option autoImplicit false
@@ -13726,6 +13732,2462 @@ theorem recorded_binary64_approx_optimal (hm : certificateMatches r h c) (hn : N
     rw [hrec]
     exact ⟨ha.1, ha.2.1, ha.2.2.1⟩
 
+theorem card_decisions (h : r.Valid) : Fintype.card (r.compile h).D = r.nd := Fintype.card_fin _
+
+/-- **Near-optimality of Julia's recorded solution of a binary64 run, whatever its actions at
+near-ties.** Under `solutionWithin τ τv` and `certificateEpsilon c < 1`, writing `κ̂` for the
+row-normalised model `certNormKernel`, `e = approxError ε n Umax` and `nd` for the number of
+decisions, Julia's recorded strategy (deterministic) satisfies
+
+* `EU κ̂ τ' ≤ EU κ̂ recorded + 2 e + nd * τ` for every nonnegative strategy `τ'`;
+* `optimalValue κ̂ - 2 e - nd * τ ≤ EU κ̂ recorded ≤ optimalValue κ̂`;
+
+and the recorded value is within `τv + e` of `optimalValue κ̂`. No agreement of the recorded
+actions with the exact run's is assumed: each recorded action is only within `τ` of the maximum
+of the exact run's score row, on every information row. -/
+theorem recorded_binary64_near_optimal (hm : certificateMatches r h c) (hn : Nonneg c)
+    (hs : s.WellFormed c) {τ τv : ℚ} (hw : solutionWithin r h.valid c s τ τv = true)
+    (hε : certificateEpsilon c < 1) :
+    let e : ℝ := approxError (certificateEpsilon c) (certChanceCount c) (certUmax c)
+    (recordedStrategy r h.valid c s).Deterministic ∧
+      (∀ τ' : Strategy (r.compile h.valid) ℝ, τ'.Nonneg →
+        expectedUtility (certNormKernel r h.valid c) τ' (certUtility r h.valid c) ≤
+          expectedUtility (certNormKernel r h.valid c) (recordedStrategy r h.valid c s)
+            (certUtility r h.valid c) + 2 * e + r.nd * (τ : ℝ)) ∧
+      optimalValue (certNormKernel r h.valid c) (certUtility r h.valid c) - 2 * e -
+          r.nd * (τ : ℝ) ≤
+        expectedUtility (certNormKernel r h.valid c) (recordedStrategy r h.valid c s)
+          (certUtility r h.valid c) ∧
+      expectedUtility (certNormKernel r h.valid c) (recordedStrategy r h.valid c s)
+          (certUtility r h.valid c) ≤
+        optimalValue (certNormKernel r h.valid c) (certUtility r h.valid c) ∧
+      |(s.value.toRat : ℝ) - optimalValue (certNormKernel r h.valid c) (certUtility r h.valid c)| ≤
+        τv + e := by
+  intro e
+  obtain ⟨plan, -, -, hwe, -⟩ := solutionWithin_spec r h.valid c s hw
+  have hε1 : (certificateEpsilon c : ℝ) < 1 := by exact_mod_cast hε
+  have hL : 0 < (1 - (certificateEpsilon c : ℝ)) ^ certChanceCount c :=
+    pow_pos (by linarith) _
+  have hU : (0 : ℝ) ≤ certUmax c := by exact_mod_cast certUmax_nonneg c
+  have hnear := DVE.solveRepPlan_near_optimal (r.selector h.valid)
+    (keepOfT r h.valid plan (initT r h.valid c)) (certNormKernel r h.valid c)
+    (certKernel r h.valid c) h.closed h.idOrder (certNormKernel_local hm h.valid)
+    (certNormKernel_normalised hm hε h.valid) (certNormKernel_nonneg hn h.valid)
+    (certKernel_local hm h.valid) (certKernel_nonneg hn h.valid) (certUtility r h.valid c)
+    (certUtility_local hm h.valid) plan _ _ _ hL hU (certKernel_envelope hm hn hε h.valid)
+    (certUtility_total_le hm h.valid) (recordedStrategy r h.valid c s)
+    (recordedAction r h.valid c s) (fun d x a => by simp [recordedStrategy]) (τ : ℝ)
+    (fun d x b => recorded_within h s hm hn hs plan hwe d x b)
+  rw [approxGap_eq r h c hm hε plan, card_decisions] at hnear
+  have hval := (recorded_binary64_approx_optimal h hm hn hs hw hε).2.1
+  have hdet := recordedStrategy_deterministic r h.valid c s
+  exact ⟨hdet, hnear.1, hnear.2, expectedUtility_le_optimalValue _ _ _
+    (DVE.deterministic_nonneg _ hdet), hval⟩
+
+/-- **The exactly normalised case.** On a certificate whose CPT rows sum to exactly one, under
+`solutionWithin τ τv`, Julia's recorded strategy is within `nd * τ` of every nonnegative strategy
+and of the optimum of the certificate's own model, and the recorded value within `τv` of that
+optimum. -/
+theorem recorded_binary64_near_optimal_exact (hm : certificateMatches r h c) (hn : Nonneg c)
+    (hs : s.WellFormed c) {τ τv : ℚ} (hw : solutionWithin r h.valid c s τ τv = true)
+    (hex : ExactNormalised r c) :
+    (∀ τ' : Strategy (r.compile h.valid) ℝ, τ'.Nonneg →
+        expectedUtility (certKernel r h.valid c) τ' (certUtility r h.valid c) ≤
+          expectedUtility (certKernel r h.valid c) (recordedStrategy r h.valid c s)
+            (certUtility r h.valid c) + r.nd * (τ : ℝ)) ∧
+      optimalValue (certKernel r h.valid c) (certUtility r h.valid c) - r.nd * (τ : ℝ) ≤
+        expectedUtility (certKernel r h.valid c) (recordedStrategy r h.valid c s)
+          (certUtility r h.valid c) ∧
+      |(s.value.toRat : ℝ) - optimalValue (certKernel r h.valid c) (certUtility r h.valid c)| ≤
+        τv := by
+  obtain ⟨h0, hk, he, -⟩ := certificate_approx_exact r h c hm hex
+  have hε : certificateEpsilon c < 1 := by rw [h0]; norm_num
+  have hnear := recorded_binary64_near_optimal h hm hn hs hw hε
+  simp only [hk, he, Rat.cast_zero, mul_zero, add_zero, sub_zero] at hnear
+  exact ⟨hnear.2.1, hnear.2.2.1, hnear.2.2.2.2⟩
+
+end Headline
+
+end InfluenceDiagramsProofs.DVECertificate
+```
+
+
+<!-- InfluenceDiagramsProofs/Finite/DVE/NearOptimal.lean -->
+
+# The expected-utility loss of near-optimal actions
+
+```lean
+import InfluenceDiagramsProofs.Finite.DVE.Approximate
+```
+
+`solveRepPlanWith_spec` and `solveRepPlanWith_approx_optimal` are about the run's **own**
+strategy, which maximizes every score row exactly. A binary64 run can record, at a near-tie, an
+action that is not a maximizer of the exact score row but whose exact score is within `τ` of the
+row maximum. This module bounds the expected utility such a strategy loses.
+
+**The scores.** The score row of a decision `d` (`decisionScoreRep`, `solveRepPlanScore`) is the
+utility potential of `d`'s bucket at the moment the plan eliminates `d`'s action, read at an
+information row. It is a *divided* utility: a chance elimination stores the ratio of summed
+weight to summed mass, so the score is a conditional expected utility given the row, of the
+bucket's part of the utility, assuming the decisions eliminated before `d` (the later ones in
+time) play the exact run's policies. Losing `τ` on a row therefore loses `τ` times the row's
+probability, and the rows of one decision partition the probability mass.
+
+**The invariant (`TolInv`).** The proof follows the run, as `ApproxInv` does, against a normalised
+reference kernel `κ` and a weight `lik` (`1` without evidence, the hard-evidence indicator with
+it; rows are read at `clamp O o x`, the identity when `O = ∅`), but for an **arbitrary**
+deterministic strategy `σ` on the eliminated decisions, given by one action function `g` per
+decision. It keeps the mass envelope `[L, H]`, the utility bound `U`, a two-sided error `e` for
+the chance eliminations, and the one-sided bound
+
+`(W x - e - t) M_σ(x) ≤ V_σ(x)`,
+
+where `W` is the run's utility potential, `M_σ` and `V_σ` the reference mass and value of the
+eliminated part under `σ`, and `t` the accumulated loss. A decision step at which `g` is within
+`τ` of the maximum of the run's own score row, on every row, adds `τ` to `t`
+(`TolInv.decisionOf`); the run's own selector is the case `τ = 0`. This is the telescoping of a
+performance-difference argument: the decisions are replaced one at a time in elimination order
+(from the last in time to the first), each replacement losing at most `τ` times the total mass of
+its rows, `τ M`. A chance step adds `(H / L - 1) U` to `e` (`TolInv.chanceOf`) and nothing to
+`t`.
+
+**Results** (`card D` is the number of decisions; a plan eliminates each exactly once,
+`Plan.decisionCount_univ`):
+
+* `solveRepPlan_tolerant`: for any selector, representative choice and plan, and any strategy
+  `ρ` reading actions `g d x` with `score d x b ≤ score d x (g d x) + τ` on **every** row of the
+  run's score (`solveRepPlanScore`), `value - e - card D * τ ≤ EU κ ρ`, with
+  `e = approxGap k L H U` as in `solveRepPlanWith_approx`;
+* `solveRepPlan_near_optimal`: hence `EU κ τ' ≤ EU κ ρ + 2 e + card D * τ` for every nonnegative
+  `τ'`, and `optimalValue κ u - 2 e - card D * τ ≤ EU κ ρ`;
+* `solveRepPlan_tolerant_optimal`: **the exactly normalised case** (`κ' = κ`): the loss is at most
+  `card D * τ`, `optimalValue κ u - card D * τ ≤ EU κ ρ`.
+
+The constant `card D` is the number of decision steps, each weighted by a total row mass of one;
+the bound needs the row condition on every row, including rows the exact run's own strategy
+reaches with probability zero, because the replaced later decisions change which rows are
+reached. Everything is exact real arithmetic about the stated run and strategy.
+
+```lean
+set_option autoImplicit false
+
+namespace InfluenceDiagramsProofs.DVE
+
+open BayesianNetworksProofs BayesianNetworksProofs.FinBayesNet FinInfluenceDiagram Valuation
+
+noncomputable section
+
+variable {id : FinInfluenceDiagram}
+```
+
+## Counting decisions
+
+```lean
+/-- The number of decision steps of a plan. -/
+def Plan.decisionCount : {R : Finset id.V} → Plan id R → ℕ
+  | _, .done => 0
+  | _, .chance _ _ _ next => next.decisionCount
+  | _, .decision _ _ _ next => next.decisionCount + 1
+
+/-- A plan eliminates every decision whose action it contains exactly once. -/
+theorem Plan.decisionCount_eq (hinj : Function.Injective id.action) {R : Finset id.V}
+    (plan : Plan id R) :
+    plan.decisionCount = (Finset.univ.filter fun d => id.action d ∈ R).card := by
+  induction plan with
+  | done => simp [Plan.decisionCount]
+  | @chance R v hv hc next ih =>
+    rw [Plan.decisionCount, ih]
+    congr 1
+    ext d
+    simp only [Finset.mem_filter, Finset.mem_univ, true_and, Finset.mem_erase]
+    exact ⟨fun h => h.2, fun h => ⟨hc d, h⟩⟩
+  | @decision R d hd hi next ih =>
+    rw [Plan.decisionCount, ih]
+    have hset : (Finset.univ.filter fun e => id.action e ∈ R.erase (id.action d)) =
+        (Finset.univ.filter fun e => id.action e ∈ R).erase d := by
+      ext e
+      simp only [Finset.mem_filter, Finset.mem_univ, true_and, Finset.mem_erase]
+      constructor
+      · rintro ⟨hne, he⟩
+        exact ⟨fun h => hne (congrArg id.action h), he⟩
+      · rintro ⟨hne, he⟩
+        exact ⟨fun h => hne (hinj h), he⟩
+    rw [hset, Finset.card_erase_of_mem (s := Finset.univ.filter fun e => id.action e ∈ R) (a := d)
+      (Finset.mem_filter.2 ⟨Finset.mem_univ _, hd⟩)]
+    have : 0 < (Finset.univ.filter fun e => id.action e ∈ R).card :=
+      Finset.card_pos.2 ⟨d, Finset.mem_filter.2 ⟨Finset.mem_univ _, hd⟩⟩
+    omega
+
+/-- A plan of all variables has one decision step per decision. -/
+theorem Plan.decisionCount_univ (hinj : Function.Injective id.action)
+    (plan : Plan id Finset.univ) : plan.decisionCount = Fintype.card id.D := by
+  rw [Plan.decisionCount_eq hinj]
+  simp
+```
+
+## Reference marginals with a weight
+
+```lean
+/-- The weighted utility `lik * U`. -/
+def likUtil (lik : id.Assignment → ℝ) (u : Utility id ℝ) (y : id.Assignment) : ℝ :=
+  lik y * totalUtility u y
+
+theorem refMarg_nonneg_of (κ : id.Kernel ℝ) (hκ : ∀ m x a, 0 ≤ κ m x a) (R : Finset id.V)
+    (σ : Strategy id ℝ) (hσ : σ.Nonneg) (F : id.Assignment → ℝ) (hF : ∀ y, 0 ≤ F y)
+    (x : id.Assignment) : 0 ≤ refMarg κ R σ F x :=
+  Finset.sum_nonneg fun y _ => mul_nonneg (freeJoint_nonneg κ hκ _ σ hσ y) (hF y)
+
+theorem clamp_empty (o x : id.Assignment) : clamp (∅ : Finset id.V) o x = x := by
+  funext v
+  simp [clamp]
+
+/-- Summing out an unobserved chance variable, read at clamped rows. -/
+theorem refMarg_unobserved (κ : id.Kernel ℝ) {R : Finset id.V} (σ : Strategy id ℝ)
+    {O : Finset id.V} (o : id.Assignment) {v : id.V} (hv : v ∈ R) (hc : ∀ d, id.action d ≠ v)
+    (hvO : v ∉ O) (F : id.Assignment → ℝ) (x : id.Assignment) :
+    refMarg κ (R.erase v) σ F (clamp O o x) =
+      ∑ b, refMarg κ R σ F (clamp O o (Function.update x v b)) := by
+  rw [refMarg_chance κ σ F v hv hc]
+  exact Finset.sum_congr rfl fun b _ => by rw [clamp_update o x hvO]
+
+/-- Summing out an observed chance variable, read at clamped rows, keeps only the observed
+state when the weight vanishes off it. -/
+theorem refMarg_observed (κ : id.Kernel ℝ) {R : Finset id.V} (σ : Strategy id ℝ)
+    {O : Finset id.V} (o : id.Assignment) {v : id.V} (hv : v ∈ R) (hc : ∀ d, id.action d ≠ v)
+    (hvO : v ∈ O) (F : id.Assignment → ℝ) (hF : ∀ z, z v ≠ o v → F z = 0)
+    (x : id.Assignment) :
+    refMarg κ (R.erase v) σ F (clamp O o x) = refMarg κ R σ F (clamp O o x) := by
+  rw [refMarg_chance κ σ F v hv hc, Finset.sum_eq_single (o v)]
+  · rw [update_clamp_self o x hvO]
+  · intro b _ hb
+    unfold refMarg marg
+    apply Finset.sum_eq_zero
+    intro z hz
+    have hzv : z v = b := by
+      have := mem_fibre.1 hz v (by simpa using hv)
+      simpa using this
+    rw [hF z (by rw [hzv]; exact hb), mul_zero]
+  · intro h
+    exact absurd (Finset.mem_univ _) h
+
+theorem nonneg_of_kernel (ρ : Strategy id ℝ)
+    (g : (d : id.D) → id.Assignment → id.states (id.action d))
+    (hρ : ∀ d x a, (ρ d).kernel x a = if a = g d x then 1 else 0) : ρ.Nonneg := by
+  intro d x a
+  rw [hρ]
+  split_ifs <;> norm_num
+```
+
+## The invariant
+
+```lean
+/-- **The tolerant invariant** of a run state `s` against the normalised reference kernel `κ`,
+the weight `lik` and the clamp `O, o`, for a strategy `σ` on the eliminated decisions: the mass
+envelope, the utility bound, the one-sided realization bound with chance error `e` and decision
+loss `t`, and dominance of every competitor with error `e`. -/
+structure TolInv (κ : id.Kernel ℝ) (u : Utility id ℝ) (lik : id.Assignment → ℝ)
+    (O : Finset id.V) (o : id.Assignment) (L H U e t : ℝ) {R : Finset id.V} (s : State id R)
+    (σ : Strategy id ℝ) : Prop where
+  nonneg : σ.Nonneg
+  mass_lower : ∀ x, L * refMarg κ R σ lik (clamp O o x) ≤ (collect s.valuations).prob x
+  mass_upper : ∀ x, (collect s.valuations).prob x ≤ H * refMarg κ R σ lik (clamp O o x)
+  bounded : ∀ x, (collect s.valuations).prob x ≠ 0 → |(collect s.valuations).util x| ≤ U
+  lower : ∀ x, ((collect s.valuations).util x - e - t) * refMarg κ R σ lik (clamp O o x) ≤
+    refMarg κ R σ (likUtil lik u) (clamp O o x)
+  dominates : ∀ τ : Strategy id ℝ, τ.Nonneg → ∀ x,
+    refMarg κ R τ (likUtil lik u) (clamp O o x) ≤
+      ((collect s.valuations).util x + e) * refMarg κ R σ lik (clamp O o x)
+
+section Steps
+
+variable {κ : id.Kernel ℝ} {u : Utility id ℝ} {lik : id.Assignment → ℝ} {O : Finset id.V}
+  {o : id.Assignment} {L H U e t : ℝ}
+
+/-- A larger chance error is still an error bound. -/
+theorem TolInv.weaken (hκ : ∀ m x a, 0 ≤ κ m x a) (hlik : ∀ y, 0 ≤ lik y) {R : Finset id.V}
+    {s : State id R} {σ : Strategy id ℝ} (h : TolInv κ u lik O o L H U e t s σ) {e' : ℝ}
+    (he : e ≤ e') : TolInv κ u lik O o L H U e' t s σ := by
+  have hM0 := refMarg_nonneg_of κ hκ R σ h.nonneg lik hlik
+  refine ⟨h.nonneg, h.mass_lower, h.mass_upper, h.bounded, fun x => ?_, fun τ hτ x => ?_⟩
+  · exact (mul_le_mul_of_nonneg_right (by linarith) (hM0 _)).trans (h.lower x)
+  · exact (h.dominates τ hτ x).trans (mul_le_mul_of_nonneg_right (by linarith) (hM0 _))
+
+/-- **An unobserved chance step adds `(H / L - 1) U` to the chance error.** -/
+theorem TolInv.chanceOf (hκ : ∀ m x a, 0 ≤ κ m x a) (hlik : ∀ y, 0 ≤ lik y) (hL : 0 < L)
+    (hU : 0 ≤ U) {R : Finset id.V} {s : State id R} {σ : Strategy id ℝ}
+    (h : TolInv κ u lik O o L H U e t s σ) (v : id.V) (hv : v ∈ R) (hc : ∀ d, id.action d ≠ v)
+    (hvO : v ∉ O) (s' : State id (R.erase v))
+    (hp : ∀ x, (collect s'.valuations).prob x =
+      ∑ b, (collect s.valuations).prob (Function.update x v b))
+    (hw : ∀ x, (collect s'.valuations).weight x =
+      ∑ b, (collect s.valuations).weight (Function.update x v b)) :
+    TolInv κ u lik O o L H U (e + (H / L - 1) * U) t s' σ := by
+  set P := (collect s.valuations).prob
+  set W := (collect s.valuations).util
+  have hP0 : ∀ y, 0 ≤ P y := fun y => (collect s.valuations).nonneg y
+  have hM0 := refMarg_nonneg_of κ hκ R σ h.nonneg lik hlik
+  have havg : ∀ x, (∑ b, P (Function.update x v b)) * (collect s'.valuations).util x =
+      ∑ b, P (Function.update x v b) * W (Function.update x v b) := by
+    intro x
+    have := hw x
+    rw [weight, hp] at this
+    simpa only [weight] using this
+  have hre : ∀ x, |∑ b, W (Function.update x v b) *
+        refMarg κ R σ lik (clamp O o (Function.update x v b)) -
+      (collect s'.valuations).util x *
+        ∑ b, refMarg κ R σ lik (clamp O o (Function.update x v b))| ≤
+      (H / L - 1) * U * ∑ b, refMarg κ R σ lik (clamp O o (Function.update x v b)) := fun x =>
+    reweight_error (fun b => P (Function.update x v b))
+      (fun b => refMarg κ R σ lik (clamp O o (Function.update x v b)))
+      (fun b => W (Function.update x v b)) _ L H U hL (fun b => hM0 _)
+      (fun b => h.mass_lower _) (fun b => h.mass_upper _) (fun b hb => h.bounded _ hb) hU
+      (havg x)
+  refine ⟨h.nonneg, fun x => ?_, fun x => ?_, fun x hx => ?_, fun x => ?_, fun τ hτ x => ?_⟩
+  · rw [refMarg_unobserved κ σ o hv hc hvO, hp, Finset.mul_sum]
+    exact Finset.sum_le_sum fun b _ => h.mass_lower _
+  · rw [refMarg_unobserved κ σ o hv hc hvO, hp, Finset.mul_sum]
+    exact Finset.sum_le_sum fun b _ => h.mass_upper _
+  · have hpos : 0 < ∑ b, P (Function.update x v b) := by
+      rw [← hp]
+      exact lt_of_le_of_ne ((collect s'.valuations).nonneg x) (Ne.symm hx)
+    have hb : |∑ b, P (Function.update x v b) * W (Function.update x v b)| ≤
+        U * ∑ b, P (Function.update x v b) := by
+      rw [Finset.mul_sum]
+      refine (Finset.abs_sum_le_sum_abs _ _).trans (Finset.sum_le_sum fun b _ => ?_)
+      rw [abs_mul, abs_of_nonneg (hP0 _), mul_comm]
+      by_cases hz : P (Function.update x v b) = 0
+      · simp [hz]
+      · exact mul_le_mul_of_nonneg_right (h.bounded _ hz) (hP0 _)
+    rw [← havg x, abs_mul, abs_of_pos hpos, mul_comm] at hb
+    exact le_of_mul_le_mul_right hb hpos
+  · rw [refMarg_unobserved κ σ o hv hc hvO, refMarg_unobserved κ σ o hv hc hvO]
+    set S := ∑ b, refMarg κ R σ lik (clamp O o (Function.update x v b))
+    set A := ∑ b, W (Function.update x v b) *
+      refMarg κ R σ lik (clamp O o (Function.update x v b))
+    have h1 : ∑ b, (W (Function.update x v b) - e - t) *
+        refMarg κ R σ lik (clamp O o (Function.update x v b)) ≤
+        ∑ b, refMarg κ R σ (likUtil lik u) (clamp O o (Function.update x v b)) :=
+      Finset.sum_le_sum fun b _ => h.lower _
+    have h3 : ∑ b, (W (Function.update x v b) - e - t) *
+        refMarg κ R σ lik (clamp O o (Function.update x v b)) = A - (e + t) * S := by
+      rw [Finset.mul_sum, ← Finset.sum_sub_distrib]
+      exact Finset.sum_congr rfl fun b _ => by ring
+    have h2 := (abs_le.1 (hre x)).1
+    have hexp : ((collect s'.valuations).util x - (e + (H / L - 1) * U) - t) * S =
+        (collect s'.valuations).util x * S - (H / L - 1) * U * S - (e + t) * S := by ring
+    rw [hexp]
+    linarith
+  · rw [refMarg_unobserved κ τ o hv hc hvO, refMarg_unobserved κ σ o hv hc hvO]
+    set S := ∑ b, refMarg κ R σ lik (clamp O o (Function.update x v b))
+    set A := ∑ b, W (Function.update x v b) *
+      refMarg κ R σ lik (clamp O o (Function.update x v b))
+    have h1 : ∑ b, refMarg κ R τ (likUtil lik u) (clamp O o (Function.update x v b)) ≤
+        A + e * S := by
+      rw [Finset.mul_sum, ← Finset.sum_add_distrib]
+      exact Finset.sum_le_sum fun b _ => by
+        have := h.dominates τ hτ (Function.update x v b)
+        linarith
+    have h2 := (abs_le.1 (hre x)).2
+    have hexp : ((collect s'.valuations).util x + (e + (H / L - 1) * U)) * S =
+        (collect s'.valuations).util x * S + (H / L - 1) * U * S + e * S := by ring
+    rw [hexp]
+    linarith
+
+/-- **An observed chance step changes nothing**: the run skips it, and the reference keeps only
+the observed state, since the weight vanishes off it. -/
+theorem TolInv.observed (hlik : ∀ z, ∀ v ∈ O, z v ≠ o v → lik z = 0) {R : Finset id.V}
+    {s : State id R} {σ : Strategy id ℝ} (h : TolInv κ u lik O o L H U e t s σ) (v : id.V)
+    (hv : v ∈ R) (hc : ∀ d, id.action d ≠ v) (hvO : v ∈ O) (s' : State id (R.erase v))
+    (hp : ∀ x, (collect s'.valuations).prob x = (collect s.valuations).prob x)
+    (hu : ∀ x, (collect s'.valuations).util x = (collect s.valuations).util x) :
+    TolInv κ u lik O o L H U e t s' σ := by
+  have hm : ∀ (τ : Strategy id ℝ) x,
+      refMarg κ (R.erase v) τ lik (clamp O o x) = refMarg κ R τ lik (clamp O o x) :=
+    fun τ x => refMarg_observed κ τ o hv hc hvO lik (fun z hz => hlik z v hvO hz) x
+  have hn : ∀ (τ : Strategy id ℝ) x,
+      refMarg κ (R.erase v) τ (likUtil lik u) (clamp O o x) =
+        refMarg κ R τ (likUtil lik u) (clamp O o x) :=
+    fun τ x => refMarg_observed κ τ o hv hc hvO _
+      (fun z hz => by rw [likUtil, hlik z v hvO hz, zero_mul]) x
+  refine ⟨h.nonneg, fun x => ?_, fun x => ?_, fun x hx => ?_, fun x => ?_, fun τ hτ x => ?_⟩
+  · rw [hm, hp]
+    exact h.mass_lower x
+  · rw [hm, hp]
+    exact h.mass_upper x
+  · rw [hu]
+    exact h.bounded x (by rwa [← hp])
+  · rw [hm, hn, hu]
+    exact h.lower x
+  · rw [hm, hn, hu]
+    exact h.dominates τ hτ x
+
+/-- **A decision step adds the tolerance `τ` to the loss** when the policy `π` of the step reads
+an action `g` within `τ` of the maximum of the run's bucket score, on every row. With the run's
+own maximizing selector, `τ = 0`. -/
+theorem TolInv.decisionOf (hκ : ∀ m x a, 0 ≤ κ m x a) (hlik : ∀ y, 0 ≤ lik y)
+    (hind : Independent κ lik) (hinj : Function.Injective id.action) (hL : 0 < L)
+    {R : Finset id.V} {s : State id R} {σ : Strategy id ℝ}
+    (h : TolInv κ u lik O o L H U e t s σ) (d : id.D) (hd : id.action d ∈ R)
+    (hi : R.erase (id.action d) = id.info d) (haO : id.action d ∉ O)
+    (hsc : ∀ w ∈ (collect s.valuations).scope, w ∉ O) (π : Policy id ℝ d)
+    (g : id.Assignment → id.states (id.action d))
+    (hπ : ∀ x b, π.kernel x b = if b = g x then 1 else 0) (τ : ℝ)
+    (hmax : ∀ x b, bucketScore s.valuations (id.action d) x b ≤
+      bucketScore s.valuations (id.action d) x (g x) + τ) :
+    TolInv κ u lik O o L H U e (t + τ) (s.decision d) (Function.update σ d π) := by
+  have hn : id.action d ∉ Rᶜ := by simpa using hd
+  have hinfo := info_disjoint d hi
+  set P := (collect s.valuations).prob
+  set W := (collect s.valuations).util
+  have hM0 := refMarg_nonneg_of κ hκ R σ h.nonneg lik hlik
+  have heval : ∀ (F : id.Assignment → ℝ) (z : id.Assignment),
+      refMarg κ (R.erase (id.action d)) (Function.update σ d π) F z =
+        refMarg κ R σ F (Function.update z (id.action d) (g z)) := by
+    intro F z
+    unfold refMarg
+    rw [compl_erase, decision_marginal κ Rᶜ σ hinj d hn hinfo]
+    simp [hπ, ite_mul]
+  have hM : ∀ z b, refMarg κ R σ lik (Function.update z (id.action d) b) = refMarg κ R σ lik z :=
+    fun z b => hind Rᶜ σ d hn (by simpa using information_boundary d hi) z b
+  have hcl : ∀ x b, clamp O o (Function.update x (id.action d) b) =
+      Function.update (clamp O o x) (id.action d) b :=
+    fun x b => clamp_update o x haO b
+  have hsclamp : ∀ x, bucketScore s.valuations (id.action d) (clamp O o x) =
+      bucketScore s.valuations (id.action d) x := by
+    intro x
+    funext b
+    unfold bucketScore
+    apply (collect (bucket (id.action d) s.valuations)).util_local
+    intro w hw
+    by_cases hwa : w = (id.action d)
+    · subst hwa
+      simp
+    · rw [Function.update_of_ne hwa, Function.update_of_ne hwa]
+      have hwO : w ∉ O := hsc w (filter_scope_subset _ s.valuations hw)
+      simp [clamp, hwO]
+  have hWnew : ∀ x, (collect (s.decision d).valuations).util x =
+      W (Function.update x (id.action d)
+        (choice (id.action d) (collect (bucket (id.action d) s.valuations)) x)) :=
+    fun x => decisionStep_util_eq (id.action d) s.valuations x
+  have hWmax : ∀ x b, W (Function.update x (id.action d) b) ≤
+      (collect (s.decision d).valuations).util x := by
+    intro x b
+    rw [hWnew]
+    show (collect s.valuations).util _ ≤ (collect s.valuations).util _
+    rw [util_update_eq_score, util_update_eq_score]
+    exact add_le_add (le_argmax (bucketScore s.valuations (id.action d) x) b) le_rfl
+  have hgood : ∀ x, (collect (s.decision d).valuations).util x ≤
+      W (Function.update x (id.action d) (g (clamp O o x))) + τ := by
+    intro x
+    rw [hWnew]
+    show (collect s.valuations).util _ ≤ (collect s.valuations).util _ + τ
+    rw [util_update_eq_score, util_update_eq_score]
+    have := hmax (clamp O o x)
+      (choice (id.action d) (collect (bucket (id.action d) s.valuations)) x)
+    rw [hsclamp] at this
+    linarith
+  have hprob : ∀ x, (collect (s.decision d).valuations).prob x =
+      P (Function.update x (id.action d)
+        (probabilityChoice (id.action d) (collect (bucket (id.action d) s.valuations)) x)) :=
+    fun x => decisionStep_prob_eq (id.action d) s.valuations x
+  have hmass : ∀ x, refMarg κ (R.erase (id.action d)) (Function.update σ d π) lik (clamp O o x) =
+      refMarg κ R σ lik (clamp O o x) := fun x => by rw [heval, hM]
+  refine ⟨?_, fun x => ?_, fun x => ?_, fun x hx => ?_, fun x => ?_, fun τ' hτ' x => ?_⟩
+  · intro e' y b
+    by_cases he : e' = d
+    · subst he
+      rw [Function.update_self, hπ]
+      split_ifs <;> norm_num
+    · rw [Function.update_of_ne he]
+      exact h.nonneg e' y b
+  · rw [hmass, hprob]
+    have := h.mass_lower (Function.update x (id.action d)
+      (probabilityChoice (id.action d) (collect (bucket (id.action d) s.valuations)) x))
+    rwa [hcl, hM] at this
+  · rw [hmass, hprob]
+    have := h.mass_upper (Function.update x (id.action d)
+      (probabilityChoice (id.action d) (collect (bucket (id.action d) s.valuations)) x))
+    rwa [hcl, hM] at this
+  · rw [hprob] at hx
+    rw [hWnew]
+    apply h.bounded
+    have hpos : 0 < P (Function.update x (id.action d)
+        (probabilityChoice (id.action d) (collect (bucket (id.action d) s.valuations)) x)) :=
+      lt_of_le_of_ne ((collect s.valuations).nonneg _) (Ne.symm hx)
+    have hmpos : 0 < refMarg κ R σ lik (clamp O o x) := by
+      have := h.mass_upper (Function.update x (id.action d)
+        (probabilityChoice (id.action d) (collect (bucket (id.action d) s.valuations)) x))
+      rw [hcl, hM] at this
+      rcases (hM0 (clamp O o x)).lt_or_eq with hlt | heq
+      · exact hlt
+      · rw [← heq, mul_zero] at this
+        exact absurd (lt_of_lt_of_le hpos this) (lt_irrefl 0)
+    have := h.mass_lower (Function.update x (id.action d)
+      (choice (id.action d) (collect (bucket (id.action d) s.valuations)) x))
+    rw [hcl, hM] at this
+    exact ne_of_gt (lt_of_lt_of_le (mul_pos hL hmpos) this)
+  · rw [hmass, heval]
+    have h1 := h.lower (Function.update x (id.action d) (g (clamp O o x)))
+    rw [hcl, hM] at h1
+    refine le_trans ?_ h1
+    exact mul_le_mul_of_nonneg_right (by linarith [hgood x]) (hM0 _)
+  · have hc := decision_marginal κ Rᶜ τ' hinj d hn hinfo (τ' d) (likUtil lik u) (clamp O o x)
+    simp only [Function.update_eq_self] at hc
+    have hlhs : refMarg κ (R.erase (id.action d)) τ' (likUtil lik u) (clamp O o x) =
+        ∑ b, (τ' d).kernel (clamp O o x) b *
+          refMarg κ R τ' (likUtil lik u) (Function.update (clamp O o x) (id.action d) b) := by
+      unfold refMarg
+      rw [compl_erase]
+      exact hc
+    rw [hlhs, hmass]
+    calc ∑ b, (τ' d).kernel (clamp O o x) b *
+          refMarg κ R τ' (likUtil lik u) (Function.update (clamp O o x) (id.action d) b)
+        ≤ ∑ b, (τ' d).kernel (clamp O o x) b *
+            (((collect (s.decision d).valuations).util x + e) *
+              refMarg κ R σ lik (clamp O o x)) := by
+          refine Finset.sum_le_sum fun b _ => mul_le_mul_of_nonneg_left ?_ (hτ' d _ b)
+          have := h.dominates τ' hτ' (Function.update x (id.action d) b)
+          rw [hcl, hM] at this
+          exact this.trans (mul_le_mul_of_nonneg_right (by linarith [hWmax x b]) (hM0 _))
+      _ = _ := by rw [← Finset.sum_mul, (τ' d).normalised, one_mul]
+
+/-- **The invariant at the start of a run**: no error and no loss yet, for any nonnegative
+strategy, when the run's initial mass is the run kernel's joint weight and its utility the total
+utility, both read at `clamp O o x`, and the weight is one there. -/
+theorem TolInv.initial (κ' : id.Kernel ℝ) (hlik1 : ∀ x, lik (clamp O o x) = 1)
+    (s : State id Finset.univ)
+    (hP : ∀ x, (collect s.valuations).prob x =
+      ∏ m, κ' m (clamp O o x) (clamp O o x (id.target m)))
+    (hW : ∀ x, (collect s.valuations).util x = totalUtility u (clamp O o x))
+    (henv : ∀ x, L * (∏ m, κ m x (x (id.target m))) ≤ ∏ m, κ' m x (x (id.target m)) ∧
+      ∏ m, κ' m x (x (id.target m)) ≤ H * ∏ m, κ m x (x (id.target m)))
+    (hUb : ∀ x, |totalUtility u x| ≤ U) (σ : Strategy id ℝ) (hσ : σ.Nonneg) :
+    TolInv κ u lik O o L H U 0 0 s σ := by
+  refine ⟨hσ, fun x => ?_, fun x => ?_, fun x _ => ?_, fun x => ?_, fun τ _ x => ?_⟩
+  · rw [refMarg_univ, hlik1, mul_one, hP]
+    exact (henv _).1
+  · rw [refMarg_univ, hlik1, mul_one, hP]
+    exact (henv _).2
+  · rw [hW]
+    exact hUb _
+  · rw [refMarg_univ, refMarg_univ, hW, likUtil, hlik1]
+    exact le_of_eq (by ring)
+  · rw [refMarg_univ, refMarg_univ, hW, likUtil, hlik1]
+    exact le_of_eq (by ring)
+
+end Steps
+```
+
+## The run without evidence
+
+```lean
+/-- **The invariant along the representative run**, without evidence, for a fixed strategy `ρ`
+whose action `g d` at every remaining decision `d` is within `τ` of the maximum of the run's
+score of `d` on every row. -/
+theorem tolInv_runRep (keep : id.V → Bool) {κ : id.Kernel ℝ} (hκ : ∀ m x a, 0 ≤ κ m x a)
+    {lik : id.Assignment → ℝ} (hlik : ∀ y, 0 ≤ lik y) (hind : Independent κ lik)
+    (hinj : Function.Injective id.action) {u : Utility id ℝ} {o : id.Assignment} {L H U : ℝ}
+    (hL : 0 < L) (hU : 0 ≤ U) {R : Finset id.V} (plan : Plan id R) (s : State id R)
+    (ρ : Strategy id ℝ) (τ : ℝ)
+    (hρ : ∀ d, id.action d ∈ R → ∃ g : id.Assignment → id.states (id.action d),
+      (∀ x a, (ρ d).kernel x a = if a = g x then 1 else 0) ∧
+        ∀ x b, decisionScoreRep keep plan s d x b ≤ decisionScoreRep keep plan s d x (g x) + τ)
+    (e t : ℝ) (h : TolInv κ u lik ∅ o L H U e t s ρ) :
+    TolInv κ u lik ∅ o L H U (e + plan.chanceCount * ((H / L - 1) * U))
+      (t + plan.decisionCount * τ) (runRepState keep plan s) ρ := by
+  induction plan generalizing e t with
+  | done => simpa [Plan.chanceCount, Plan.decisionCount, runRepState] using h
+  | @chance R v hv hc next ih =>
+    have hs : TolInv κ u lik ∅ o L H U (e + (H / L - 1) * U) t (s.chanceKeep keep v) ρ := by
+      obtain ⟨hp, hw⟩ := chanceStepKeep_collect (keep v) v s.valuations
+      refine h.chanceOf hκ hlik hL hU v hv hc (Finset.notMem_empty v) _ (fun x => ?_)
+        (fun x => ?_)
+      · change (collect (chanceStepKeep (keep v) v s.valuations)).prob x = _
+        rw [hp]
+        exact chanceStep_prob v s.valuations x
+      · change (collect (chanceStepKeep (keep v) v s.valuations)).weight x = _
+        rw [hw]
+        exact chanceStep_weight v s.valuations x
+    have := ih (s.chanceKeep keep v) (fun d hd => hρ d (Finset.mem_of_mem_erase hd)) _ _ hs
+    simp only [Plan.chanceCount, Plan.decisionCount, Nat.cast_add, Nat.cast_one] at this ⊢
+    convert this using 1
+    ring
+  | @decision R d hd hi next ih =>
+    obtain ⟨g, hgk, hgmax⟩ := hρ d hd
+    have hmax : ∀ x b, bucketScore s.valuations (id.action d) x b ≤
+        bucketScore s.valuations (id.action d) x (g x) + τ := by
+      intro x b
+      have := hgmax x b
+      change (if d = d then bucketScore s.valuations (id.action d)
+          else decisionScoreRep keep next (s.decision d) d) x b ≤
+        (if d = d then bucketScore s.valuations (id.action d)
+          else decisionScoreRep keep next (s.decision d) d) x (g x) + τ at this
+      rwa [if_pos rfl] at this
+    have hs := h.decisionOf hκ hlik hind hinj hL d hd hi (Finset.notMem_empty _)
+      (fun w _ => Finset.notMem_empty w) (ρ d) g hgk τ hmax
+    rw [Function.update_eq_self] at hs
+    have hρ' : ∀ d', id.action d' ∈ R.erase (id.action d) →
+        ∃ g' : id.Assignment → id.states (id.action d'),
+          (∀ x a, (ρ d').kernel x a = if a = g' x then 1 else 0) ∧
+            ∀ x b, decisionScoreRep keep next (s.decision d) d' x b ≤
+              decisionScoreRep keep next (s.decision d) d' x (g' x) + τ := by
+      intro d' hd'
+      have hne : d ≠ d' := fun he => (Finset.mem_erase.1 hd').1 (by rw [he])
+      obtain ⟨g', hk', hm'⟩ := hρ d' (Finset.mem_of_mem_erase hd')
+      refine ⟨g', hk', fun x b => ?_⟩
+      have := hm' x b
+      change (if d = d' then bucketScore s.valuations (id.action d')
+          else decisionScoreRep keep next (s.decision d) d') x b ≤
+        (if d = d' then bucketScore s.valuations (id.action d')
+          else decisionScoreRep keep next (s.decision d) d') x (g' x) + τ at this
+      rwa [if_neg hne] at this
+    have := ih (s.decision d) hρ' _ _ hs
+    simp only [Plan.chanceCount, Plan.decisionCount, Nat.cast_add, Nat.cast_one] at this ⊢
+    convert this using 1
+    ring
+
+/-- The final reference quantities without evidence: total mass one and expected utility. -/
+theorem refMarg_empty_one (κ : id.Kernel ℝ) (hclosed : id.Closed) (ord : id.IDOrder)
+    (hloc : ∀ m, Local κ m) (hnorm : ∀ m, Normalised κ m) (u : Utility id ℝ) (σ : Strategy id ℝ)
+    (x : id.Assignment) :
+    refMarg κ ∅ σ (fun _ => 1) x = 1 ∧
+      refMarg κ ∅ σ (likUtil (fun _ => 1) u) x = expectedUtility κ σ u := by
+  constructor
+  · rw [refMarg_empty]
+    simpa only [mul_one] using sum_joint_instantiate_eq_one κ σ hclosed ord hloc hnorm
+  · rw [refMarg_empty]
+    simp only [likUtil, one_mul]
+    rfl
+
+/-- **The tolerant strategy's expected utility**, without evidence. For any selector,
+representative choice and plan of the run on `κ'`, and any strategy `ρ` that reads at every
+decision `d` an action `g d x` within `τ` of the maximum of the run's score row
+(`solveRepPlanScore`) on every row, the reference expected utility of `ρ` is at least the run's
+value minus the chance error `e = approxGap k L H U` minus `card D * τ`. -/
+theorem solveRepPlan_tolerant (sel : Selector id) (keep : id.V → Bool) (κ κ' : id.Kernel ℝ)
+    (hclosed : id.Closed) (ord : id.IDOrder) (hloc : ∀ m, Local κ m)
+    (hnorm : ∀ m, Normalised κ m) (hnonneg : ∀ m x a, 0 ≤ κ m x a) (hloc' : ∀ m, Local κ' m)
+    (hnonneg' : ∀ m x a, 0 ≤ κ' m x a) (u : Utility id ℝ) (hu : ∀ j, Utility.Local u j)
+    (plan : Plan id Finset.univ) (L H U : ℝ) (hL : 0 < L) (hU : 0 ≤ U)
+    (henv : ∀ x, L * (∏ m, κ m x (x (id.target m))) ≤ ∏ m, κ' m x (x (id.target m)) ∧
+      ∏ m, κ' m x (x (id.target m)) ≤ H * ∏ m, κ m x (x (id.target m)))
+    (hUb : ∀ x, |totalUtility u x| ≤ U) (ρ : Strategy id ℝ)
+    (g : (d : id.D) → id.Assignment → id.states (id.action d))
+    (hρ : ∀ d x a, (ρ d).kernel x a = if a = g d x then 1 else 0) (τ : ℝ)
+    (hg : ∀ d x b, solveRepPlanScore keep κ' hloc' hnonneg' u hu plan d x b ≤
+      solveRepPlanScore keep κ' hloc' hnonneg' u hu plan d x (g d x) + τ) :
+    (solveRepPlanWith sel keep κ' hloc' hnonneg' u hu plan).value -
+        approxGap plan.chanceCount L H U - Fintype.card id.D * τ ≤
+      expectedUtility κ ρ u := by
+  have hinj := (id.closed_iff.1 hclosed).2.1
+  have hind := independent_one κ hclosed ord hloc hnorm
+  have hρn := nonneg_of_kernel ρ g hρ
+  have h0 : TolInv κ u (fun _ => 1) ∅ (baseAssignment id) L H U 0 0
+      (initial κ' hloc' hnonneg' u hu) ρ :=
+    TolInv.initial κ' (fun _ => rfl) _
+      (fun x => by rw [initial_prob, clamp_empty])
+      (fun x => by rw [initial_util, clamp_empty]) henv hUb ρ hρn
+  have hr := tolInv_runRep keep hnonneg (fun _ => zero_le_one) hind hinj hL hU plan _ ρ τ
+    (fun d _ => ⟨g d, hρ d, hg d⟩) 0 0 h0
+  have hl := hr.lower (baseAssignment id)
+  rw [clamp_empty, (refMarg_empty_one κ hclosed ord hloc hnorm u ρ _).1,
+    (refMarg_empty_one κ hclosed ord hloc hnorm u ρ _).2, mul_one,
+    Plan.decisionCount_univ hinj] at hl
+  have hv : (solveRepPlanWith sel keep κ' hloc' hnonneg' u hu plan).value =
+      (collect (runRepState keep plan (initial κ' hloc' hnonneg' u hu)).valuations).util
+        (baseAssignment id) := by
+    unfold solveRepPlanWith
+    simp only
+    rw [runRepWith_state]
+  rw [hv]
+  unfold approxGap
+  linarith
+
+/-- **Near-optimality of a tolerant strategy**, without evidence. Under the hypotheses of
+`solveRepPlan_tolerant` and with `e = approxGap k L H U`: every nonnegative strategy's reference
+expected utility exceeds `ρ`'s by at most `2 e + card D * τ`, and `ρ` is within
+`2 e + card D * τ` of the reference optimum. -/
+theorem solveRepPlan_near_optimal (sel : Selector id) (keep : id.V → Bool) (κ κ' : id.Kernel ℝ)
+    (hclosed : id.Closed) (ord : id.IDOrder) (hloc : ∀ m, Local κ m)
+    (hnorm : ∀ m, Normalised κ m) (hnonneg : ∀ m x a, 0 ≤ κ m x a) (hloc' : ∀ m, Local κ' m)
+    (hnonneg' : ∀ m x a, 0 ≤ κ' m x a) (u : Utility id ℝ) (hu : ∀ j, Utility.Local u j)
+    (plan : Plan id Finset.univ) (L H U : ℝ) (hL : 0 < L) (hU : 0 ≤ U)
+    (henv : ∀ x, L * (∏ m, κ m x (x (id.target m))) ≤ ∏ m, κ' m x (x (id.target m)) ∧
+      ∏ m, κ' m x (x (id.target m)) ≤ H * ∏ m, κ m x (x (id.target m)))
+    (hUb : ∀ x, |totalUtility u x| ≤ U) (ρ : Strategy id ℝ)
+    (g : (d : id.D) → id.Assignment → id.states (id.action d))
+    (hρ : ∀ d x a, (ρ d).kernel x a = if a = g d x then 1 else 0) (τ : ℝ)
+    (hg : ∀ d x b, solveRepPlanScore keep κ' hloc' hnonneg' u hu plan d x b ≤
+      solveRepPlanScore keep κ' hloc' hnonneg' u hu plan d x (g d x) + τ) :
+    let e := approxGap plan.chanceCount L H U
+    (∀ τ' : Strategy id ℝ, τ'.Nonneg →
+        expectedUtility κ τ' u ≤ expectedUtility κ ρ u + 2 * e + Fintype.card id.D * τ) ∧
+      optimalValue κ u - 2 * e - Fintype.card id.D * τ ≤ expectedUtility κ ρ u := by
+  intro e
+  have ht := solveRepPlan_tolerant sel keep κ κ' hclosed ord hloc hnorm hnonneg hloc' hnonneg' u
+    hu plan L H U hL hU henv hUb ρ g hρ τ hg
+  obtain ⟨-, -, hdom⟩ := solveRepPlanWith_approx sel keep κ κ' hclosed ord hloc hnorm hnonneg
+    hloc' hnonneg' u hu plan L H U hL hU henv hUb
+  have hall : ∀ τ' : Strategy id ℝ, τ'.Nonneg →
+      expectedUtility κ τ' u ≤ expectedUtility κ ρ u + 2 * e + Fintype.card id.D * τ := by
+    intro τ' hτ'
+    have := hdom τ' hτ'
+    change _ ≤ _ + e at this
+    change _ - e - _ ≤ _ at ht
+    linarith
+  refine ⟨hall, ?_⟩
+  obtain ⟨σo, _, hσo, hvo⟩ := optimalValue_attained κ u
+  have := hall σo hσo
+  rw [hvo] at this
+  linarith
+
+/-- **The exactly normalised case**: if the run is on the normalised kernel `κ` itself, a
+strategy whose actions are within `τ` of every row maximum of the run's score loses at most
+`card D * τ` in expected utility: it is within `card D * τ` of every nonnegative strategy and
+of the optimum. -/
+theorem solveRepPlan_tolerant_optimal (sel : Selector id) (keep : id.V → Bool)
+    (κ : id.Kernel ℝ) (hclosed : id.Closed) (ord : id.IDOrder) (hloc : ∀ m, Local κ m)
+    (hnorm : ∀ m, Normalised κ m) (hnonneg : ∀ m x a, 0 ≤ κ m x a) (u : Utility id ℝ)
+    (hu : ∀ j, Utility.Local u j) (plan : Plan id Finset.univ) (ρ : Strategy id ℝ)
+    (g : (d : id.D) → id.Assignment → id.states (id.action d))
+    (hρ : ∀ d x a, (ρ d).kernel x a = if a = g d x then 1 else 0) (τ : ℝ)
+    (hg : ∀ d x b, solveRepPlanScore keep κ hloc hnonneg u hu plan d x b ≤
+      solveRepPlanScore keep κ hloc hnonneg u hu plan d x (g d x) + τ) :
+    (∀ τ' : Strategy id ℝ, τ'.Nonneg →
+        expectedUtility κ τ' u ≤ expectedUtility κ ρ u + Fintype.card id.D * τ) ∧
+      optimalValue κ u - Fintype.card id.D * τ ≤ expectedUtility κ ρ u := by
+  set U := ∑ x, |totalUtility u x|
+  have hU : 0 ≤ U := Finset.sum_nonneg fun x _ => abs_nonneg _
+  have hUb : ∀ x, |totalUtility u x| ≤ U := fun x =>
+    Finset.single_le_sum (f := fun x => |totalUtility u x|) (fun _ _ => abs_nonneg _)
+      (Finset.mem_univ x)
+  have henv : ∀ x, 1 * (∏ m, κ m x (x (id.target m))) ≤ ∏ m, κ m x (x (id.target m)) ∧
+      ∏ m, κ m x (x (id.target m)) ≤ 1 * ∏ m, κ m x (x (id.target m)) :=
+    fun x => ⟨le_of_eq (one_mul _), le_of_eq (one_mul _).symm⟩
+  have h := solveRepPlan_near_optimal sel keep κ κ hclosed ord hloc hnorm hnonneg hloc hnonneg u
+    hu plan 1 1 U one_pos hU henv hUb ρ g hρ τ hg
+  have h0 : approxGap plan.chanceCount 1 1 U = 0 := by simp [approxGap]
+  simp only [h0, mul_zero, add_zero, sub_zero] at h
+  exact h
+
+end
+end InfluenceDiagramsProofs.DVE
+```
+
+
+<!-- InfluenceDiagramsProofs/Finite/DVE/NearOptimalEvidence.lean -->
+
+# Julia's evidence run: sliced valuations, skipped variables and the `sum_out` representative
+
+```lean
+import InfluenceDiagramsProofs.Finite.DVE.NearOptimal
+```
+
+`Finite/DVE/Conditioning.lean` models Julia's evidence path (every chance and utility valuation
+sliced at the observed states, absent chance variables skipped) with the model's chance step,
+and `Finite/DVE/Representative.lean` models Julia's `sum_out` representative without evidence.
+Julia's run does both, on any elimination plan. This module combines them:
+
+* `State.chanceRepSkip keep v` skips `v` when no valuation mentions it, and otherwise is the
+  representative step `chanceKeep keep v`; `runRepSkipWith sel keep` is the bucket driver with
+  that step, `decisionScoreRepSkip` its score rows, `runRepSkipWith_kernel` its tables;
+* `solveCondRepPlanWith sel keep κ … O o plan` runs it from `initialConditioned` (the valuations
+  sliced at `clamp O o`), the model of Julia's `_decision_elimination` with hard evidence;
+* `ScopeOK`: observed variables are in no scope, every remaining unobserved chance variable is,
+  so exactly the observed chance variables are skipped.
+
+**Results.** For hard evidence `ev` (`HardEvidence`: observations on an action-free
+chance-ancestral set) the tolerant invariant `TolInv` of `Finite/DVE/NearOptimal.lean`, with the
+indicator likelihood as weight, runs through the whole plan: an observed chance step changes
+nothing on either side (`TolInv.observed`), an unobserved one adds `(H / L - 1) U`. Against a
+normalised reference kernel `κ` and a run kernel `κ'` within `[L, H]` of it, with
+`e = approxGap k L H U` and `Z` the evidence mass:
+
+* `solveCondRepPlan_mass`: the run's final mass (Julia's evidence probability) lies in
+  `[L Z, H Z]`, so a positive computed mass gives positive evidence mass;
+* `solveCondRepPlan_tolerant`: at positive evidence mass, a strategy `ρ` whose actions are within
+  `τ` of the maximum of the run's score rows on every row has
+  `value - e - card D * τ ≤ conditionalEU κ ρ u ev`, and every nonnegative strategy has
+  conditional expected utility at most `value + e`;
+* `solveCondRepPlan_approx_optimal`: the run's own strategy is deterministic and within `2 e` of
+  the conditional optimum `conditionalOptimalValue`, and the value within `e` of it;
+* `solveCondRepPlan_near_optimal`: `ρ` is within `2 e + card D * τ` of every nonnegative strategy
+  and of the conditional optimum;
+* `solveCondRepPlan_spec`: on the normalised kernel itself (`κ' = κ`, `e = 0`), the run's strategy
+  realizes its value, which is the conditional optimum, and `ρ` is within `card D * τ` of it.
+
+The conditional problem is the one of `Evidence.lean`: `conditionalEU`, `conditionalOptimalValue`
+for the indicator likelihood `ev.toEvidence`. Tables on rows that contradict the evidence are
+representation artefacts of the sliced run; the bounds hold for the recorded table as it is,
+since the row condition is required on every row.
+
+```lean
+set_option autoImplicit false
+
+namespace InfluenceDiagramsProofs.DVE
+
+open BayesianNetworksProofs BayesianNetworksProofs.FinBayesNet FinInfluenceDiagram Valuation
+
+noncomputable section
+
+variable {id : FinInfluenceDiagram}
+```
+
+## The driver
+
+```lean
+open Classical in
+/-- Julia's chance step on sliced valuations: skip a variable that no valuation mentions,
+otherwise sum it out with the representative `keep`. -/
+def State.chanceRepSkip {R : Finset id.V} (keep : id.V → Bool) (v : id.V) (s : State id R) :
+    State id (R.erase v) :=
+  if h : bucket v s.valuations = [] then
+    { valuations := s.valuations
+      supported := fun _ hw => Finset.mem_erase.2
+        ⟨fun he => notMem_scope_of_bucket_nil v _ h (he ▸ hw), s.supported hw⟩ }
+  else s.chanceKeep keep v
+
+theorem State.chanceRepSkip_of_nil {R : Finset id.V} (keep : id.V → Bool) (v : id.V)
+    (s : State id R) (h : bucket v s.valuations = []) :
+    (s.chanceRepSkip keep v).valuations = s.valuations := by
+  unfold State.chanceRepSkip
+  rw [dif_pos h]
+
+theorem State.chanceRepSkip_of_ne {R : Finset id.V} (keep : id.V → Bool) (v : id.V)
+    (s : State id R) (h : bucket v s.valuations ≠ []) :
+    (s.chanceRepSkip keep v).valuations = chanceStepKeep (keep v) v s.valuations := by
+  unfold State.chanceRepSkip
+  rw [dif_neg h]
+  rfl
+
+/-- The bucket driver with Julia's skipping representative chance step. -/
+def runRepSkipWith (sel : Selector id) (keep : id.V → Bool) {R : Finset id.V} (plan : Plan id R)
+    (s : State id R) (σ : Strategy id ℝ) : State id ∅ × Strategy id ℝ :=
+  match plan with
+  | .done => (s, σ)
+  | .chance v _ _ next => runRepSkipWith sel keep next (s.chanceRepSkip keep v) σ
+  | .decision d _ hi next =>
+    runRepSkipWith sel keep next (s.decision d) (Function.update σ d (s.policyWith sel d hi))
+
+/-- The valuations of `runRepSkipWith`. -/
+def runRepSkipState (keep : id.V → Bool) {R : Finset id.V} (plan : Plan id R) (s : State id R) :
+    State id ∅ :=
+  match plan with
+  | .done => s
+  | .chance v _ _ next => runRepSkipState keep next (s.chanceRepSkip keep v)
+  | .decision d _ _ next => runRepSkipState keep next (s.decision d)
+
+theorem runRepSkipWith_state (sel : Selector id) (keep : id.V → Bool) {R : Finset id.V}
+    (plan : Plan id R) (s : State id R) (σ : Strategy id ℝ) :
+    (runRepSkipWith sel keep plan s σ).1 = runRepSkipState keep plan s := by
+  induction plan generalizing σ with
+  | done => rfl
+  | chance v _ _ next ih => exact ih (s.chanceRepSkip keep v) σ
+  | decision d _ hi next ih =>
+    exact ih (s.decision d) (Function.update σ d (s.policyWith sel d hi))
+
+/-- The score row of `d` when `runRepSkipWith` eliminates its action. -/
+def decisionScoreRepSkip (keep : id.V → Bool) {R : Finset id.V} (plan : Plan id R)
+    (s : State id R) (d : id.D) : id.Assignment → id.states (id.action d) → ℝ :=
+  match plan with
+  | .done => fun _ _ => 0
+  | .chance v _ _ next => decisionScoreRepSkip keep next (s.chanceRepSkip keep v) d
+  | .decision d' _ _ next =>
+    if d' = d then bucketScore s.valuations (id.action d)
+    else decisionScoreRepSkip keep next (s.decision d') d
+
+theorem decisionScoreRepSkip_local (keep : id.V → Bool) (hinj : Function.Injective id.action)
+    {R : Finset id.V} (plan : Plan id R) (s : State id R) (d : id.D) (hd : id.action d ∈ R) :
+    LocalOn (id.info d) (decisionScoreRepSkip keep plan s d) := by
+  induction plan with
+  | done => simp at hd
+  | chance v _ hc next ih =>
+    exact ih (s.chanceRepSkip keep v) (Finset.mem_erase.2 ⟨hc d, hd⟩)
+  | decision d' hd' hi next ih =>
+    by_cases hdd : d' = d
+    · subst hdd
+      intro x y h
+      show (if d' = d' then bucketScore s.valuations (id.action d')
+          else decisionScoreRepSkip keep next (s.decision d') d') x =
+        (if d' = d' then bucketScore s.valuations (id.action d')
+          else decisionScoreRepSkip keep next (s.decision d') d') y
+      rw [if_pos rfl]
+      exact bucketScore_local s d' hi x y h
+    · intro x y h
+      show (if d' = d then bucketScore s.valuations (id.action d)
+          else decisionScoreRepSkip keep next (s.decision d') d) x =
+        (if d' = d then bucketScore s.valuations (id.action d)
+          else decisionScoreRepSkip keep next (s.decision d') d) y
+      rw [if_neg hdd]
+      exact ih (s.decision d') (Finset.mem_erase.2 ⟨fun he => hdd (hinj he).symm, hd⟩) x y h
+
+theorem runRepSkipWith_snd_of_notMem (sel : Selector id) (keep : id.V → Bool) {R : Finset id.V}
+    (plan : Plan id R) (s : State id R) (σ : Strategy id ℝ) (e : id.D)
+    (he : id.action e ∉ R) : (runRepSkipWith sel keep plan s σ).2 e = σ e := by
+  induction plan generalizing σ with
+  | done => rfl
+  | chance v _ _ next ih =>
+    exact ih (s.chanceRepSkip keep v) σ (fun h => he (Finset.mem_of_mem_erase h))
+  | decision d hd hi next ih =>
+    refine (ih (s.decision d) (Function.update σ d (s.policyWith sel d hi))
+      (fun h => he (Finset.mem_of_mem_erase h))).trans ?_
+    exact Function.update_of_ne (fun h : e = d => he (by rw [h]; exact hd)) _ _
+
+theorem runRepSkipWith_policy_at_step (sel : Selector id) (keep : id.V → Bool) {R : Finset id.V}
+    (d : id.D) (hd : id.action d ∈ R) (hi : R.erase (id.action d) = id.info d)
+    (next : Plan id (R.erase (id.action d))) (s : State id R) (σ : Strategy id ℝ) :
+    (runRepSkipWith sel keep (.decision d hd hi next) s σ).2 d = s.policyWith sel d hi := by
+  refine (runRepSkipWith_snd_of_notMem sel keep next (s.decision d)
+    (Function.update σ d (s.policyWith sel d hi)) d (Finset.notMem_erase _ _)).trans ?_
+  exact Function.update_self _ _ _
+
+theorem runRepSkipWith_deterministic (sel : Selector id) (keep : id.V → Bool) {R : Finset id.V}
+    (plan : Plan id R) (s : State id R) (σ : Strategy id ℝ) (hσ : σ.Deterministic) :
+    (runRepSkipWith sel keep plan s σ).2.Deterministic := by
+  induction plan generalizing σ with
+  | done => exact hσ
+  | chance v _ _ next ih => exact ih (s.chanceRepSkip keep v) σ hσ
+  | decision d _ hi next ih =>
+    apply ih (s.decision d) (Function.update σ d (s.policyWith sel d hi))
+    intro e
+    by_cases h : e = d
+    · subst e
+      simp only [Function.update_self]
+      exact ⟨_, fun x y h => congrArg (sel.pick d) (bucketScore_local s d hi x y h), rfl⟩
+    · rw [Function.update_of_ne h]
+      exact hσ e
+
+/-- Every returned policy row is the selector's choice on the run's score. -/
+theorem runRepSkipWith_kernel (sel : Selector id) (keep : id.V → Bool)
+    (hinj : Function.Injective id.action) {R : Finset id.V} (plan : Plan id R) (s : State id R)
+    (σ : Strategy id ℝ) (d : id.D) (hd : id.action d ∈ R) (x : id.Assignment)
+    (a : id.states (id.action d)) :
+    ((runRepSkipWith sel keep plan s σ).2 d).kernel x a =
+      if a = sel.pick d (decisionScoreRepSkip keep plan s d x) then 1 else 0 := by
+  induction plan generalizing σ with
+  | done => simp at hd
+  | chance v _ hc next ih =>
+    exact ih (s.chanceRepSkip keep v) σ (Finset.mem_erase.2 ⟨hc d, hd⟩)
+  | decision d' hd' hi next ih =>
+    by_cases hdd : d' = d
+    · subst hdd
+      rw [runRepSkipWith_policy_at_step]
+      show (if a = sel.pick d' (bucketScore s.valuations (id.action d') x) then (1 : ℝ) else 0) =
+        if a = sel.pick d' ((if d' = d' then bucketScore s.valuations (id.action d')
+          else decisionScoreRepSkip keep next (s.decision d') d') x) then 1 else 0
+      rw [if_pos rfl]
+    · have hne : id.action d ≠ id.action d' := fun he => hdd (hinj he).symm
+      refine (ih (s.decision d') (Function.update σ d' (s.policyWith sel d' hi))
+        (Finset.mem_erase.2 ⟨hne, hd⟩)).trans ?_
+      show (if a = sel.pick d (decisionScoreRepSkip keep next (s.decision d') d x) then (1 : ℝ)
+          else 0) =
+        if a = sel.pick d ((if d' = d then bucketScore s.valuations (id.action d)
+          else decisionScoreRepSkip keep next (s.decision d') d) x) then 1 else 0
+      rw [if_neg hdd]
+```
+
+## Scopes
+
+```lean
+/-- Observed variables are in no scope; every remaining unobserved chance variable is in one. -/
+structure ScopeOK (O : Finset id.V) {R : Finset id.V} (s : State id R) : Prop where
+  unobserved : ∀ v ∈ O, v ∉ (collect s.valuations).scope
+  covers : ∀ v ∈ R, v ∉ O → (∀ d, id.action d ≠ v) → v ∈ (collect s.valuations).scope
+
+theorem ScopeOK.chanceRepSkip {O : Finset id.V} {R : Finset id.V} {s : State id R}
+    (h : ScopeOK O s) (keep : id.V → Bool) (v : id.V) : ScopeOK O (s.chanceRepSkip keep v) := by
+  by_cases hnil : bucket v s.valuations = []
+  · have hval := State.chanceRepSkip_of_nil keep v s hnil
+    constructor
+    · intro w hw hws
+      rw [hval] at hws
+      exact h.unobserved w hw hws
+    · intro w hw hwO hwc
+      rw [hval]
+      exact h.covers w (Finset.mem_of_mem_erase hw) hwO hwc
+  · have hval := State.chanceRepSkip_of_ne keep v s hnil
+    have hscope : (collect (chanceStepKeep (keep v) v s.valuations)).scope =
+        (collect s.valuations).scope.erase v :=
+      step_scope_eq v s.valuations (sumOutKeep (keep v) v) (fun _ => rfl)
+    constructor
+    · intro w hw hws
+      rw [hval, hscope] at hws
+      exact h.unobserved w hw (Finset.mem_of_mem_erase hws)
+    · intro w hw hwO hwc
+      rw [hval, hscope]
+      exact Finset.mem_erase.2
+        ⟨Finset.ne_of_mem_erase hw, h.covers w (Finset.mem_of_mem_erase hw) hwO hwc⟩
+
+theorem ScopeOK.decision {O : Finset id.V} {R : Finset id.V} {s : State id R}
+    (h : ScopeOK O s) (d : id.D) : ScopeOK O (s.decision d) := by
+  have hscope : (collect (decisionStep (id.action d) s.valuations)).scope =
+      (collect s.valuations).scope.erase (id.action d) :=
+    step_scope_eq _ s.valuations (maxOut (id.action d)) (fun _ => rfl)
+  constructor
+  · intro w hw hws
+    change w ∈ (collect (decisionStep (id.action d) s.valuations)).scope at hws
+    rw [hscope] at hws
+    exact h.unobserved w hw (Finset.mem_of_mem_erase hws)
+  · intro w hw hwO hwc
+    change w ∈ (collect (decisionStep (id.action d) s.valuations)).scope
+    rw [hscope]
+    exact Finset.mem_erase.2
+      ⟨fun he => hwc d he.symm, h.covers w (Finset.mem_of_mem_erase hw) hwO hwc⟩
+```
+
+## The invariant along the evidence run
+
+```lean
+theorem approxStep_nonneg {L H U : ℝ} (hL : 0 < L) (hLH : L ≤ H) (hU : 0 ≤ U) :
+    0 ≤ (H / L - 1) * U := by
+  refine mul_nonneg ?_ hU
+  rw [sub_nonneg, le_div_iff₀ hL, one_mul]
+  exact hLH
+
+/-- **The tolerant invariant along Julia's evidence run**, for a fixed strategy `ρ` whose action
+at every remaining decision is within `τ` of the maximum of the run's score on every row. -/
+theorem tolInv_runRepSkip (keep : id.V → Bool) {κ : id.Kernel ℝ} (hκ : ∀ m x a, 0 ≤ κ m x a)
+    (ev : HardEvidence id) (hind : Independent κ ev.toEvidence.likelihood)
+    (hinj : Function.Injective id.action) {u : Utility id ℝ} {L H U : ℝ} (hL : 0 < L)
+    (hLH : L ≤ H) (hU : 0 ≤ U) {R : Finset id.V} (plan : Plan id R) (s : State id R)
+    (ρ : Strategy id ℝ) (τ : ℝ)
+    (hρ : ∀ d, id.action d ∈ R → ∃ g : id.Assignment → id.states (id.action d),
+      (∀ x a, (ρ d).kernel x a = if a = g x then 1 else 0) ∧
+        ∀ x b, decisionScoreRepSkip keep plan s d x b ≤
+          decisionScoreRepSkip keep plan s d x (g x) + τ)
+    (hsc : ScopeOK ev.observed s) (e t : ℝ)
+    (h : TolInv κ u ev.toEvidence.likelihood ev.observed ev.value L H U e t s ρ) :
+    TolInv κ u ev.toEvidence.likelihood ev.observed ev.value L H U
+      (e + plan.chanceCount * ((H / L - 1) * U)) (t + plan.decisionCount * τ)
+      (runRepSkipState keep plan s) ρ := by
+  have hlik : ∀ y, 0 ≤ ev.toEvidence.likelihood y := ev.toEvidence.nonneg
+  induction plan generalizing e t with
+  | done => simpa [Plan.chanceCount, Plan.decisionCount, runRepSkipState] using h
+  | @chance R v hv hc next ih =>
+    have hs : TolInv κ u ev.toEvidence.likelihood ev.observed ev.value L H U
+        (e + (H / L - 1) * U) t (s.chanceRepSkip keep v) ρ := by
+      by_cases hvO : v ∈ ev.observed
+      · have hnil : bucket v s.valuations = [] :=
+          bucket_nil_of_notMem v _ (hsc.unobserved v hvO)
+        have hval := State.chanceRepSkip_of_nil keep v s hnil
+        have h0 := h.observed (fun z w hw hz => ev.likelihood_zero hw z hz) v hv hc hvO
+          (s.chanceRepSkip keep v) (fun x => by rw [hval]) (fun x => by rw [hval])
+        exact h0.weaken hκ hlik (le_add_of_nonneg_right (approxStep_nonneg hL hLH hU))
+      · have hne : bucket v s.valuations ≠ [] :=
+          fun hnil => notMem_scope_of_bucket_nil v _ hnil (hsc.covers v hv hvO hc)
+        have hval := State.chanceRepSkip_of_ne keep v s hne
+        obtain ⟨hp, hw⟩ := chanceStepKeep_collect (keep v) v s.valuations
+        refine h.chanceOf hκ hlik hL hU v hv hc hvO _ (fun x => ?_) (fun x => ?_)
+        · rw [hval, hp]
+          exact chanceStep_prob v s.valuations x
+        · rw [hval, hw]
+          exact chanceStep_weight v s.valuations x
+    have := ih (s.chanceRepSkip keep v) (fun d hd => hρ d (Finset.mem_of_mem_erase hd))
+      (hsc.chanceRepSkip keep v) _ _ hs
+    simp only [Plan.chanceCount, Plan.decisionCount, Nat.cast_add, Nat.cast_one] at this ⊢
+    convert this using 1
+    ring
+  | @decision R d hd hi next ih =>
+    obtain ⟨g, hgk, hgmax⟩ := hρ d hd
+    have hmax : ∀ x b, bucketScore s.valuations (id.action d) x b ≤
+        bucketScore s.valuations (id.action d) x (g x) + τ := by
+      intro x b
+      have := hgmax x b
+      change (if d = d then bucketScore s.valuations (id.action d)
+          else decisionScoreRepSkip keep next (s.decision d) d) x b ≤
+        (if d = d then bucketScore s.valuations (id.action d)
+          else decisionScoreRepSkip keep next (s.decision d) d) x (g x) + τ at this
+      rwa [if_pos rfl] at this
+    have hs := h.decisionOf hκ hlik hind hinj hL d hd hi (ev.action_notMem d)
+      (fun w hw hwO => hsc.unobserved w hwO hw) (ρ d) g hgk τ hmax
+    rw [Function.update_eq_self] at hs
+    have hρ' : ∀ d', id.action d' ∈ R.erase (id.action d) →
+        ∃ g' : id.Assignment → id.states (id.action d'),
+          (∀ x a, (ρ d').kernel x a = if a = g' x then 1 else 0) ∧
+            ∀ x b, decisionScoreRepSkip keep next (s.decision d) d' x b ≤
+              decisionScoreRepSkip keep next (s.decision d) d' x (g' x) + τ := by
+      intro d' hd'
+      have hne : d ≠ d' := fun he => (Finset.mem_erase.1 hd').1 (by rw [he])
+      obtain ⟨g', hk', hm'⟩ := hρ d' (Finset.mem_of_mem_erase hd')
+      refine ⟨g', hk', fun x b => ?_⟩
+      have := hm' x b
+      change (if d = d' then bucketScore s.valuations (id.action d')
+          else decisionScoreRepSkip keep next (s.decision d) d') x b ≤
+        (if d = d' then bucketScore s.valuations (id.action d')
+          else decisionScoreRepSkip keep next (s.decision d) d') x (g' x) + τ at this
+      rwa [if_neg hne] at this
+    have := ih (s.decision d) hρ' (hsc.decision d) _ _ hs
+    simp only [Plan.chanceCount, Plan.decisionCount, Nat.cast_add, Nat.cast_one] at this ⊢
+    convert this using 1
+    ring
+```
+
+## The solver and the conditional problem
+
+```lean
+/-- **Julia's evidence run** on any plan: the sliced initial valuations, the skipping
+representative chance step `keep`, and the selector `sel`. -/
+def solveCondRepPlanWith (sel : Selector id) (keep : id.V → Bool) (κ : id.Kernel ℝ)
+    (hloc : ∀ m, Local κ m) (hnonneg : ∀ m x a, 0 ≤ κ m x a) (u : Utility id ℝ)
+    (hu : ∀ j, Utility.Local u j) (O : Finset id.V) (o : id.Assignment)
+    (plan : Plan id Finset.univ) : Solution id :=
+  let result := runRepSkipWith sel keep plan (initialConditioned κ hloc hnonneg u hu O o)
+    defaultStrategy
+  ⟨(collect result.1.valuations).util (baseAssignment id), result.2⟩
+
+/-- The score row that `solveCondRepPlanWith` maximizes for `d`. -/
+def solveCondRepPlanScore (keep : id.V → Bool) (κ : id.Kernel ℝ) (hloc : ∀ m, Local κ m)
+    (hnonneg : ∀ m x a, 0 ≤ κ m x a) (u : Utility id ℝ) (hu : ∀ j, Utility.Local u j)
+    (O : Finset id.V) (o : id.Assignment) (plan : Plan id Finset.univ) (d : id.D) :
+    id.Assignment → id.states (id.action d) → ℝ :=
+  decisionScoreRepSkip keep plan (initialConditioned κ hloc hnonneg u hu O o) d
+
+/-- The final probability potential of `solveCondRepPlanWith` (Julia's `evidence_probability`). -/
+def solveCondRepPlanMass (keep : id.V → Bool) (κ : id.Kernel ℝ) (hloc : ∀ m, Local κ m)
+    (hnonneg : ∀ m x a, 0 ≤ κ m x a) (u : Utility id ℝ) (hu : ∀ j, Utility.Local u j)
+    (O : Finset id.V) (o : id.Assignment) (plan : Plan id Finset.univ) : ℝ :=
+  (collect (runRepSkipState keep plan (initialConditioned κ hloc hnonneg u hu O o)).valuations).prob
+    (baseAssignment id)
+
+theorem solveCondRepPlanWith_value (sel : Selector id) (keep : id.V → Bool) (κ : id.Kernel ℝ)
+    (hloc : ∀ m, Local κ m) (hnonneg : ∀ m x a, 0 ≤ κ m x a) (u : Utility id ℝ)
+    (hu : ∀ j, Utility.Local u j) (O : Finset id.V) (o : id.Assignment)
+    (plan : Plan id Finset.univ) :
+    (solveCondRepPlanWith sel keep κ hloc hnonneg u hu O o plan).value =
+      (collect (runRepSkipState keep plan
+        (initialConditioned κ hloc hnonneg u hu O o)).valuations).util (baseAssignment id) := by
+  unfold solveCondRepPlanWith
+  simp only
+  rw [runRepSkipWith_state]
+
+/-- The conditional expected utility through the reference marginals of the empty set. -/
+theorem refMarg_empty_evidence (κ : id.Kernel ℝ) (e : Evidence id) (u : Utility id ℝ)
+    (σ : Strategy id ℝ) (x : id.Assignment) :
+    refMarg κ ∅ σ e.likelihood x = evidenceMass κ σ e ∧
+      refMarg κ ∅ σ (likUtil e.likelihood u) x = evidenceNumerator κ σ u e := by
+  constructor
+  · rw [refMarg_empty]
+    rfl
+  · rw [refMarg_empty]
+    unfold evidenceNumerator likUtil
+    exact Finset.sum_congr rfl fun y _ => by ring
+
+theorem conditionalEU_eq_weighted (κ : id.Kernel ℝ) (hclosed : id.Closed) (ord : id.IDOrder)
+    (hloc : ∀ m, Local κ m) (hnorm : ∀ m, Normalised κ m) (u : Utility id ℝ) (e : Evidence id)
+    (σ : Strategy id ℝ) :
+    conditionalEU κ σ u e =
+      expectedUtility κ σ (weightedUtility u e) / evidenceMass κ defaultStrategy e := by
+  rw [conditionalEU, expectedUtility_weighted,
+    evidenceMass_independent e κ hclosed ord hloc hnorm σ defaultStrategy]
+
+/-- At positive evidence mass, no nonnegative strategy exceeds the conditional optimum. -/
+theorem conditionalEU_le_optimal (κ : id.Kernel ℝ) (hclosed : id.Closed) (ord : id.IDOrder)
+    (hloc : ∀ m, Local κ m) (hnorm : ∀ m, Normalised κ m) (u : Utility id ℝ) (e : Evidence id)
+    (hZ : 0 < evidenceMass κ defaultStrategy e) (σ : Strategy id ℝ) (hσ : σ.Nonneg) :
+    conditionalEU κ σ u e ≤ conditionalOptimalValue κ u e := by
+  rw [conditionalEU_eq_weighted κ hclosed ord hloc hnorm, conditionalOptimalValue]
+  exact div_le_div_of_nonneg_right (expectedUtility_le_optimalValue κ _ σ hσ) hZ.le
+
+/-- The conditional optimum is attained by a nonnegative (deterministic) strategy. -/
+theorem conditionalOptimal_attained (κ : id.Kernel ℝ) (hclosed : id.Closed) (ord : id.IDOrder)
+    (hloc : ∀ m, Local κ m) (hnorm : ∀ m, Normalised κ m) (u : Utility id ℝ)
+    (e : Evidence id) :
+    ∃ σ : Strategy id ℝ, σ.Nonneg ∧ conditionalEU κ σ u e = conditionalOptimalValue κ u e := by
+  obtain ⟨σ, _, hσ, hv⟩ := optimalValue_attained κ (weightedUtility u e)
+  exact ⟨σ, hσ, by rw [conditionalEU_eq_weighted κ hclosed ord hloc hnorm, conditionalOptimalValue,
+    hv]⟩
+
+/-- The tolerant invariant at the end of Julia's evidence run, for a strategy `ρ` within `τ` of
+the run's score rows on every row. -/
+theorem tolInv_solveCondRepPlan (keep : id.V → Bool) (κ κ' : id.Kernel ℝ) (hclosed : id.Closed)
+    (ord : id.IDOrder) (hloc : ∀ m, Local κ m) (hnorm : ∀ m, Normalised κ m)
+    (hnonneg : ∀ m x a, 0 ≤ κ m x a) (hloc' : ∀ m, Local κ' m)
+    (hnonneg' : ∀ m x a, 0 ≤ κ' m x a) (u : Utility id ℝ) (hu : ∀ j, Utility.Local u j)
+    (ev : HardEvidence id) (plan : Plan id Finset.univ) (L H U : ℝ)
+    (hL : 0 < L) (hLH : L ≤ H) (hU : 0 ≤ U)
+    (henv : ∀ x, L * (∏ m, κ m x (x (id.target m))) ≤ ∏ m, κ' m x (x (id.target m)) ∧
+      ∏ m, κ' m x (x (id.target m)) ≤ H * ∏ m, κ m x (x (id.target m)))
+    (hUb : ∀ x, |totalUtility u x| ≤ U) (ρ : Strategy id ℝ)
+    (g : (d : id.D) → id.Assignment → id.states (id.action d))
+    (hρ : ∀ d x a, (ρ d).kernel x a = if a = g d x then 1 else 0) (τ : ℝ)
+    (hg : ∀ d x b,
+      solveCondRepPlanScore keep κ' hloc' hnonneg' u hu ev.observed ev.value plan d x b ≤
+        solveCondRepPlanScore keep κ' hloc' hnonneg' u hu ev.observed ev.value plan d x (g d x) +
+          τ) :
+    TolInv κ u ev.toEvidence.likelihood ev.observed ev.value L H U
+      (approxGap plan.chanceCount L H U) (Fintype.card id.D * τ)
+      (runRepSkipState keep plan (initialConditioned κ' hloc' hnonneg' u hu ev.observed ev.value))
+      ρ := by
+  have hinj := (id.closed_iff.1 hclosed).2.1
+  have hind := independent_evidence ev.toEvidence κ hclosed ord hloc hnorm
+  have h0 : TolInv κ u ev.toEvidence.likelihood ev.observed ev.value L H U 0 0
+      (initialConditioned κ' hloc' hnonneg' u hu ev.observed ev.value) ρ :=
+    TolInv.initial κ' ev.likelihood_clamp _
+      (fun x => by
+        show (collect ((initial κ' hloc' hnonneg' u hu).valuations.map _)).prob x = _
+        rw [collect_condition_prob, initial_prob])
+      (fun x => by
+        show (collect ((initial κ' hloc' hnonneg' u hu).valuations.map _)).util x = _
+        rw [collect_condition_util, initial_util])
+      henv hUb ρ (nonneg_of_kernel ρ g hρ)
+  have hcp := initial_coupled κ' hclosed hloc' hnonneg' u hu ev
+  have hr := tolInv_runRepSkip keep hnonneg ev hind hinj hL hLH hU plan _ ρ τ
+    (fun d _ => ⟨g d, hρ d, hg d⟩) ⟨hcp.unobserved, hcp.covers⟩ 0 0 h0
+  rw [zero_add, zero_add, Plan.decisionCount_univ hinj] at hr
+  exact hr
+
+/-- At the end of a run, the tolerant invariant bounds conditional expected utilities: the
+strategy `σ` of the invariant is within `e + t` below the run's value, every nonnegative
+strategy at most `e` above it. -/
+theorem TolInv.conditional {κ : id.Kernel ℝ} (hclosed : id.Closed) (ord : id.IDOrder)
+    (hloc : ∀ m, Local κ m) (hnorm : ∀ m, Normalised κ m) {u : Utility id ℝ} (e : Evidence id)
+    {O : Finset id.V} {o : id.Assignment} {L H U err t : ℝ} {s : State id ∅}
+    {σ : Strategy id ℝ} (h : TolInv κ u e.likelihood O o L H U err t s σ)
+    (hZ : 0 < evidenceMass κ defaultStrategy e) :
+    (collect s.valuations).util (baseAssignment id) - err - t ≤ conditionalEU κ σ u e ∧
+      ∀ τ : Strategy id ℝ, τ.Nonneg →
+        conditionalEU κ τ u e ≤ (collect s.valuations).util (baseAssignment id) + err := by
+  have hind : ∀ ρ : Strategy id ℝ, evidenceMass κ ρ e = evidenceMass κ defaultStrategy e :=
+    fun ρ => evidenceMass_independent e κ hclosed ord hloc hnorm ρ defaultStrategy
+  constructor
+  · have hl := h.lower (baseAssignment id)
+    rw [(refMarg_empty_evidence κ e u σ _).1, (refMarg_empty_evidence κ e u σ _).2, hind] at hl
+    rw [conditionalEU, hind, le_div_iff₀ hZ]
+    exact hl
+  · intro τ hτ
+    have hd := h.dominates τ hτ (baseAssignment id)
+    rw [(refMarg_empty_evidence κ e u τ _).2, (refMarg_empty_evidence κ e u σ _).1, hind] at hd
+    rw [conditionalEU, hind, div_le_iff₀ hZ]
+    exact hd
+
+/-- The run's own strategy is within `0` of its score rows: the tolerant invariant with no loss. -/
+theorem tolInv_solveCondRepPlan_run (sel : Selector id) (keep : id.V → Bool)
+    (κ κ' : id.Kernel ℝ) (hclosed : id.Closed)
+    (ord : id.IDOrder) (hloc : ∀ m, Local κ m) (hnorm : ∀ m, Normalised κ m)
+    (hnonneg : ∀ m x a, 0 ≤ κ m x a) (hloc' : ∀ m, Local κ' m)
+    (hnonneg' : ∀ m x a, 0 ≤ κ' m x a) (u : Utility id ℝ) (hu : ∀ j, Utility.Local u j)
+    (ev : HardEvidence id) (plan : Plan id Finset.univ) (L H U : ℝ)
+    (hL : 0 < L) (hLH : L ≤ H) (hU : 0 ≤ U)
+    (henv : ∀ x, L * (∏ m, κ m x (x (id.target m))) ≤ ∏ m, κ' m x (x (id.target m)) ∧
+      ∏ m, κ' m x (x (id.target m)) ≤ H * ∏ m, κ m x (x (id.target m)))
+    (hUb : ∀ x, |totalUtility u x| ≤ U) :
+    TolInv κ u ev.toEvidence.likelihood ev.observed ev.value L H U
+      (approxGap plan.chanceCount L H U) 0
+      (runRepSkipState keep plan (initialConditioned κ' hloc' hnonneg' u hu ev.observed ev.value))
+      (solveCondRepPlanWith sel keep κ' hloc' hnonneg' u hu ev.observed ev.value
+        plan).strategy := by
+  have hinj := (id.closed_iff.1 hclosed).2.1
+  have hr := tolInv_solveCondRepPlan keep κ κ' hclosed ord hloc hnorm hnonneg hloc' hnonneg' u hu
+    ev plan L H U hL hLH hU henv hUb
+    (solveCondRepPlanWith sel keep κ' hloc' hnonneg' u hu ev.observed ev.value plan).strategy
+    (fun d x => sel.pick d
+      (solveCondRepPlanScore keep κ' hloc' hnonneg' u hu ev.observed ev.value plan d x))
+    (fun d x a => runRepSkipWith_kernel sel keep hinj plan _ defaultStrategy d (Finset.mem_univ _)
+      x a) 0
+    (fun d x b => by
+      rw [add_zero]
+      exact sel.maximizes d _ b)
+  rwa [mul_zero] at hr
+
+/-- **Julia's evidence probability brackets the evidence mass**: the run's final mass lies in
+`[L Z, H Z]`, `Z` the reference evidence mass. -/
+theorem solveCondRepPlan_mass (keep : id.V → Bool) (κ κ' : id.Kernel ℝ) (hclosed : id.Closed)
+    (ord : id.IDOrder) (hloc : ∀ m, Local κ m) (hnorm : ∀ m, Normalised κ m)
+    (hnonneg : ∀ m x a, 0 ≤ κ m x a) (hloc' : ∀ m, Local κ' m)
+    (hnonneg' : ∀ m x a, 0 ≤ κ' m x a) (u : Utility id ℝ) (hu : ∀ j, Utility.Local u j)
+    (ev : HardEvidence id) (plan : Plan id Finset.univ) (L H U : ℝ)
+    (hL : 0 < L) (hLH : L ≤ H) (hU : 0 ≤ U)
+    (henv : ∀ x, L * (∏ m, κ m x (x (id.target m))) ≤ ∏ m, κ' m x (x (id.target m)) ∧
+      ∏ m, κ' m x (x (id.target m)) ≤ H * ∏ m, κ m x (x (id.target m)))
+    (hUb : ∀ x, |totalUtility u x| ≤ U) :
+    L * evidenceMass κ defaultStrategy ev.toEvidence ≤
+        solveCondRepPlanMass keep κ' hloc' hnonneg' u hu ev.observed ev.value plan ∧
+      solveCondRepPlanMass keep κ' hloc' hnonneg' u hu ev.observed ev.value plan ≤
+        H * evidenceMass κ defaultStrategy ev.toEvidence := by
+  have hr := tolInv_solveCondRepPlan_run (Selector.classical id) keep κ κ' hclosed ord hloc hnorm
+    hnonneg hloc' hnonneg' u hu ev plan L H U hL hLH hU henv hUb
+  have hind := evidenceMass_independent ev.toEvidence κ hclosed ord hloc hnorm
+  have h1 := hr.mass_lower (baseAssignment id)
+  have h2 := hr.mass_upper (baseAssignment id)
+  rw [(refMarg_empty_evidence κ ev.toEvidence u _ _).1, hind] at h1 h2
+  exact ⟨h1, h2⟩
+
+/-- **A tolerant strategy on Julia's evidence run.** At positive evidence mass, a strategy `ρ`
+reading at every decision `d` an action `g d x` within `τ` of the maximum of the run's score row
+(`solveCondRepPlanScore`) on every row has conditional expected utility at least the run's value
+minus `e + card D * τ`, and no nonnegative strategy exceeds the value plus `e`, with
+`e = approxGap k L H U`. -/
+theorem solveCondRepPlan_tolerant (sel : Selector id) (keep : id.V → Bool) (κ κ' : id.Kernel ℝ)
+    (hclosed : id.Closed) (ord : id.IDOrder) (hloc : ∀ m, Local κ m)
+    (hnorm : ∀ m, Normalised κ m) (hnonneg : ∀ m x a, 0 ≤ κ m x a) (hloc' : ∀ m, Local κ' m)
+    (hnonneg' : ∀ m x a, 0 ≤ κ' m x a) (u : Utility id ℝ) (hu : ∀ j, Utility.Local u j)
+    (ev : HardEvidence id) (plan : Plan id Finset.univ) (L H U : ℝ)
+    (hL : 0 < L) (hLH : L ≤ H) (hU : 0 ≤ U)
+    (henv : ∀ x, L * (∏ m, κ m x (x (id.target m))) ≤ ∏ m, κ' m x (x (id.target m)) ∧
+      ∏ m, κ' m x (x (id.target m)) ≤ H * ∏ m, κ m x (x (id.target m)))
+    (hUb : ∀ x, |totalUtility u x| ≤ U)
+    (hZ : 0 < evidenceMass κ defaultStrategy ev.toEvidence) (ρ : Strategy id ℝ)
+    (g : (d : id.D) → id.Assignment → id.states (id.action d))
+    (hρ : ∀ d x a, (ρ d).kernel x a = if a = g d x then 1 else 0) (τ : ℝ)
+    (hg : ∀ d x b,
+      solveCondRepPlanScore keep κ' hloc' hnonneg' u hu ev.observed ev.value plan d x b ≤
+        solveCondRepPlanScore keep κ' hloc' hnonneg' u hu ev.observed ev.value plan d x (g d x) +
+          τ) :
+    (solveCondRepPlanWith sel keep κ' hloc' hnonneg' u hu ev.observed ev.value plan).value -
+        approxGap plan.chanceCount L H U - Fintype.card id.D * τ ≤
+      conditionalEU κ ρ u ev.toEvidence ∧
+    ∀ τ' : Strategy id ℝ, τ'.Nonneg →
+      conditionalEU κ τ' u ev.toEvidence ≤
+        (solveCondRepPlanWith sel keep κ' hloc' hnonneg' u hu ev.observed ev.value plan).value +
+          approxGap plan.chanceCount L H U := by
+  have hr := tolInv_solveCondRepPlan keep κ κ' hclosed ord hloc hnorm hnonneg hloc' hnonneg' u hu
+    ev plan L H U hL hLH hU henv hUb ρ g hρ τ hg
+  rw [solveCondRepPlanWith_value]
+  exact hr.conditional hclosed ord hloc hnorm ev.toEvidence hZ
+
+/-- **Approximate conditional optimality of Julia's evidence run.** At positive evidence mass, the
+run's own strategy is deterministic and within `2 e` of every nonnegative strategy and of the
+conditional optimum, and the run's value is within `e` of that optimum. -/
+theorem solveCondRepPlan_approx_optimal (sel : Selector id) (keep : id.V → Bool)
+    (κ κ' : id.Kernel ℝ) (hclosed : id.Closed) (ord : id.IDOrder) (hloc : ∀ m, Local κ m)
+    (hnorm : ∀ m, Normalised κ m) (hnonneg : ∀ m x a, 0 ≤ κ m x a) (hloc' : ∀ m, Local κ' m)
+    (hnonneg' : ∀ m x a, 0 ≤ κ' m x a) (u : Utility id ℝ) (hu : ∀ j, Utility.Local u j)
+    (ev : HardEvidence id) (plan : Plan id Finset.univ) (L H U : ℝ)
+    (hL : 0 < L) (hLH : L ≤ H) (hU : 0 ≤ U)
+    (henv : ∀ x, L * (∏ m, κ m x (x (id.target m))) ≤ ∏ m, κ' m x (x (id.target m)) ∧
+      ∏ m, κ' m x (x (id.target m)) ≤ H * ∏ m, κ m x (x (id.target m)))
+    (hUb : ∀ x, |totalUtility u x| ≤ U)
+    (hZ : 0 < evidenceMass κ defaultStrategy ev.toEvidence) :
+    let sol := solveCondRepPlanWith sel keep κ' hloc' hnonneg' u hu ev.observed ev.value plan
+    let e := approxGap plan.chanceCount L H U
+    sol.strategy.Deterministic ∧
+      (∀ τ : Strategy id ℝ, τ.Nonneg →
+        conditionalEU κ τ u ev.toEvidence ≤ conditionalEU κ sol.strategy u ev.toEvidence + 2 * e) ∧
+      conditionalOptimalValue κ u ev.toEvidence - 2 * e ≤
+        conditionalEU κ sol.strategy u ev.toEvidence ∧
+      conditionalEU κ sol.strategy u ev.toEvidence ≤ conditionalOptimalValue κ u ev.toEvidence ∧
+      |sol.value - conditionalOptimalValue κ u ev.toEvidence| ≤ e := by
+  intro sol e
+  have hr := tolInv_solveCondRepPlan_run sel keep κ κ' hclosed ord hloc hnorm hnonneg hloc'
+    hnonneg' u hu ev plan L H U hL hLH hU henv hUb
+  obtain ⟨hlo, hdom⟩ := hr.conditional hclosed ord hloc hnorm ev.toEvidence hZ
+  rw [← solveCondRepPlanWith_value sel] at hlo hdom
+  change sol.value - e - 0 ≤ _ at hlo
+  change ∀ τ : Strategy id ℝ, τ.Nonneg → _ ≤ sol.value + e at hdom
+  have hdet : sol.strategy.Deterministic :=
+    runRepSkipWith_deterministic sel keep _ _ _ defaultStrategy_deterministic
+  have hle := conditionalEU_le_optimal κ hclosed ord hloc hnorm u ev.toEvidence hZ sol.strategy
+    (deterministic_nonneg _ hdet)
+  obtain ⟨σo, hσo, hvo⟩ := conditionalOptimal_attained κ hclosed ord hloc hnorm u ev.toEvidence
+  have hopt := hdom σo hσo
+  rw [hvo] at hopt
+  refine ⟨hdet, fun τ hτ => ?_, by linarith, hle, ?_⟩
+  · have := hdom τ hτ
+    linarith
+  · rw [abs_le]
+    constructor <;> linarith
+
+/-- **Near-optimality of a tolerant strategy with hard evidence.** Under the hypotheses of
+`solveCondRepPlan_tolerant`, `ρ` is within `2 e + card D * τ` of every nonnegative strategy and of
+the conditional optimum. -/
+theorem solveCondRepPlan_near_optimal (sel : Selector id) (keep : id.V → Bool)
+    (κ κ' : id.Kernel ℝ) (hclosed : id.Closed) (ord : id.IDOrder) (hloc : ∀ m, Local κ m)
+    (hnorm : ∀ m, Normalised κ m) (hnonneg : ∀ m x a, 0 ≤ κ m x a) (hloc' : ∀ m, Local κ' m)
+    (hnonneg' : ∀ m x a, 0 ≤ κ' m x a) (u : Utility id ℝ) (hu : ∀ j, Utility.Local u j)
+    (ev : HardEvidence id) (plan : Plan id Finset.univ) (L H U : ℝ)
+    (hL : 0 < L) (hLH : L ≤ H) (hU : 0 ≤ U)
+    (henv : ∀ x, L * (∏ m, κ m x (x (id.target m))) ≤ ∏ m, κ' m x (x (id.target m)) ∧
+      ∏ m, κ' m x (x (id.target m)) ≤ H * ∏ m, κ m x (x (id.target m)))
+    (hUb : ∀ x, |totalUtility u x| ≤ U)
+    (hZ : 0 < evidenceMass κ defaultStrategy ev.toEvidence) (ρ : Strategy id ℝ)
+    (g : (d : id.D) → id.Assignment → id.states (id.action d))
+    (hρ : ∀ d x a, (ρ d).kernel x a = if a = g d x then 1 else 0) (τ : ℝ)
+    (hg : ∀ d x b,
+      solveCondRepPlanScore keep κ' hloc' hnonneg' u hu ev.observed ev.value plan d x b ≤
+        solveCondRepPlanScore keep κ' hloc' hnonneg' u hu ev.observed ev.value plan d x (g d x) +
+          τ) :
+    let e := approxGap plan.chanceCount L H U
+    (∀ τ' : Strategy id ℝ, τ'.Nonneg →
+        conditionalEU κ τ' u ev.toEvidence ≤
+          conditionalEU κ ρ u ev.toEvidence + 2 * e + Fintype.card id.D * τ) ∧
+      conditionalOptimalValue κ u ev.toEvidence - 2 * e - Fintype.card id.D * τ ≤
+        conditionalEU κ ρ u ev.toEvidence := by
+  intro e
+  obtain ⟨hlo, hdom⟩ := solveCondRepPlan_tolerant sel keep κ κ' hclosed ord hloc hnorm hnonneg
+    hloc' hnonneg' u hu ev plan L H U hL hLH hU henv hUb hZ ρ g hρ τ hg
+  obtain ⟨σo, hσo, hvo⟩ := conditionalOptimal_attained κ hclosed ord hloc hnorm u ev.toEvidence
+  have hopt := hdom σo hσo
+  rw [hvo] at hopt
+  refine ⟨fun τ' hτ' => ?_, by linarith⟩
+  have := hdom τ' hτ'
+  linarith
+
+/-- The exact case: a kernel is within `[1, 1]` of itself, and the gap is then `0`. -/
+theorem exact_envelope (κ : id.Kernel ℝ) (x : id.Assignment) :
+    1 * (∏ m, κ m x (x (id.target m))) ≤ ∏ m, κ m x (x (id.target m)) ∧
+      ∏ m, κ m x (x (id.target m)) ≤ 1 * ∏ m, κ m x (x (id.target m)) :=
+  ⟨le_of_eq (one_mul _), le_of_eq (one_mul _).symm⟩
+
+theorem approxGap_one (k : ℕ) (U : ℝ) : approxGap k 1 1 U = 0 := by simp [approxGap]
+
+theorem utility_bound (u : Utility id ℝ) :
+    0 ≤ ∑ x, |totalUtility u x| ∧ ∀ x, |totalUtility u x| ≤ ∑ x, |totalUtility u x| :=
+  ⟨Finset.sum_nonneg fun _ _ => abs_nonneg _, fun x =>
+    Finset.single_le_sum (f := fun x => |totalUtility u x|) (fun _ _ => abs_nonneg _)
+      (Finset.mem_univ x)⟩
+
+/-- **Julia's evidence run on exact, normalised data is conditionally optimal.** If the run is on
+the normalised kernel `κ` itself and the evidence mass is positive, the run's strategy is
+deterministic and realizes the run's value, which is the conditional optimum; its final mass is
+the evidence mass; and a strategy within `τ` of the run's score rows on every row is within
+`card D * τ` of every nonnegative strategy and of the conditional optimum. -/
+theorem solveCondRepPlan_spec (sel : Selector id) (keep : id.V → Bool) (κ : id.Kernel ℝ)
+    (hclosed : id.Closed) (ord : id.IDOrder) (hloc : ∀ m, Local κ m)
+    (hnorm : ∀ m, Normalised κ m) (hnonneg : ∀ m x a, 0 ≤ κ m x a) (u : Utility id ℝ)
+    (hu : ∀ j, Utility.Local u j) (ev : HardEvidence id) (plan : Plan id Finset.univ)
+    (hZ : 0 < evidenceMass κ defaultStrategy ev.toEvidence) :
+    let sol := solveCondRepPlanWith sel keep κ hloc hnonneg u hu ev.observed ev.value plan
+    sol.strategy.Deterministic ∧ conditionalEU κ sol.strategy u ev.toEvidence = sol.value ∧
+      sol.value = conditionalOptimalValue κ u ev.toEvidence ∧
+      solveCondRepPlanMass keep κ hloc hnonneg u hu ev.observed ev.value plan =
+        evidenceMass κ defaultStrategy ev.toEvidence ∧
+      ∀ (ρ : Strategy id ℝ) (g : (d : id.D) → id.Assignment → id.states (id.action d)),
+        (∀ d x a, (ρ d).kernel x a = if a = g d x then 1 else 0) → ∀ τ : ℝ,
+        (∀ d x b, solveCondRepPlanScore keep κ hloc hnonneg u hu ev.observed ev.value plan d x b ≤
+          solveCondRepPlanScore keep κ hloc hnonneg u hu ev.observed ev.value plan d x (g d x) +
+            τ) →
+        (∀ τ' : Strategy id ℝ, τ'.Nonneg →
+          conditionalEU κ τ' u ev.toEvidence ≤
+            conditionalEU κ ρ u ev.toEvidence + Fintype.card id.D * τ) ∧
+        conditionalOptimalValue κ u ev.toEvidence - Fintype.card id.D * τ ≤
+          conditionalEU κ ρ u ev.toEvidence := by
+  intro sol
+  obtain ⟨hU, hUb⟩ := utility_bound u
+  have ha := solveCondRepPlan_approx_optimal sel keep κ κ hclosed ord hloc hnorm hnonneg hloc
+    hnonneg u hu ev plan 1 1 _ one_pos le_rfl hU (exact_envelope κ) hUb hZ
+  have hm := solveCondRepPlan_mass keep κ κ hclosed ord hloc hnorm hnonneg hloc hnonneg u hu ev
+    plan 1 1 _ one_pos le_rfl hU (exact_envelope κ) hUb
+  simp only [approxGap_one, mul_zero, add_zero, sub_zero, one_mul] at ha hm
+  obtain ⟨hdet, -, hlo, hle, hv⟩ := ha
+  have hv' : sol.value = conditionalOptimalValue κ u ev.toEvidence := by
+    rw [abs_nonpos_iff, sub_eq_zero] at hv
+    exact hv
+  refine ⟨hdet, by linarith, hv', le_antisymm hm.2 hm.1, fun ρ g hρ τ hg => ?_⟩
+  have hn := solveCondRepPlan_near_optimal sel keep κ κ hclosed ord hloc hnorm hnonneg hloc
+    hnonneg u hu ev plan 1 1 _ one_pos le_rfl hU (exact_envelope κ) hUb hZ ρ g hρ τ hg
+  simp only [approxGap_one, mul_zero, add_zero, sub_zero] at hn
+  exact hn
+
+end
+end InfluenceDiagramsProofs.DVE
+```
+
+
+<!-- InfluenceDiagramsProofs/Finite/DVE/SolutionEvidence.lean -->
+
+# A computable exact run of the certificate's DVE with hard evidence
+
+```lean
+import InfluenceDiagramsProofs.Finite.DVE.SolutionRun
+import InfluenceDiagramsProofs.Finite.DVE.NearOptimalEvidence
+```
+
+Julia's `_decision_elimination` conditions on the model's hard evidence before eliminating
+anything: every chance factor and every utility potential is sliced at the observed states and
+the observed axes are dropped (`condition`), and a chance block orders only the variables some
+current factor mentions, so the observed variables are never summed and do not appear in the
+recorded `elimination_order` (`sum_out` of an absent variable is also the identity). The
+recorded solution says `conditioned_on = "evidence.hard"`: the certificate's `evidence.hard`
+rows, and nothing else, are what the run conditioned on.
+
+This module computes that run exactly over `ℚ`, as `Finite/DVE/SolutionRun.lean` does without
+evidence:
+
+* `certObserved r c` and `certObservedValue r h c` read the observed variables and states off
+  the certificate's hard rows; `qcondition O o` slices a rational valuation at `clamp O o`
+  (`rel_condition`: it is `Valuation.condition` read in `ℚ`);
+* `initCT` tabulates the sliced initial valuations; `runST` runs a plan on tables, skipping a
+  chance variable that no table mentions (`chanceStepTS`), and `scoreST`, `valueST`, `massST`
+  (Julia's evidence probability) and `keepOfST` (Julia's `sum_out` branch) are read off it;
+* `withObserved O order` puts the observed variables back into Julia's order, each just before
+  the first decision whose information set does not contain it (at the end when every one
+  does), so that `planOf` can rebuild a plan of all variables; where they go does not matter to
+  the run, which skips them.
+
+**Result.** `exactRunC_spec`: for a matching certificate with nonnegative cells and any plan, the
+real run `DVE.solveCondRepPlanWith` of `Finite/DVE/NearOptimalEvidence.lean` on the sliced data,
+with `keep := keepOfST plan`, has value `valueST`, score rows `scoreST` and final mass `massST`,
+read in `ℝ`. `certHardEvidence` packages the certificate's rows as `HardEvidence` of the compiled
+diagram: the observed set is action-free and chance-ancestral because `certificateMatches` puts
+every evidence variable before every action in `topological_order`, so the conditional problem
+of `Evidence.lean` (`conditionalEU`, `conditionalOptimalValue`) is defined for it.
+
+```lean
+set_option autoImplicit false
+
+namespace InfluenceDiagramsProofs.DVECertificate
+
+open BayesianNetworksProofs BayesianNetworksProofs.FinBayesNet FinInfluenceDiagram
+open BayesianNetworksProofs.Raw InfluenceDiagramsProofs.Records Spec
+```
+
+## Sliced rational valuations
+
+```lean
+section Condition
+
+variable {bn : FinBayesNet}
+
+/-- Julia's `condition` on a rational valuation: both potentials read at `clamp O o`, the
+observed variables dropped from the scope and from the utility variables. -/
+def qcondition (O : Finset bn.V) (o : bn.Assignment) (q : QVal bn) : QVal bn :=
+  ⟨q.scope \ O, q.uvars \ O, fun x => q.prob (clamp O o x), fun x => q.util (clamp O o x)⟩
+
+theorem rel_condition {q : QVal bn} {v : DVE.Valuation bn} (h : Rel q v) (O : Finset bn.V)
+    (o : bn.Assignment) : Rel (qcondition O o q) (DVE.Valuation.condition O o v) := by
+  refine ⟨?_, fun x => h.2.1 _, fun x => h.2.2 _⟩
+  change q.scope \ O = v.scope \ O
+  rw [h.1]
+
+theorem udep_condition {q : QVal bn} (hu : UDep q) (O : Finset bn.V) (o : bn.Assignment) :
+    UDep (qcondition O o q) := by
+  intro x y hxy
+  apply hu
+  intro w hw
+  by_cases hwO : w ∈ O
+  · simp [clamp, hwO]
+  · simp only [clamp, hwO, if_false]
+    exact hxy w (Finset.mem_sdiff.2 ⟨hw, hwO⟩)
+
+end Condition
+```
+
+## The certificate's evidence
+
+```lean
+variable (r : Diagram) (h : r.Valid) (c : Certificate)
+
+/-- The observed variables of the certificate's hard rows. -/
+def certObserved : Finset (Fin r.nv) :=
+  (c.hard.filterMap fun e => if hv : e.var < r.nv then some ⟨e.var, hv⟩ else none).toFinset
+
+/-- The observed states of the certificate's hard rows (state `0` off the observed variables). -/
+def certObservedValue : (r.compile h).Assignment := fun v =>
+  match c.hard.find? (fun e => decide (e.var = v.val)) with
+  | some e => if hk : e.stateIndex < r.stateCount v then ⟨e.stateIndex, hk⟩
+    else ⟨0, h.nonempty_states v⟩
+  | none => ⟨0, h.nonempty_states v⟩
+
+theorem mem_certObserved {v : Fin r.nv} : v ∈ certObserved r c ↔ ∃ e ∈ c.hard, e.var = v.val := by
+  unfold certObserved
+  rw [List.mem_toFinset, List.mem_filterMap]
+  constructor
+  · rintro ⟨e, he, hv⟩
+    split_ifs at hv with hlt
+    cases hv
+    exact ⟨e, he, rfl⟩
+  · rintro ⟨e, he, hev⟩
+    refine ⟨e, he, ?_⟩
+    rw [dif_pos (hev ▸ v.isLt)]
+    exact congrArg some (Fin.ext hev)
+```
+
+## The run on tables, with skipped variables
+
+```lean
+/-- **The sliced initial tables**: the mechanisms, then the utilities, each conditioned on the
+certificate's hard rows. -/
+def initCT : List (TVal r) :=
+  (List.finRange r.nm).map (fun m => tab r h
+      (qcondition (certObserved r c) (certObservedValue r h c) (chanceQ r h c m))) ++
+    (List.finRange r.nu).map (fun j => tab r h
+      (qcondition (certObserved r c) (certObservedValue r h c) (utilityQ r h c j)))
+
+/-- Julia's chance step on tables: skip a variable that no table mentions. -/
+def chanceStepTS (a : Fin r.nv) (ts : List (TVal r)) : List (TVal r) :=
+  if bucketT r a ts = [] then ts else chanceStepT r h a ts
+
+/-- **The run on tables, with skipped variables.** -/
+def runST : {R : Finset (Fin r.nv)} → DVE.Plan (r.compile h) R → List (TVal r) → List (TVal r)
+  | _, .done, ts => ts
+  | _, .chance v _ _ next, ts => runST next (chanceStepTS r h v ts)
+  | _, .decision d _ _ next, ts => runST next (decisionStepT r h (r.decisions d).action ts)
+
+/-- The representative choice of the run with skipped variables. -/
+def keepOfST : {R : Finset (Fin r.nv)} → DVE.Plan (r.compile h) R → List (TVal r) →
+    Fin r.nv → Bool
+  | _, .done, _ => fun _ => false
+  | _, .chance v _ _ next, ts =>
+    Function.update (keepOfST next (chanceStepTS r h v ts)) v
+      (decide (v ∉ (bucketQ r h v ts).uvars))
+  | _, .decision d _ _ next, ts => keepOfST next (decisionStepT r h (r.decisions d).action ts)
+
+/-- The score row the run with skipped variables maximizes for `d`. -/
+def scoreST : {R : Finset (Fin r.nv)} → DVE.Plan (r.compile h) R → List (TVal r) →
+    (d : Fin r.nd) → (r.compile h).Assignment →
+      Fin (r.stateCount (r.decisions d).action) → ℚ
+  | _, .done, _, _ => fun _ _ => 0
+  | _, .chance v _ _ next, ts, d => scoreST next (chanceStepTS r h v ts) d
+  | _, .decision d' _ _ next, ts, d =>
+    if d' = d then fun x b =>
+      (bucketQ r h (r.decisions d).action ts).util
+        (Function.update x (r.decisions d).action b)
+    else scoreST next (decisionStepT r h (r.decisions d').action ts) d
+
+/-- The value of the run with skipped variables. -/
+def valueST {R : Finset (Fin r.nv)} (plan : DVE.Plan (r.compile h) R) (ts : List (TVal r)) : ℚ :=
+  (qcollect ((runST r h plan ts).map (view r h))).util (zeroAssignment r h)
+
+/-- The final mass of the run with skipped variables: Julia's `evidence_probability`. -/
+def massST {R : Finset (Fin r.nv)} (plan : DVE.Plan (r.compile h) R) (ts : List (TVal r)) : ℚ :=
+  (qcollect ((runST r h plan ts).map (view r h))).prob (zeroAssignment r h)
+
+/-- The bucket of `d`'s action when the run with skipped variables eliminates it. -/
+def bucketAtS : {R : Finset (Fin r.nv)} → DVE.Plan (r.compile h) R → List (TVal r) → Fin r.nd →
+    Option (List (TVal r))
+  | _, .done, _, _ => none
+  | _, .chance v _ _ next, ts, d => bucketAtS next (chanceStepTS r h v ts) d
+  | _, .decision d' _ _ next, ts, d =>
+    if d' = d then some (bucketT r (r.decisions d).action ts)
+    else bucketAtS next (decisionStepT r h (r.decisions d').action ts) d
+
+theorem scoreST_of_bucketAtS {R : Finset (r.compile h).V} (plan : DVE.Plan (r.compile h) R)
+    (ts : List (TVal r)) (d : Fin r.nd) (B : List (TVal r))
+    (hB : bucketAtS r h plan ts d = some B) (x : (r.compile h).Assignment)
+    (b : Fin (r.stateCount (r.decisions d).action)) :
+    scoreST r h plan ts d x b =
+      (qcollect (B.map (view r h))).util (Function.update x (r.decisions d).action b) := by
+  induction plan generalizing ts with
+  | done => simp [bucketAtS] at hB
+  | @chance R v hv hc next ih => exact ih _ hB
+  | @decision R d' hd hi next ih =>
+    simp only [bucketAtS] at hB
+    simp only [scoreST]
+    by_cases hdd : d' = d
+    · subst hdd
+      rw [if_pos rfl] at hB ⊢
+      cases hB
+      rfl
+    · rw [if_neg hdd] at hB ⊢
+      exact ih _ hB
+```
+
+## Putting the observed variables back into the order
+
+```lean
+/-- Julia's recorded order omits the observed variables. Each one is put just before the first
+decision of the order whose information set does not contain it, or at the end. -/
+def withObserved : List (Fin r.nv) → List (Fin r.nv) → List (Fin r.nv)
+  | pending, [] => pending
+  | pending, v :: vs =>
+    match (List.finRange r.nd).find? (fun d => decide ((r.decisions d).action = v)) with
+    | some d => pending.filter (fun o => decide (o ∉ (r.compile h).info d)) ++
+        v :: withObserved (pending.filter fun o => decide (o ∈ (r.compile h).info d)) vs
+    | none => v :: withObserved pending vs
+```
+
+## Simulation
+
+```lean
+theorem Sim.bucket_nil_iff {ts : List (TVal r)}
+    {vs : List (DVE.Valuation (r.compile h).toFinBayesNet)} (hs : Sim r h ts vs) (a : Fin r.nv) :
+    bucketT r a ts = [] ↔ DVE.Valuation.bucket a vs = [] := by
+  obtain ⟨⟨ws, hperm, hf⟩, -⟩ := hs
+  have hfB : List.Forall₂ (fun t v => Rel (view r h t) v) (bucketT r a ts)
+      (DVE.Valuation.bucket a ws) :=
+    forall₂_filter hf fun t v hr => by
+      change decide (a ∈ (view r h t).scope) = _
+      rw [hr.1]
+  have h1 := hfB.length_eq
+  have h2 : (DVE.Valuation.bucket a ws).length = (DVE.Valuation.bucket a vs).length :=
+    (hperm.filter _).length_eq
+  rw [← List.length_eq_zero_iff, ← List.length_eq_zero_iff (l := DVE.Valuation.bucket a vs), h1, h2]
+
+theorem Sim.chanceSkip {R : Finset (r.compile h).V} {ts : List (TVal r)}
+    {s : DVE.State (r.compile h) R} (hs : Sim r h ts s.valuations) (a : Fin r.nv)
+    (keep : Fin r.nv → Bool) (hk : keep a = decide (a ∉ (bucketQ r h a ts).uvars)) :
+    Sim r h (chanceStepTS r h a ts) (s.chanceRepSkip keep a).valuations := by
+  by_cases hnil : bucketT r a ts = []
+  · have hnil' := (hs.bucket_nil_iff r h a).1 hnil
+    rw [DVE.State.chanceRepSkip_of_nil keep a s hnil']
+    unfold chanceStepTS
+    rw [if_pos hnil]
+    exact hs
+  · have hne : DVE.Valuation.bucket a s.valuations ≠ [] :=
+      fun h' => hnil ((hs.bucket_nil_iff r h a).2 h')
+    rw [DVE.State.chanceRepSkip_of_ne keep a s hne]
+    unfold chanceStepTS
+    rw [if_neg hnil]
+    exact hs.chance r h a (keep a) hk
+
+/-- **The simulation theorem with skipped variables.** -/
+theorem sim_runRepSkip {R : Finset (r.compile h).V} (plan : DVE.Plan (r.compile h) R)
+    (s : DVE.State (r.compile h) R) (ts : List (TVal r)) (keep : Fin r.nv → Bool)
+    (hs : Sim r h ts s.valuations) (hk : ∀ v ∈ R, keep v = keepOfST r h plan ts v) :
+    Sim r h (runST r h plan ts) (DVE.runRepSkipState keep plan s).valuations ∧
+      ∀ (d : Fin r.nd) x b, DVE.decisionScoreRepSkip keep plan s d x b =
+        (scoreST r h plan ts d x b : ℝ) := by
+  induction plan generalizing ts with
+  | done => exact ⟨hs, fun _ _ _ => by simp [DVE.decisionScoreRepSkip, scoreST]⟩
+  | @chance R v hv hc next ih =>
+    have hkv : keep v = decide (v ∉ (bucketQ r h v ts).uvars) := by
+      rw [hk v hv]
+      simp only [keepOfST, Function.update_self]
+    have hs' := hs.chanceSkip r h v keep hkv
+    have hk' : ∀ w ∈ R.erase v, keep w = keepOfST r h next (chanceStepTS r h v ts) w := by
+      intro w hw
+      rw [hk w (Finset.mem_of_mem_erase hw)]
+      simp only [keepOfST]
+      exact Function.update_of_ne (Finset.ne_of_mem_erase hw) _ _
+    exact ih (s.chanceRepSkip keep v) (chanceStepTS r h v ts) hs' hk'
+  | @decision R d' hd hi next ih =>
+    have hs' := hs.decision r h (r.decisions d').action
+    have hk' : ∀ w ∈ R.erase ((r.compile h).action d'),
+        keep w = keepOfST r h next (decisionStepT r h (r.decisions d').action ts) w := by
+      intro w hw
+      rw [hk w (Finset.mem_of_mem_erase hw)]
+      rfl
+    obtain ⟨hrun, hscore⟩ := ih (s.decision d') (decisionStepT r h (r.decisions d').action ts)
+      hs' hk'
+    refine ⟨hrun, fun d x b => ?_⟩
+    simp only [DVE.decisionScoreRepSkip, scoreST]
+    by_cases hdd : d' = d
+    · subst hdd
+      rw [if_pos rfl, if_pos rfl]
+      exact (hs.bucket r h _).1.2.2 _
+    · rw [if_neg hdd, if_neg hdd]
+      exact hscore d x b
+
+theorem sim_initialC (hm : Matches r c) (hn : Nonneg c) :
+    Sim r h (initCT r h c) (DVE.initialConditioned (certKernel r h c) (certKernel_local hm h)
+      (certKernel_nonneg hn h) (certUtility r h c) (certUtility_local hm h) (certObserved r c)
+      (certObservedValue r h c)).valuations := by
+  set O := certObserved r c
+  set o := certObservedValue r h c
+  have hrc : ∀ m, Rel (qcondition O o (chanceQ r h c m))
+      (DVE.Valuation.condition O o (DVE.chanceValuation (certKernel r h c) (certKernel_local hm h)
+        (certKernel_nonneg hn h) m)) := fun m =>
+    rel_condition ⟨rfl, fun x => certKernel_eq_cast r h c m x _,
+      fun x => by simp [chanceQ, DVE.chanceValuation]⟩ O o
+  have hru : ∀ j, Rel (qcondition O o (utilityQ r h c j))
+      (DVE.Valuation.condition O o (DVE.utilityValuation (certUtility r h c)
+        (certUtility_local hm h) j)) := fun j =>
+    rel_condition ⟨rfl, fun x => by simp [utilityQ, DVE.utilityValuation],
+      fun x => certUtility_eq_cast r h c j x⟩ O o
+  have hud : ∀ j, UDep (qcondition O o (utilityQ r h c j)) := by
+    intro j
+    apply udep_condition
+    have hr : Rel (utilityQ r h c j) (DVE.utilityValuation (certUtility r h c)
+        (certUtility_local hm h) j) :=
+      ⟨rfl, fun x => by simp [utilityQ, DVE.utilityValuation],
+        fun x => certUtility_eq_cast r h c j x⟩
+    exact hr.depUtil
+  refine ⟨⟨((List.finRange r.nm).map (DVE.chanceValuation (certKernel r h c)
+      (certKernel_local hm h) (certKernel_nonneg hn h)) ++
+    (List.finRange r.nu).map (DVE.utilityValuation (certUtility r h c)
+      (certUtility_local hm h))).map (DVE.Valuation.condition O o), ?_, ?_⟩, ?_⟩
+  · exact (List.Perm.append ((finRange_perm_toList r.nm).map _)
+      ((finRange_perm_toList r.nu).map _)).map _
+  · rw [List.map_append]
+    refine List.rel_append ?_ ?_
+    · rw [List.map_map, List.forall₂_map_left_iff, List.forall₂_map_right_iff, List.forall₂_same]
+      intro m _
+      rw [view_tab r h _ (hrc m).depProb (hrc m).depUtil]
+      exact hrc m
+    · rw [List.map_map, List.forall₂_map_left_iff, List.forall₂_map_right_iff, List.forall₂_same]
+      intro j _
+      rw [view_tab r h _ (hru j).depProb (hru j).depUtil]
+      exact hru j
+  · intro t ht
+    rcases List.mem_append.1 ht with ht | ht
+    · obtain ⟨m, -, rfl⟩ := List.mem_map.1 ht
+      rw [view_tab r h _ (hrc m).depProb (hrc m).depUtil]
+      exact udep_condition (q := chanceQ r h c m) (fun _ _ _ => rfl) O o
+    · obtain ⟨j, -, rfl⟩ := List.mem_map.1 ht
+      rw [view_tab r h _ (hru j).depProb (hru j).depUtil]
+      exact hud j
+
+/-- **The exact run with hard evidence is computed.** For a certificate that matches the checked
+diagram and has nonnegative cells, and for any plan, Julia's evidence run on the sliced data with
+`keep := keepOfST plan` (Julia's `sum_out` branch) and any selector has the value `valueST`, the
+score rows `scoreST` and the final mass `massST`, read in `ℝ`. -/
+theorem exactRunC_spec (hm : Matches r c) (hn : Nonneg c) (sel : DVE.Selector (r.compile h))
+    (plan : DVE.Plan (r.compile h) Finset.univ) :
+    (DVE.solveCondRepPlanWith sel (keepOfST r h plan (initCT r h c)) (certKernel r h c)
+        (certKernel_local hm h) (certKernel_nonneg hn h) (certUtility r h c)
+        (certUtility_local hm h) (certObserved r c) (certObservedValue r h c) plan).value =
+        (valueST r h plan (initCT r h c) : ℝ) ∧
+      (∀ (d : Fin r.nd) x b, DVE.solveCondRepPlanScore (keepOfST r h plan (initCT r h c))
+          (certKernel r h c) (certKernel_local hm h) (certKernel_nonneg hn h)
+          (certUtility r h c) (certUtility_local hm h) (certObserved r c)
+          (certObservedValue r h c) plan d x b =
+        (scoreST r h plan (initCT r h c) d x b : ℝ)) ∧
+      DVE.solveCondRepPlanMass (keepOfST r h plan (initCT r h c)) (certKernel r h c)
+          (certKernel_local hm h) (certKernel_nonneg hn h) (certUtility r h c)
+          (certUtility_local hm h) (certObserved r c) (certObservedValue r h c) plan =
+        (massST r h plan (initCT r h c) : ℝ) := by
+  obtain ⟨hsim, hscore⟩ := sim_runRepSkip r h plan _ (initCT r h c)
+    (keepOfST r h plan (initCT r h c)) (sim_initialC r h c hm hn) (fun _ _ => rfl)
+  obtain ⟨⟨ws, hperm, hf⟩, -⟩ := hsim
+  have hrel := rel_collect (List.forall₂_map_left_iff.2 hf)
+  rw [collect_perm hperm] at hrel
+  have hempty : ∀ w ∈ (DVE.Valuation.collect (DVE.runRepSkipState
+      (keepOfST r h plan (initCT r h c)) plan (DVE.initialConditioned (certKernel r h c)
+        (certKernel_local hm h) (certKernel_nonneg hn h) (certUtility r h c)
+        (certUtility_local hm h) (certObserved r c) (certObservedValue r h c))).valuations).scope,
+      DVE.baseAssignment (r.compile h) w = zeroAssignment r h w := by
+    intro w hw
+    have := (DVE.runRepSkipState (keepOfST r h plan (initCT r h c)) plan
+      (DVE.initialConditioned (certKernel r h c) (certKernel_local hm h)
+        (certKernel_nonneg hn h) (certUtility r h c) (certUtility_local hm h) (certObserved r c)
+        (certObservedValue r h c))).supported hw
+    simp at this
+  refine ⟨?_, hscore, ?_⟩
+  · rw [DVE.solveCondRepPlanWith_value]
+    unfold valueST
+    rw [← hrel.2.2]
+    exact DVE.Valuation.util_local _ _ _ hempty
+  · unfold DVE.solveCondRepPlanMass massST
+    rw [← hrel.2.1]
+    exact DVE.Valuation.prob_local _ _ _ hempty
+```
+
+## The certificate's hard evidence
+
+```lean
+/-- **The certificate's hard rows as hard evidence of the compiled diagram.** The ancestral set
+is every variable before every action in the certificate's `topological_order`: closed under
+causal parents (`Arc`), free of actions, and containing every evidence variable, which
+`certificateMatches` puts before every action (`EvidenceArc`). -/
+def certHardEvidence (hm : Matches r c) (hf : r.FullValid) :
+    DVE.HardEvidence (r.compile hf.valid) where
+  ancestors := Finset.univ.filter fun w => ∀ d : Fin r.nd,
+    (certOrder hm hf).order.idxOf w < (certOrder hm hf).order.idxOf ((r.compile hf.valid).action d)
+  observed := certObserved r c
+  sub := by
+    intro v hv
+    obtain ⟨e, he, hev⟩ := (mem_certObserved r c).1 hv
+    refine Finset.mem_filter.2 ⟨Finset.mem_univ _, fun d => ?_⟩
+    have hne : v ≠ (r.compile hf.valid).action d := fun hvd =>
+      (hm.evidence_range e he).2 d (by rw [hev, hvd])
+    apply DVE.idxOf_lt_of_no_reverse (certOrder hm hf).order ((certOrder hm hf).complete v)
+      ((certOrder hm hf).complete _) hne
+    refine (List.pairwise_pmap _).2 (hm.topo_order.imp fun {a b} hab ha hb hx hy => ?_)
+    apply hab.2
+    exact ⟨⟨e, he, by rw [hev]; exact (congrArg Fin.val hy).symm⟩, d,
+      (congrArg Fin.val hx).symm⟩
+  closed := by
+    intro m hmt p hp
+    refine Finset.mem_filter.2 ⟨Finset.mem_univ _, fun d => ?_⟩
+    exact lt_trans ((DVE.RankedOrder.ofOrder (certOrder hm hf)).parents_lt m p hp)
+      ((Finset.mem_filter.1 hmt).2 d)
+  no_action := by
+    intro d hd
+    exact lt_irrefl _ ((Finset.mem_filter.1 hd).2 d)
+  value := certObservedValue r hf.valid c
+
+end InfluenceDiagramsProofs.DVECertificate
+```
+
+
+<!-- InfluenceDiagramsProofs/Finite/DVE/SolutionCheckEvidence.lean -->
+
+# Checking Julia's recorded solution of a run with hard evidence
+
+```lean
+import InfluenceDiagramsProofs.Finite.DVE.SolutionCheck
+import InfluenceDiagramsProofs.Finite.DVE.SolutionEvidence
+```
+
+`Finite/DVE/SolutionCheck.lean` compares Julia's recorded solution with the exact run when the
+certificate has no evidence row. This module drops that restriction: the comparison is with the
+exact run of `Finite/DVE/SolutionEvidence.lean` on the certificate's data sliced at its hard
+rows, which is what Julia's run conditions on (`conditioned_on = "evidence.hard"`).
+
+* `solutionPlanE`: Julia's recorded order with the observed variables put back
+  (`withObserved`), as a plan of all variables (`planOf`);
+* `solutionMatchesE` (decidable, exact runs): every recorded action is the least-position
+  maximizer of the exact sliced run's score row, every recorded score that row's maximum, the
+  recorded value the run's value, and the run's final mass (Julia's evidence probability,
+  `massST`) is positive;
+* `solutionWithinE τ τv` (decidable, binary64 runs): every recorded action within `τ` of its
+  exact row maximum, the value within `τv`, the final mass positive.
+
+Without evidence rows these are the run of `SolutionCheck.lean` up to the positivity check (the
+sliced run skips no variable then).
+
+**Theorems**, writing `ev = certHardEvidence` for the certificate's hard rows as hard evidence
+of the compiled diagram, and the conditional problem of `Evidence.lean` for it
+(`conditionalEU`, `conditionalOptimalValue`, the evidence mass `Z`):
+
+* `recorded_solution_optimal_evidence`: under `solutionMatchesE`, Julia's recorded strategy and
+  value are the exact sliced run's, and on every information row the recorded action is the
+  least-position maximizer of the run's own score; if every CPT row sums to exactly one, the
+  evidence mass is positive and the recorded strategy (deterministic) and value are
+  conditionally optimal;
+* `recorded_solution_approx_optimal_evidence`: under `solutionMatchesE` and
+  `certificateEpsilon c < 1`, the recorded strategy is within `2 e` of the conditional optimum of
+  the row-normalised model and the recorded value within `e`;
+* `recorded_binary64_near_optimal_evidence`: under `solutionWithinE τ τv` and
+  `certificateEpsilon c < 1`, every recorded action is within `τ` of its exact row maximum, the
+  recorded value within `τv + e` of the conditional optimum of the row-normalised model, and the
+  recorded strategy within `2 e + nd * τ` of every nonnegative strategy and of that optimum, with
+  no agreement of actions assumed; `recorded_binary64_near_optimal_evidence_exact`: on an exactly
+  normalised certificate, within `nd * τ` and `τv` of the certificate model's conditional optimum.
+
+On rows that contradict the evidence the recorded table is Julia's sliced table (constant along
+the observed coordinates); the bounds hold for it as recorded. Trusted: `Lean.Json.parse`,
+Julia's exporter and its run, which is compared, not proved.
+
+```lean
+set_option autoImplicit false
+
+namespace InfluenceDiagramsProofs.DVECertificate
+
+open BayesianNetworksProofs BayesianNetworksProofs.FinBayesNet FinInfluenceDiagram
+open BayesianNetworksProofs.Raw InfluenceDiagramsProofs.Records Spec
+
+variable (r : Diagram) (h : r.Valid) (c : Certificate) (s : Solution)
+```
+
+## The comparison
+
+```lean
+/-- Every entry of every decision's policy satisfies `P` against the score row of the exact run
+with evidence. -/
+def AllEntriesE {R : Finset (Fin r.nv)} (plan : DVE.Plan (r.compile h) R)
+    (P : (d : Fin r.nd) → PolicyRecord → PolicyEntry →
+      (Fin (r.stateCount (r.decisions d).action) → ℚ) → Prop) : Prop :=
+  ∀ d : Fin r.nd, OptHolds (fun p => OptHolds
+    (fun B => ∀ e ∈ p.entries, P d p e (rowScore r h B d p e))
+    (bucketAtS r h plan (initCT r h c) d)) s.policies[d.val]?
+
+instance {R : Finset (Fin r.nv)} (plan : DVE.Plan (r.compile h) R)
+    (P : (d : Fin r.nd) → PolicyRecord → PolicyEntry →
+      (Fin (r.stateCount (r.decisions d).action) → ℚ) → Prop)
+    [∀ d p e f, Decidable (P d p e f)] : Decidable (AllEntriesE r h c s plan P) := by
+  unfold AllEntriesE; infer_instance
+
+/-- The plan of Julia's recorded order, with the observed variables put back. -/
+def solutionPlanE : Option (DVE.Plan (r.compile h) Finset.univ) :=
+  (toFinList r s.eliminationOrder).bind fun o =>
+    planOf r h (withObserved r h (finsetList (certObserved r c)) o) Finset.univ
+
+/-- Every recorded action is the exact sliced run's. -/
+def ActionsAgreeWithE (plan : DVE.Plan (r.compile h) Finset.univ) : Prop :=
+  AllEntriesE r h c s plan fun _ p e f => EntryAction f (entryIndex c p e)
+
+/-- **The exact comparison with evidence**, on a plan. -/
+def SolutionMatchesWithE (plan : DVE.Plan (r.compile h) Finset.univ) : Prop :=
+  ActionsAgreeWithE r h c s plan ∧ s.arithmetic = .exactRational ∧ DataConsistent c s ∧
+    AllEntriesE r h c s plan (fun _ p e f => EntryScore f (entryIndex c p e) e.score.toRat) ∧
+    s.value.toRat = valueST r h plan (initCT r h c) ∧ 0 < massST r h plan (initCT r h c)
+
+/-- **The binary64 comparison with evidence**, on a plan, with tolerances `τ` and `τv`. -/
+def SolutionWithinWithE (τ τv : ℚ) (plan : DVE.Plan (r.compile h) Finset.univ) : Prop :=
+  AllEntriesE r h c s plan (fun _ p e f => EntryWithin f (entryIndex c p e) τ) ∧
+    |s.value.toRat - valueST r h plan (initCT r h c)| ≤ τv ∧ 0 < massST r h plan (initCT r h c)
+
+instance (plan : DVE.Plan (r.compile h) Finset.univ) :
+    Decidable (ActionsAgreeWithE r h c s plan) := by
+  unfold ActionsAgreeWithE; infer_instance
+
+instance (plan : DVE.Plan (r.compile h) Finset.univ) :
+    Decidable (SolutionMatchesWithE r h c s plan) := by
+  unfold SolutionMatchesWithE; infer_instance
+
+instance (τ τv : ℚ) (plan : DVE.Plan (r.compile h) Finset.univ) :
+    Decidable (SolutionWithinWithE r h c s τ τv plan) := by
+  unfold SolutionWithinWithE; infer_instance
+
+/-- **The checker for exact runs with evidence** (decidable). -/
+def solutionMatchesE : Bool :=
+  match solutionPlanE r h c s with
+  | some plan => decide (SolutionMatchesWithE r h c s plan)
+  | none => false
+
+/-- Every recorded action is the exact sliced run's. -/
+def actionsAgreeE : Bool :=
+  match solutionPlanE r h c s with
+  | some plan => decide (ActionsAgreeWithE r h c s plan)
+  | none => false
+
+/-- **The checker for binary64 runs with evidence** (decidable), with tolerances `τ` and `τv`. -/
+def solutionWithinE (τ τv : ℚ) : Bool :=
+  match solutionPlanE r h c s with
+  | some plan => decide (SolutionWithinWithE r h c s τ τv plan)
+  | none => false
+
+theorem solutionMatchesE_spec (hsm : solutionMatchesE r h c s = true) :
+    ∃ plan, solutionPlanE r h c s = some plan ∧ SolutionMatchesWithE r h c s plan := by
+  unfold solutionMatchesE at hsm
+  split at hsm
+  · rename_i plan hp
+    exact ⟨plan, hp, of_decide_eq_true hsm⟩
+  · cases hsm
+
+theorem actionsAgreeE_spec (hsm : actionsAgreeE r h c s = true) :
+    ∃ plan, solutionPlanE r h c s = some plan ∧ ActionsAgreeWithE r h c s plan := by
+  unfold actionsAgreeE at hsm
+  split at hsm
+  · rename_i plan hp
+    exact ⟨plan, hp, of_decide_eq_true hsm⟩
+  · cases hsm
+
+theorem solutionWithinE_spec {τ τv : ℚ} (hsm : solutionWithinE r h c s τ τv = true) :
+    ∃ plan, solutionPlanE r h c s = some plan ∧ SolutionWithinWithE r h c s τ τv plan := by
+  unfold solutionWithinE at hsm
+  split at hsm
+  · rename_i plan hp
+    exact ⟨plan, hp, of_decide_eq_true hsm⟩
+  · cases hsm
+```
+
+## The run's tables at the recorded entries
+
+```lean
+section Run
+
+variable {r : Diagram} (hf : r.FullValid) {c : Certificate} (s : Solution)
+
+/-- The exact sliced run on a plan. -/
+noncomputable abbrev runOfE (hm : Matches r c) (hn : Nonneg c)
+    (plan : DVE.Plan (r.compile hf.valid) Finset.univ) :=
+  DVE.solveCondRepPlanWith (r.selector hf.valid) (keepOfST r hf.valid plan (initCT r hf.valid c))
+    (certKernel r hf.valid c) (certKernel_local hm hf.valid) (certKernel_nonneg hn hf.valid)
+    (certUtility r hf.valid c) (certUtility_local hm hf.valid) (certObserved r c)
+    (certObservedValue r hf.valid c) plan
+
+/-- The exact sliced run's score rows on a plan. -/
+noncomputable abbrev scoreOfE (hm : Matches r c) (hn : Nonneg c)
+    (plan : DVE.Plan (r.compile hf.valid) Finset.univ) :=
+  DVE.solveCondRepPlanScore (keepOfST r hf.valid plan (initCT r hf.valid c))
+    (certKernel r hf.valid c) (certKernel_local hm hf.valid) (certKernel_nonneg hn hf.valid)
+    (certUtility r hf.valid c) (certUtility_local hm hf.valid) (certObserved r c)
+    (certObservedValue r hf.valid c) plan
+
+/-- **The first-label table of the sliced run**, on every information row. -/
+theorem tablesE (hm : Matches r c) (hn : Nonneg c)
+    (plan : DVE.Plan (r.compile hf.valid) Finset.univ) (d : (r.compile hf.valid).D)
+    (x : (r.compile hf.valid).Assignment) :
+    ∃ t, (∀ a, ((runOfE hf hm hn plan).strategy d).kernel x a = if a = t then 1 else 0) ∧
+      (∀ b, scoreOfE hf hm hn plan d x b ≤ scoreOfE hf hm hn plan d x t) ∧
+      ∀ b, (∀ c', scoreOfE hf hm hn plan d x c' ≤ scoreOfE hf hm hn plan d x b) →
+        r.statePosition hf.valid _ t ≤ r.statePosition hf.valid _ b := by
+  have hinj := ((r.compile hf.valid).closed_iff.1 hf.closed).2.1
+  refine ⟨_, fun a => @DVE.runRepSkipWith_kernel (r.compile hf.valid) (r.selector hf.valid)
+    (keepOfST r hf.valid plan (initCT r hf.valid c)) hinj _ _ _ _ d (Finset.mem_univ _) x a, ?_⟩
+  exact @firstArgmax_least_position _ ((r.compile hf.valid).fintypeS _)
+    ((r.compile hf.valid).nonemptyS _) _ (r.statePosition_injective hf.valid _) _
+
+/-- **At every information row, the recorded entry and the exact sliced score row.** -/
+theorem entry_of_rowE (hm : Matches r c) (hn : Nonneg c) (hs : s.WellFormed c)
+    (plan : DVE.Plan (r.compile hf.valid) Finset.univ) (d : Fin r.nd) (p : PolicyRecord)
+    (hp : s.policies[d.val]? = some p) (B : List (TVal r))
+    (hB : bucketAtS r hf.valid plan (initCT r hf.valid c) d = some B)
+    (x : (r.compile hf.valid).Assignment) :
+    ∃ e ∈ p.entries, recordedIndex r hf.valid c s d (infoProject r hf.valid d x) =
+        some (entryIndex c p e) ∧
+      ∀ b, scoreOfE hf hm hn plan d x b = (rowScore r hf.valid B d p e b : ℝ) := by
+  have hd : d.val < s.policies.length := by
+    rw [hs.length, hm.decisions_length]
+    exact d.isLt
+  have hpk : s.policies[d.val] = p := by
+    rw [List.getElem?_eq_getElem hd, Option.some.injEq] at hp
+    exact hp
+  have hwf := hs.policies d.val hd
+  rw [hpk] at hwf
+  set x' := infoProject r hf.valid d x
+  have hmem : coordsOf r hf.valid x' p.axes ∈ p.entries.map PolicyEntry.coords := by
+    rw [hwf.coverage, mem_lexCoords, coordsOf, List.forall₂_map_left_iff,
+      List.forall₂_map_right_iff, List.forall₂_same]
+    intro v hv
+    have hlt : v < r.nv := by
+      have := hwf.axes.1 v hv
+      rwa [hm.vars_length] at this
+    rw [dif_pos hlt]
+    exact certDim_lt r hf.valid hm ⟨v, hlt⟩ x'
+  obtain ⟨e0, he0, he0c⟩ := List.mem_map.1 hmem
+  have hfind :
+      (p.entries.find? fun e => decide (e.coords = coordsOf r hf.valid x' p.axes)).isSome := by
+    rw [List.find?_isSome]
+    exact ⟨e0, he0, by simpa using he0c⟩
+  obtain ⟨e, he⟩ := Option.isSome_iff_exists.1 hfind
+  have hemem : e ∈ p.entries := List.mem_of_find?_eq_some he
+  have hec : e.coords = coordsOf r hf.valid x' p.axes := by simpa using List.find?_some he
+  refine ⟨e, hemem, ?_, fun b => ?_⟩
+  · unfold recordedIndex
+    rw [hp, Option.bind_some, he, Option.map_some]
+  · have hinj := ((r.compile hf.valid).closed_iff.1 hf.closed).2.1
+    have hloc := DVE.decisionScoreRepSkip_local (keepOfST r hf.valid plan (initCT r hf.valid c))
+      hinj plan
+      (DVE.initialConditioned (certKernel r hf.valid c) (certKernel_local hm hf.valid)
+        (certKernel_nonneg hn hf.valid) (certUtility r hf.valid c)
+        (certUtility_local hm hf.valid) (certObserved r c) (certObservedValue r hf.valid c))
+      d (Finset.mem_univ _)
+    have hax : infoVars c d.val = some p.axes := hwf.axes.2
+    have hxy : DVE.decisionScoreRepSkip (keepOfST r hf.valid plan (initCT r hf.valid c)) plan
+        (DVE.initialConditioned (certKernel r hf.valid c) (certKernel_local hm hf.valid)
+          (certKernel_nonneg hn hf.valid) (certUtility r hf.valid c)
+          (certUtility_local hm hf.valid) (certObserved r c) (certObservedValue r hf.valid c))
+          d x =
+        DVE.decisionScoreRepSkip (keepOfST r hf.valid plan (initCT r hf.valid c)) plan
+        (DVE.initialConditioned (certKernel r hf.valid c) (certKernel_local hm hf.valid)
+          (certKernel_nonneg hn hf.valid) (certUtility r hf.valid c)
+          (certUtility_local hm hf.valid) (certObserved r c) (certObservedValue r hf.valid c))
+          d (entryAssignment r hf.valid p.axes e.coords) := by
+      apply hloc
+      intro v hv
+      rw [hec, entryAssignment_coordsOf r hf.valid p.axes x' v (info_mem_axes hf hm d hax v hv)]
+      change x v = if v ∈ (r.compile hf.valid).info d then x v else _
+      rw [if_pos hv]
+    change DVE.decisionScoreRepSkip _ plan _ d x b = _
+    rw [hxy]
+    have := (exactRunC_spec r hf.valid c hm hn (r.selector hf.valid) plan).2.1 d
+      (entryAssignment r hf.valid p.axes e.coords) b
+    unfold DVE.solveCondRepPlanScore at this
+    rw [this, scoreST_of_bucketAtS r hf.valid plan _ d B hB]
+    rfl
+
+/-- **The recorded strategy is the exact sliced run's**, when the recorded actions agree. -/
+theorem recorded_eq_runE (hm : Matches r c) (hn : Nonneg c) (hs : s.WellFormed c)
+    (plan : DVE.Plan (r.compile hf.valid) Finset.univ)
+    (hagree : ActionsAgreeWithE r hf.valid c s plan) :
+    recordedStrategy r hf.valid c s = (runOfE hf hm hn plan).strategy := by
+  funext d
+  apply policy_ext
+  funext x a
+  obtain ⟨t, hkt, hmax, hleast⟩ := tablesE hf hm hn plan d x
+  have hag := hagree d
+  cases hp : s.policies[d.val]? with
+  | none => rw [hp] at hag; exact hag.elim
+  | some p =>
+    rw [hp] at hag
+    change OptHolds _ _ at hag
+    cases hB : bucketAtS r hf.valid plan (initCT r hf.valid c) d with
+    | none => rw [hB] at hag; exact hag.elim
+    | some B =>
+      rw [hB] at hag
+      change ∀ e ∈ p.entries, _ at hag
+      obtain ⟨e, he, hidx, hscore⟩ := entry_of_rowE hf s hm hn hs plan d p hp B hB x
+      obtain ⟨hi, hfmax, hfleast⟩ := hag e he
+      have hrec : recordedAction r hf.valid c s d x = ⟨entryIndex c p e, hi⟩ := by
+        unfold recordedAction
+        rw [hidx]
+        simp only [dif_pos hi]
+      have hti : t = ⟨entryIndex c p e, hi⟩ := by
+        have h1 : t.val ≤ entryIndex c p e := by
+          have := hleast ⟨entryIndex c p e, hi⟩ fun b => by
+            rw [hscore, hscore]
+            exact_mod_cast hfmax b
+          rw [Records.Diagram.statePosition_eq, Records.Diagram.statePosition_eq] at this
+          exact this
+        have h2 : entryIndex c p e ≤ t.val := hfleast t fun b => by
+          have := hmax b
+          rw [hscore, hscore] at this
+          exact_mod_cast this
+        exact Fin.ext (le_antisymm h1 h2)
+      change (if a = recordedAction r hf.valid c s d x then (1 : ℝ) else 0) = _
+      rw [hkt a, hrec, hti]
+
+/-- The recorded action is within `τ` of the maximum of the exact sliced run's score row. -/
+theorem recorded_withinE (hm : Matches r c) (hn : Nonneg c) (hs : s.WellFormed c) {τ : ℚ}
+    (plan : DVE.Plan (r.compile hf.valid) Finset.univ)
+    (hw : AllEntriesE r hf.valid c s plan (fun _ p e f => EntryWithin f (entryIndex c p e) τ))
+    (d : Fin r.nd) (x : (r.compile hf.valid).Assignment) (b) :
+    scoreOfE hf hm hn plan d x b ≤
+      scoreOfE hf hm hn plan d x (recordedAction r hf.valid c s d x) + τ := by
+  have hag := hw d
+  cases hp : s.policies[d.val]? with
+  | none => rw [hp] at hag; exact hag.elim
+  | some p =>
+    rw [hp] at hag
+    change OptHolds _ _ at hag
+    cases hB : bucketAtS r hf.valid plan (initCT r hf.valid c) d with
+    | none => rw [hB] at hag; exact hag.elim
+    | some B =>
+      rw [hB] at hag
+      change ∀ e ∈ p.entries, _ at hag
+      obtain ⟨e, he, hidx, hscore⟩ := entry_of_rowE hf s hm hn hs plan d p hp B hB x
+      obtain ⟨hi, hfw⟩ := hag e he
+      have hrec : recordedAction r hf.valid c s d x = ⟨entryIndex c p e, hi⟩ := by
+        unfold recordedAction
+        rw [hidx]
+        simp only [dif_pos hi]
+      rw [hrec, hscore, hscore]
+      exact_mod_cast hfw b
+
+/-- The evidence mass of the row-normalised model is positive when the exact sliced run's final
+mass is. -/
+theorem evidenceMass_pos (hm : certificateMatches r hf c) (hn : Nonneg c)
+    (hε : certificateEpsilon c < 1) (plan : DVE.Plan (r.compile hf.valid) Finset.univ)
+    (hpos : 0 < massST r hf.valid plan (initCT r hf.valid c)) :
+    0 < DVE.evidenceMass (certNormKernel r hf.valid c) DVE.defaultStrategy
+      (certHardEvidence r c hm hf).toEvidence := by
+  have hε1 : (certificateEpsilon c : ℝ) < 1 := by exact_mod_cast hε
+  have hε0 : (0 : ℝ) ≤ certificateEpsilon c := by exact_mod_cast certificateEpsilon_nonneg c
+  have hL : 0 < (1 - (certificateEpsilon c : ℝ)) ^ certChanceCount c := pow_pos (by linarith) _
+  have hLH : (1 - (certificateEpsilon c : ℝ)) ^ certChanceCount c ≤
+      (1 + (certificateEpsilon c : ℝ)) ^ certChanceCount c :=
+    pow_le_pow_left₀ (by linarith) (by linarith) _
+  have hU : (0 : ℝ) ≤ certUmax c := by exact_mod_cast certUmax_nonneg c
+  have hmass := DVE.solveCondRepPlan_mass (keepOfST r hf.valid plan (initCT r hf.valid c))
+    (certNormKernel r hf.valid c) (certKernel r hf.valid c) hf.closed hf.idOrder
+    (certNormKernel_local hm hf.valid) (certNormKernel_normalised hm hε hf.valid)
+    (certNormKernel_nonneg hn hf.valid) (certKernel_local hm hf.valid)
+    (certKernel_nonneg hn hf.valid) (certUtility r hf.valid c) (certUtility_local hm hf.valid)
+    (certHardEvidence r c hm hf) plan _ _ _ hL hLH hU (certKernel_envelope hm hn hε hf.valid)
+    (certUtility_total_le hm hf.valid)
+  have hval := (exactRunC_spec r hf.valid c hm hn (r.selector hf.valid) plan).2.2
+  have hp : (0 : ℝ) < massST r hf.valid plan (initCT r hf.valid c) := by exact_mod_cast hpos
+  have hH : 0 < (1 + (certificateEpsilon c : ℝ)) ^ certChanceCount c := pow_pos (by linarith) _
+  have h2 := hmass.2
+  change DVE.solveCondRepPlanMass _ _ _ _ _ _ (certObserved r c) (certObservedValue r hf.valid c)
+    plan ≤ _ at h2
+  rw [hval] at h2
+  exact pos_of_mul_pos_right (lt_of_lt_of_le hp h2) hH.le
+
+end Run
+```
+
+## The headline theorems
+
+```lean
+section Headline
+
+variable {r : Diagram} (h : r.FullValid) {c : Certificate} {s : Solution}
+
+/-- **Julia's recorded solution of an exact run with hard evidence is the exact sliced run's,
+hence conditionally optimal.** If the certificate matches the checked diagram, its cells are
+nonnegative, its solution decodes and `solutionMatchesE` holds, then for the plan of Julia's
+order with the observed variables put back (`solutionPlanE`) and the representative `keepOfST`:
+
+* Julia's recorded strategy is the exact sliced run's strategy and the recorded value its value;
+* on every information row the recorded action is the action of least `state_position` among
+  the maximizers of the run's own score;
+* if every CPT row sums to exactly one, the evidence mass of the certificate's model is positive
+  and the recorded strategy is deterministic, its conditional expected utility given the hard
+  rows is the conditional optimum, and so is the recorded value. -/
+theorem recorded_solution_optimal_evidence (hm : certificateMatches r h c) (hn : Nonneg c)
+    (hs : s.WellFormed c) (hsm : solutionMatchesE r h.valid c s = true) :
+    (∃ plan : DVE.Plan (r.compile h.valid) Finset.univ, solutionPlanE r h.valid c s = some plan ∧
+      recordedStrategy r h.valid c s = (runOfE h hm hn plan).strategy ∧
+      (s.value.toRat : ℝ) = (runOfE h hm hn plan).value ∧
+      ∀ (d : (r.compile h.valid).D) (x : (r.compile h.valid).Assignment),
+        (∀ b, scoreOfE h hm hn plan d x b ≤
+          scoreOfE h hm hn plan d x (recordedAction r h.valid c s d x)) ∧
+        ∀ b, (∀ c', scoreOfE h hm hn plan d x c' ≤ scoreOfE h hm hn plan d x b) →
+          r.statePosition h.valid _ (recordedAction r h.valid c s d x) ≤
+            r.statePosition h.valid _ b) ∧
+    (ExactNormalised r c →
+      (recordedStrategy r h.valid c s).Deterministic ∧
+      0 < DVE.evidenceMass (certKernel r h.valid c) DVE.defaultStrategy
+        (certHardEvidence r c hm h).toEvidence ∧
+      DVE.conditionalEU (certKernel r h.valid c) (recordedStrategy r h.valid c s)
+          (certUtility r h.valid c) (certHardEvidence r c hm h).toEvidence =
+        DVE.conditionalOptimalValue (certKernel r h.valid c) (certUtility r h.valid c)
+          (certHardEvidence r c hm h).toEvidence ∧
+      (s.value.toRat : ℝ) = DVE.conditionalOptimalValue (certKernel r h.valid c)
+        (certUtility r h.valid c) (certHardEvidence r c hm h).toEvidence) := by
+  obtain ⟨plan, hplan, hagree, -, -, -, hval, hpos⟩ := solutionMatchesE_spec r h.valid c s hsm
+  have hrec := recorded_eq_runE h s hm hn hs plan hagree
+  have hv : (s.value.toRat : ℝ) = (runOfE h hm hn plan).value := by
+    rw [(exactRunC_spec r h.valid c hm hn (r.selector h.valid) plan).1, hval]
+  refine ⟨⟨plan, hplan, hrec, hv, fun d x => ?_⟩, fun hex => ?_⟩
+  · obtain ⟨t, hkt, hmax, hleast⟩ := tablesE h hm hn plan d x
+    have hta : recordedAction r h.valid c s d x = t := by
+      have := congrFun (congrArg (fun σ : Strategy (r.compile h.valid) ℝ => (σ d).kernel x) hrec) t
+      simp only [recordedStrategy, Policy.ofFun_kernel] at this
+      rw [hkt t, if_pos rfl] at this
+      by_contra hne
+      rw [if_neg (Ne.symm hne)] at this
+      exact absurd this (by norm_num)
+    rw [hta]
+    exact ⟨hmax, hleast⟩
+  · obtain ⟨h0, hk, -, -⟩ := certificate_approx_exact r h c hm hex
+    have hε : certificateEpsilon c < 1 := by rw [h0]; norm_num
+    have hZ := evidenceMass_pos h hm hn hε plan hpos
+    rw [hk] at hZ
+    have hspec := DVE.solveCondRepPlan_spec (r.selector h.valid)
+      (keepOfST r h.valid plan (initCT r h.valid c)) (certKernel r h.valid c) h.closed h.idOrder
+      (certKernel_local hm h.valid) (certKernel_normalised hm hex h.valid)
+      (certKernel_nonneg hn h.valid) (certUtility r h.valid c) (certUtility_local hm h.valid)
+      (certHardEvidence r c hm h) plan hZ
+    obtain ⟨-, hreal, hopt, -, -⟩ := hspec
+    refine ⟨recordedStrategy_deterministic r h.valid c s, hZ, ?_, ?_⟩
+    · rw [hrec]
+      exact hreal.trans hopt
+    · rw [hv]
+      exact hopt
+
+/-- **Near-optimality of Julia's recorded solution of an exact run with hard evidence**, for a
+certificate whose rows sum to one only up to `ε = certificateEpsilon c < 1`: against the
+conditional problem of the row-normalised model `certNormKernel`, the recorded strategy is
+within `2 e` of every nonnegative strategy and of the conditional optimum, and the recorded
+value within `e` of it, `e = approxError ε n Umax`. -/
+theorem recorded_solution_approx_optimal_evidence (hm : certificateMatches r h c) (hn : Nonneg c)
+    (hs : s.WellFormed c) (hsm : solutionMatchesE r h.valid c s = true)
+    (hε : certificateEpsilon c < 1) :
+    let e : ℝ := approxError (certificateEpsilon c) (certChanceCount c) (certUmax c)
+    let ev := (certHardEvidence r c hm h).toEvidence
+    (recordedStrategy r h.valid c s).Deterministic ∧
+      0 < DVE.evidenceMass (certNormKernel r h.valid c) DVE.defaultStrategy ev ∧
+      (∀ τ : Strategy (r.compile h.valid) ℝ, τ.Nonneg →
+        DVE.conditionalEU (certNormKernel r h.valid c) τ (certUtility r h.valid c) ev ≤
+          DVE.conditionalEU (certNormKernel r h.valid c) (recordedStrategy r h.valid c s)
+            (certUtility r h.valid c) ev + 2 * e) ∧
+      DVE.conditionalOptimalValue (certNormKernel r h.valid c) (certUtility r h.valid c) ev -
+          2 * e ≤
+        DVE.conditionalEU (certNormKernel r h.valid c) (recordedStrategy r h.valid c s)
+          (certUtility r h.valid c) ev ∧
+      DVE.conditionalEU (certNormKernel r h.valid c) (recordedStrategy r h.valid c s)
+          (certUtility r h.valid c) ev ≤
+        DVE.conditionalOptimalValue (certNormKernel r h.valid c) (certUtility r h.valid c) ev ∧
+      |(s.value.toRat : ℝ) -
+          DVE.conditionalOptimalValue (certNormKernel r h.valid c) (certUtility r h.valid c) ev| ≤
+        e := by
+  intro e ev
+  obtain ⟨plan, -, hagree, -, -, -, hval, hpos⟩ := solutionMatchesE_spec r h.valid c s hsm
+  have hrec := recorded_eq_runE h s hm hn hs plan hagree
+  have hv : (s.value.toRat : ℝ) = (runOfE h hm hn plan).value := by
+    rw [(exactRunC_spec r h.valid c hm hn (r.selector h.valid) plan).1, hval]
+  have hZ := evidenceMass_pos h hm hn hε plan hpos
+  have hε1 : (certificateEpsilon c : ℝ) < 1 := by exact_mod_cast hε
+  have hL : 0 < (1 - (certificateEpsilon c : ℝ)) ^ certChanceCount c := pow_pos (by linarith) _
+  have hε0 : (0 : ℝ) ≤ certificateEpsilon c := by exact_mod_cast certificateEpsilon_nonneg c
+  have hLH : (1 - (certificateEpsilon c : ℝ)) ^ certChanceCount c ≤
+      (1 + (certificateEpsilon c : ℝ)) ^ certChanceCount c :=
+    pow_le_pow_left₀ (by linarith) (by linarith) _
+  have hU : (0 : ℝ) ≤ certUmax c := by exact_mod_cast certUmax_nonneg c
+  have ha := DVE.solveCondRepPlan_approx_optimal (r.selector h.valid)
+    (keepOfST r h.valid plan (initCT r h.valid c)) (certNormKernel r h.valid c)
+    (certKernel r h.valid c) h.closed h.idOrder (certNormKernel_local hm h.valid)
+    (certNormKernel_normalised hm hε h.valid) (certNormKernel_nonneg hn h.valid)
+    (certKernel_local hm h.valid) (certKernel_nonneg hn h.valid) (certUtility r h.valid c)
+    (certUtility_local hm h.valid) (certHardEvidence r c hm h) plan _ _ _ hL hLH hU
+    (certKernel_envelope hm hn hε h.valid) (certUtility_total_le hm h.valid) hZ
+  rw [approxGap_eq r h c hm hε plan] at ha
+  rw [hrec, hv]
+  exact ⟨ha.1, hZ, ha.2⟩
+
+/-- **Julia's recorded solution of a binary64 run with hard evidence.** Under `solutionWithinE τ τv`
+and `certificateEpsilon c < 1`, for the plan of Julia's order with the observed variables put back
+and the representative `keepOfST`, writing `κ̂` for the row-normalised model, `e = approxError ε n
+Umax` and `nd` for the number of decisions:
+
+* on every information row the recorded action is within `τ` of the maximum of the exact sliced
+  run's score row;
+* the evidence mass of `κ̂` is positive and the recorded value is within `τv + e` of the
+  conditional optimum of `κ̂` given the hard rows;
+* the recorded strategy (deterministic) is within `2 e + nd * τ` of every nonnegative strategy and
+  of that conditional optimum (from below; it never exceeds it), whatever its actions at
+  near-ties. -/
+theorem recorded_binary64_near_optimal_evidence (hm : certificateMatches r h c) (hn : Nonneg c)
+    (hs : s.WellFormed c) {τ τv : ℚ} (hw : solutionWithinE r h.valid c s τ τv = true)
+    (hε : certificateEpsilon c < 1) :
+    let e : ℝ := approxError (certificateEpsilon c) (certChanceCount c) (certUmax c)
+    let ev := (certHardEvidence r c hm h).toEvidence
+    (∃ plan : DVE.Plan (r.compile h.valid) Finset.univ, solutionPlanE r h.valid c s = some plan ∧
+      ∀ (d : (r.compile h.valid).D) (x : (r.compile h.valid).Assignment) b,
+        scoreOfE h hm hn plan d x b ≤
+          scoreOfE h hm hn plan d x (recordedAction r h.valid c s d x) + τ) ∧
+      0 < DVE.evidenceMass (certNormKernel r h.valid c) DVE.defaultStrategy ev ∧
+      |(s.value.toRat : ℝ) -
+          DVE.conditionalOptimalValue (certNormKernel r h.valid c) (certUtility r h.valid c) ev| ≤
+        τv + e ∧
+      (recordedStrategy r h.valid c s).Deterministic ∧
+      (∀ τ' : Strategy (r.compile h.valid) ℝ, τ'.Nonneg →
+        DVE.conditionalEU (certNormKernel r h.valid c) τ' (certUtility r h.valid c) ev ≤
+          DVE.conditionalEU (certNormKernel r h.valid c) (recordedStrategy r h.valid c s)
+            (certUtility r h.valid c) ev + 2 * e + r.nd * (τ : ℝ)) ∧
+      DVE.conditionalOptimalValue (certNormKernel r h.valid c) (certUtility r h.valid c) ev -
+          2 * e - r.nd * (τ : ℝ) ≤
+        DVE.conditionalEU (certNormKernel r h.valid c) (recordedStrategy r h.valid c s)
+          (certUtility r h.valid c) ev ∧
+      DVE.conditionalEU (certNormKernel r h.valid c) (recordedStrategy r h.valid c s)
+          (certUtility r h.valid c) ev ≤
+        DVE.conditionalOptimalValue (certNormKernel r h.valid c) (certUtility r h.valid c) ev := by
+  intro e ev
+  obtain ⟨plan, hplan, hwe, hval, hpos⟩ := solutionWithinE_spec r h.valid c s hw
+  have hZ := evidenceMass_pos h hm hn hε plan hpos
+  have hε1 : (certificateEpsilon c : ℝ) < 1 := by exact_mod_cast hε
+  have hL : 0 < (1 - (certificateEpsilon c : ℝ)) ^ certChanceCount c := pow_pos (by linarith) _
+  have hε0 : (0 : ℝ) ≤ certificateEpsilon c := by exact_mod_cast certificateEpsilon_nonneg c
+  have hLH : (1 - (certificateEpsilon c : ℝ)) ^ certChanceCount c ≤
+      (1 + (certificateEpsilon c : ℝ)) ^ certChanceCount c :=
+    pow_le_pow_left₀ (by linarith) (by linarith) _
+  have hU : (0 : ℝ) ≤ certUmax c := by exact_mod_cast certUmax_nonneg c
+  have ha := DVE.solveCondRepPlan_approx_optimal (r.selector h.valid)
+    (keepOfST r h.valid plan (initCT r h.valid c)) (certNormKernel r h.valid c)
+    (certKernel r h.valid c) h.closed h.idOrder (certNormKernel_local hm h.valid)
+    (certNormKernel_normalised hm hε h.valid) (certNormKernel_nonneg hn h.valid)
+    (certKernel_local hm h.valid) (certKernel_nonneg hn h.valid) (certUtility r h.valid c)
+    (certUtility_local hm h.valid) (certHardEvidence r c hm h) plan _ _ _ hL hLH hU
+    (certKernel_envelope hm hn hε h.valid) (certUtility_total_le hm h.valid) hZ
+  have hnear := DVE.solveCondRepPlan_near_optimal (r.selector h.valid)
+    (keepOfST r h.valid plan (initCT r h.valid c)) (certNormKernel r h.valid c)
+    (certKernel r h.valid c) h.closed h.idOrder (certNormKernel_local hm h.valid)
+    (certNormKernel_normalised hm hε h.valid) (certNormKernel_nonneg hn h.valid)
+    (certKernel_local hm h.valid) (certKernel_nonneg hn h.valid) (certUtility r h.valid c)
+    (certUtility_local hm h.valid) (certHardEvidence r c hm h) plan _ _ _ hL hLH hU
+    (certKernel_envelope hm hn hε h.valid) (certUtility_total_le hm h.valid) hZ
+    (recordedStrategy r h.valid c s) (recordedAction r h.valid c s)
+    (fun d x a => by simp [recordedStrategy]) (τ : ℝ)
+    (fun d x b => recorded_withinE h s hm hn hs plan hwe d x b)
+  rw [approxGap_eq r h c hm hε plan] at ha hnear
+  rw [card_decisions] at hnear
+  have hrun := ha.2.2.2.2
+  have hrv : (DVE.solveCondRepPlanWith (r.selector h.valid)
+      (keepOfST r h.valid plan (initCT r h.valid c)) (certKernel r h.valid c)
+      (certKernel_local hm h.valid) (certKernel_nonneg hn h.valid) (certUtility r h.valid c)
+      (certUtility_local hm h.valid) (certHardEvidence r c hm h).observed
+      (certHardEvidence r c hm h).value plan).value =
+      (valueST r h.valid plan (initCT r h.valid c) : ℝ) :=
+    (exactRunC_spec r h.valid c hm hn (r.selector h.valid) plan).1
+  rw [hrv] at hrun
+  have hval' : |(s.value.toRat : ℝ) - (valueST r h.valid plan (initCT r h.valid c) : ℝ)| ≤ τv := by
+    exact_mod_cast hval
+  have hdet := recordedStrategy_deterministic r h.valid c s
+  have hle := DVE.conditionalEU_le_optimal (certNormKernel r h.valid c) h.closed h.idOrder
+    (certNormKernel_local hm h.valid) (certNormKernel_normalised hm hε h.valid)
+    (certUtility r h.valid c) ev hZ _ (DVE.deterministic_nonneg _ hdet)
+  refine ⟨⟨plan, hplan, fun d x b => recorded_withinE h s hm hn hs plan hwe d x b⟩, hZ, ?_,
+    hdet, hnear.1, hnear.2, hle⟩
+  calc |(s.value.toRat : ℝ) - DVE.conditionalOptimalValue (certNormKernel r h.valid c)
+        (certUtility r h.valid c) ev|
+      ≤ |(s.value.toRat : ℝ) - (valueST r h.valid plan (initCT r h.valid c) : ℝ)| +
+        |(valueST r h.valid plan (initCT r h.valid c) : ℝ) -
+          DVE.conditionalOptimalValue (certNormKernel r h.valid c) (certUtility r h.valid c) ev| :=
+        abs_sub_le _ _ _
+    _ ≤ τv + e := add_le_add hval' hrun
+
+/-- **The exactly normalised case with hard evidence.** On a certificate whose CPT rows sum to
+exactly one, under `solutionWithinE τ τv`, the evidence mass is positive, Julia's recorded
+strategy is within `nd * τ` of every nonnegative strategy and of the conditional optimum of the
+certificate's own model, and the recorded value within `τv` of that optimum. -/
+theorem recorded_binary64_near_optimal_evidence_exact (hm : certificateMatches r h c)
+    (hn : Nonneg c) (hs : s.WellFormed c) {τ τv : ℚ}
+    (hw : solutionWithinE r h.valid c s τ τv = true) (hex : ExactNormalised r c) :
+    let ev := (certHardEvidence r c hm h).toEvidence
+    0 < DVE.evidenceMass (certKernel r h.valid c) DVE.defaultStrategy ev ∧
+      (∀ τ' : Strategy (r.compile h.valid) ℝ, τ'.Nonneg →
+        DVE.conditionalEU (certKernel r h.valid c) τ' (certUtility r h.valid c) ev ≤
+          DVE.conditionalEU (certKernel r h.valid c) (recordedStrategy r h.valid c s)
+            (certUtility r h.valid c) ev + r.nd * (τ : ℝ)) ∧
+      DVE.conditionalOptimalValue (certKernel r h.valid c) (certUtility r h.valid c) ev -
+          r.nd * (τ : ℝ) ≤
+        DVE.conditionalEU (certKernel r h.valid c) (recordedStrategy r h.valid c s)
+          (certUtility r h.valid c) ev ∧
+      |(s.value.toRat : ℝ) -
+          DVE.conditionalOptimalValue (certKernel r h.valid c) (certUtility r h.valid c) ev| ≤
+        τv := by
+  intro ev
+  obtain ⟨h0, hk, he, -⟩ := certificate_approx_exact r h c hm hex
+  have hε : certificateEpsilon c < 1 := by rw [h0]; norm_num
+  have hnear := recorded_binary64_near_optimal_evidence h hm hn hs hw hε
+  simp only [hk, he, Rat.cast_zero, mul_zero, add_zero, sub_zero] at hnear
+  exact ⟨hnear.2.1, hnear.2.2.2.2.1, hnear.2.2.2.2.2.1, hnear.2.2.1⟩
+
 end Headline
 
 end InfluenceDiagramsProofs.DVECertificate
@@ -13841,9 +16303,12 @@ This is **not** a byte-for-byte verification of Julia. Remaining refinements are
   `recorded_solution_optimal` makes Julia's recorded strategy and value the run's, hence optimal
   under exact normalisation, and `recorded_solution_approx_optimal` gives them the bound above.
   Julia's Float64 run is compared, not proved: `recorded_binary64_approx_optimal` bounds its
-  recorded value and per-row action loss `τ`, and its strategy only when its actions are the exact
-  run's; a different action at a near-tie has no proved expected-utility bound.
-  That Julia's action axis lists the
+  recorded value and per-row action loss `τ`, and its strategy when its actions are the exact
+  run's; `recorded_binary64_near_optimal` (`Finite/DVE/NearOptimal.lean`) bounds the strategy's
+  expected utility within `2 e + nd * τ` of the reference optimum whatever its actions at
+  near-ties, given that per-row check. Certificates with hard evidence rows are compared with the
+  exact run on the sliced data (`Finite/DVE/SolutionCheckEvidence.lean`), with the same bounds for
+  the conditional problem. That Julia's action axis lists the
   states in `state_position` order is pinned by a Julia test, and the array layout is the
   `FiniteKernels` `Layout/` result; Julia's execution itself is not proved. That Julia's block
   schedule is a `Plan`, and which `keep` its run uses, are read off the source, not derived (for
@@ -13851,9 +16316,11 @@ This is **not** a byte-for-byte verification of Julia. Remaining refinements are
   recorded scores with the run of `keepOfT` is decided, on that certificate only);
 * zero-probability rows beyond the above. There no semantic score exists, so a zero-reach
   entry is fixed by the representatives and is not claimed independent of the elimination
-  plan. Julia's hard-evidence path (sliced factors, absent variables skipped) is proved only
-  against the model's representative (`Conditioning.lean`); combined with Julia's `keep`
-  representative it is not modelled. The model's empty-bucket decision step adds a unit
+  plan. Julia's hard-evidence path (sliced factors, absent variables skipped) is proved against
+  the model's representative (`Conditioning.lean`) and, combined with Julia's `keep`
+  representative, in `Finite/DVE/NearOptimalEvidence.lean` (`runRepSkipWith`); that Julia's
+  evidence run is this one is read off the source and, for a version-2 certificate, decided by
+  `solutionMatchesE` on that certificate only. The model's empty-bucket decision step adds a unit
   valuation that Julia omits; this changes no value and no table;
 * Float64/tolerance behavior. Small action-dependent evidence probabilities can pass the
   source's tolerance guard and yield a wrong reported value; they are outside the theorem's

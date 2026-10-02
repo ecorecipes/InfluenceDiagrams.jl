@@ -22,3 +22,7 @@ import InfluenceDiagramsProofs.Finite.DVE.CertificateApprox
 import InfluenceDiagramsProofs.Finite.DVE.SolutionJson
 import InfluenceDiagramsProofs.Finite.DVE.SolutionRun
 import InfluenceDiagramsProofs.Finite.DVE.SolutionCheck
+import InfluenceDiagramsProofs.Finite.DVE.NearOptimal
+import InfluenceDiagramsProofs.Finite.DVE.NearOptimalEvidence
+import InfluenceDiagramsProofs.Finite.DVE.SolutionEvidence
+import InfluenceDiagramsProofs.Finite.DVE.SolutionCheckEvidence

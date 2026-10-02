@@ -313,6 +313,69 @@ assert_no_sorry InfluenceDiagramsProofs.DVECertificate.recorded_binary64_approx_
 #print axioms InfluenceDiagramsProofs.DVECertificate.recorded_solution_approx_optimal
 #print axioms InfluenceDiagramsProofs.DVECertificate.recorded_binary64_approx_optimal
 
+-- Near-tie action changes: the expected-utility loss of actions within `τ` of the row maximum.
+assert_no_sorry InfluenceDiagramsProofs.DVE.solveRepPlan_tolerant
+assert_no_sorry InfluenceDiagramsProofs.DVE.solveRepPlan_near_optimal
+assert_no_sorry InfluenceDiagramsProofs.DVE.solveRepPlan_tolerant_optimal
+assert_no_sorry InfluenceDiagramsProofs.DVECertificate.recorded_binary64_near_optimal
+assert_no_sorry InfluenceDiagramsProofs.DVECertificate.recorded_binary64_near_optimal_exact
+#print axioms InfluenceDiagramsProofs.DVE.Plan.decisionCount_eq
+#print axioms InfluenceDiagramsProofs.DVE.Plan.decisionCount_univ
+#print axioms InfluenceDiagramsProofs.DVE.refMarg_unobserved
+#print axioms InfluenceDiagramsProofs.DVE.refMarg_observed
+#print axioms InfluenceDiagramsProofs.DVE.TolInv.weaken
+#print axioms InfluenceDiagramsProofs.DVE.TolInv.chanceOf
+#print axioms InfluenceDiagramsProofs.DVE.TolInv.observed
+#print axioms InfluenceDiagramsProofs.DVE.TolInv.decisionOf
+#print axioms InfluenceDiagramsProofs.DVE.TolInv.initial
+#print axioms InfluenceDiagramsProofs.DVE.tolInv_runRep
+#print axioms InfluenceDiagramsProofs.DVE.solveRepPlan_tolerant
+#print axioms InfluenceDiagramsProofs.DVE.solveRepPlan_near_optimal
+#print axioms InfluenceDiagramsProofs.DVE.solveRepPlan_tolerant_optimal
+#print axioms InfluenceDiagramsProofs.DVECertificate.recorded_binary64_near_optimal
+#print axioms InfluenceDiagramsProofs.DVECertificate.recorded_binary64_near_optimal_exact
+
+-- Hard evidence: Julia's sliced run with the `sum_out` representative, its computable exact run,
+-- and the comparison of the recorded solution with it.
+assert_no_sorry InfluenceDiagramsProofs.DVE.solveCondRepPlan_tolerant
+assert_no_sorry InfluenceDiagramsProofs.DVE.solveCondRepPlan_approx_optimal
+assert_no_sorry InfluenceDiagramsProofs.DVE.solveCondRepPlan_near_optimal
+assert_no_sorry InfluenceDiagramsProofs.DVE.solveCondRepPlan_spec
+assert_no_sorry InfluenceDiagramsProofs.DVECertificate.exactRunC_spec
+assert_no_sorry InfluenceDiagramsProofs.DVECertificate.recorded_solution_optimal_evidence
+assert_no_sorry InfluenceDiagramsProofs.DVECertificate.recorded_solution_approx_optimal_evidence
+assert_no_sorry InfluenceDiagramsProofs.DVECertificate.recorded_binary64_near_optimal_evidence
+assert_no_sorry InfluenceDiagramsProofs.DVECertificate.recorded_binary64_near_optimal_evidence_exact
+#print axioms InfluenceDiagramsProofs.DVE.runRepSkipWith_kernel
+#print axioms InfluenceDiagramsProofs.DVE.decisionScoreRepSkip_local
+#print axioms InfluenceDiagramsProofs.DVE.ScopeOK.chanceRepSkip
+#print axioms InfluenceDiagramsProofs.DVE.ScopeOK.decision
+#print axioms InfluenceDiagramsProofs.DVE.tolInv_runRepSkip
+#print axioms InfluenceDiagramsProofs.DVE.TolInv.conditional
+#print axioms InfluenceDiagramsProofs.DVE.conditionalEU_le_optimal
+#print axioms InfluenceDiagramsProofs.DVE.conditionalOptimal_attained
+#print axioms InfluenceDiagramsProofs.DVE.solveCondRepPlan_mass
+#print axioms InfluenceDiagramsProofs.DVE.solveCondRepPlan_tolerant
+#print axioms InfluenceDiagramsProofs.DVE.solveCondRepPlan_approx_optimal
+#print axioms InfluenceDiagramsProofs.DVE.solveCondRepPlan_near_optimal
+#print axioms InfluenceDiagramsProofs.DVE.solveCondRepPlan_spec
+#print axioms InfluenceDiagramsProofs.DVECertificate.rel_condition
+#print axioms InfluenceDiagramsProofs.DVECertificate.udep_condition
+#print axioms InfluenceDiagramsProofs.DVECertificate.mem_certObserved
+#print axioms InfluenceDiagramsProofs.DVECertificate.sim_runRepSkip
+#print axioms InfluenceDiagramsProofs.DVECertificate.sim_initialC
+#print axioms InfluenceDiagramsProofs.DVECertificate.exactRunC_spec
+#print axioms InfluenceDiagramsProofs.DVECertificate.certHardEvidence
+#print axioms InfluenceDiagramsProofs.DVECertificate.tablesE
+#print axioms InfluenceDiagramsProofs.DVECertificate.entry_of_rowE
+#print axioms InfluenceDiagramsProofs.DVECertificate.recorded_eq_runE
+#print axioms InfluenceDiagramsProofs.DVECertificate.recorded_withinE
+#print axioms InfluenceDiagramsProofs.DVECertificate.evidenceMass_pos
+#print axioms InfluenceDiagramsProofs.DVECertificate.recorded_solution_optimal_evidence
+#print axioms InfluenceDiagramsProofs.DVECertificate.recorded_solution_approx_optimal_evidence
+#print axioms InfluenceDiagramsProofs.DVECertificate.recorded_binary64_near_optimal_evidence
+#print axioms InfluenceDiagramsProofs.DVECertificate.recorded_binary64_near_optimal_evidence_exact
+
 -- Exact multi-decision bucket DVE; the schedule is generated from no-forgetting.
 assert_no_sorry InfluenceDiagramsProofs.DVE.solve_spec
 assert_no_sorry InfluenceDiagramsProofs.DVE.solveEvidence_spec
