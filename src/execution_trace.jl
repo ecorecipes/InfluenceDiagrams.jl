@@ -199,7 +199,8 @@ function trace_decision_elimination(m::InfluenceDiagramModel;
                                                "inputs" => Any[])
     end
     recorder = _DVETraceRecorder(data, Int(max_entries), include_compilation)
-    solution = _decision_elimination(m, order, probability_atol, Rational{BigInt}, recorder)
+    solution = _decision_elimination(m, order, probability_atol, Rational{BigInt}, recorder;
+                                     normalization_atol=atol)
     data["policies"] = [Dict("decision" => String(decision_name(id, decision)),
                              "scope" => String.(information_names(id, decision)),
                              "values" => String.(vec(policy_table(solution.strategy[decision_name(id,

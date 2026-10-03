@@ -342,7 +342,9 @@ function Base.showerror(io::IO, e::IrregularDiagramError)
 end
 
 # Internal control-flow signal, never raised to a caller (ADR 0014): the binary64 run of
-# decision variable elimination ended with an evidence mass that is not a normal positive
-# number, which does not decide whether the evidence is impossible. `decision_elimination`
-# catches it and reruns the same schedule in exact rational arithmetic.
+# decision variable elimination is not trusted, because it ended with an evidence mass that
+# is not a normal positive number, which does not decide whether the evidence is impossible,
+# or because a product of nonzero values fell below the normal range, losing significand
+# bits (`_checked_product`). `decision_elimination` catches it and reruns the same schedule
+# in exact rational arithmetic (`_exact_rerun`).
 struct _UnresolvedDecisionMass <: InfluenceDiagramError end

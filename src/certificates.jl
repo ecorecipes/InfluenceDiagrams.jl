@@ -277,8 +277,8 @@ function _dve_solution(snapshot, backend, data, sources, normalization_tol, owne
     constancy = backend.atol === nothing ? normalization_tol : backend.atol
     _check_probability_tolerance(constancy)
     recorder = _DVESolutionRecorder()
-    sol = _run_decision_elimination(snapshot, backend.order, constancy, backend.stable;
-                                    observer=recorder,
+    sol = _run_decision_elimination(snapshot, backend.order, constancy, normalization_tol,
+                                    backend.stable; observer=recorder,
                                     sources=(kind, name) -> sources[(kind, name)])
     final = recorder.final
     exact = eltype(final.ψ.table) == Rational{BigInt}
@@ -346,10 +346,14 @@ end
         numeric_mode=:binary64_exact, exact_tables=nothing,
         capture_runtime_bits=true, trace=false, max_entries=1_000_000,
         atol=DEFAULT_ATOL, probability_atol=1e-9,
-        model_name="InfluenceDiagramModel", solution=false) -> Dict{String,Any}
+        model_name="InfluenceDiagramModel", solution=false) -> OrderedDict{String,Any}
 
 Capture complete model data in the version-1 `ecorecipes.dve-certificate`
-profile. Original source part IDs are decimal strings; semantic slots retain
+profile. The result is an `OrderedDict` (OrderedCollections' type, which
+`BayesianNetworks` also returns for its CatColab documents) whose keys, and the
+fields of every object inside it, follow the JSON Schema's property order, so
+the key order `JSON3.write` emits does not depend on Julia's string hashing. It
+is indexed like a `Dict`, and `==` ignores the key order. Original source part IDs are decimal strings; semantic slots retain
 their position order and every table entry has explicit zero-based coordinates
 in lexicographic order. Raw ordered CPTs and the actual unique-scope diagonal
 factors are both captured. Evidence ancestors are placed before the first
@@ -575,32 +579,35 @@ function export_dve_certificate(m::InfluenceDiagramModel;
                                      evidence(snapshot)[variable_name(id, v)]) - 1)
             for v in sort([variable_id(id, name) for name in keys(evidence(snapshot))])]
     version = backend === nothing ? 1 : 2
-    certificate = Dict{String,Any}("format" => "ecorecipes.dve-certificate",
-                                   "version" => version,
-                                   "provenance" => (implementation_manifest_sha256=_DVE_CERTIFICATE_SOURCE,
-                                                    model_name=String(model_name),
-                                                    exporter="InfluenceDiagrams.jl/$(pkgversion(@__MODULE__))/export_dve_certificate-v$(version)",
-                                                    origin="runtime",
-                                                    exact_source=numeric_mode ==
-                                                                 :binary64_exact ?
-                                                                 "none" :
-                                                                 "caller_companion"),
-                                   "numeric" => (mode=String(numeric_mode),
-                                                 runtime_bits=capture_runtime_bits,
-                                                 normalization="none"),
-                                   "runtime_tolerances" => (kernel_normalization_f64=_dve_float_bits(normalization_tol,
-                                                                                                     owner),
-                                                            decision_probability_f64=_dve_float_bits(decision_tol,
-                                                                                                     owner)),
-                                   "reference_pool" => pool, "variables" => vars,
-                                   "topological_order" => [_dve_source_id(v, owner)
-                                                           for v in order],
-                                   "decision_order" => [_dve_source_id(d, owner)
-                                                        for d in ds],
-                                   "mechanisms" => mechs, "decisions" => decs,
-                                   "precedence" => prec,
-                                   "utilities" => us,
-                                   "evidence" => (hard=hard, likelihood=nothing))
+    # Insertion order is the schema's property order, so `JSON3.write` emits the keys in
+    # that order whatever the Julia version's string hashing; every nested object is a
+    # named tuple, whose fields follow the schema too.
+    certificate = OrderedDict{String,Any}("format" => "ecorecipes.dve-certificate",
+                                          "version" => version,
+                                          "provenance" => (implementation_manifest_sha256=_DVE_CERTIFICATE_SOURCE,
+                                                           model_name=String(model_name),
+                                                           exporter="InfluenceDiagrams.jl/$(pkgversion(@__MODULE__))/export_dve_certificate-v$(version)",
+                                                           origin="runtime",
+                                                           exact_source=numeric_mode ==
+                                                                        :binary64_exact ?
+                                                                        "none" :
+                                                                        "caller_companion"),
+                                          "numeric" => (mode=String(numeric_mode),
+                                                        runtime_bits=capture_runtime_bits,
+                                                        normalization="none"),
+                                          "runtime_tolerances" => (kernel_normalization_f64=_dve_float_bits(normalization_tol,
+                                                                                                            owner),
+                                                                   decision_probability_f64=_dve_float_bits(decision_tol,
+                                                                                                            owner)),
+                                          "reference_pool" => pool, "variables" => vars,
+                                          "topological_order" => [_dve_source_id(v, owner)
+                                                                  for v in order],
+                                          "decision_order" => [_dve_source_id(d, owner)
+                                                               for d in ds],
+                                          "mechanisms" => mechs, "decisions" => decs,
+                                          "precedence" => prec,
+                                          "utilities" => us,
+                                          "evidence" => (hard=hard, likelihood=nothing))
     backend === nothing && return certificate
     certificate["solution"] = _dve_solution(snapshot, backend, data, run_inputs,
                                             normalization_tol, owner)

@@ -56,6 +56,9 @@ using BayesianNetworks: AbstractVariableSpace, AbstractBayesNet, BayesNetError,
                         MissingKernelError, ModelTooLargeError, UnsupportedNodeKindError,
                         KernelBindingError, MechanismRecord, ModelEvent,
                         hard_intervention_name, json_bayesnet, FormatError
+# OrderedCollections' type, which BayesianNetworks imports and returns for its CatColab
+# documents; taking that binding adds no dependency here (see CLAUDE.md).
+using BayesianNetworks: OrderedDict
 using BayesianNetworkInference: BayesianNetworkInference, Factor, scope, unit_factor,
                                 multiply, marginalize, maximize,
                                 argmax_table, condition, reorder, FactorGraph,

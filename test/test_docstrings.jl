@@ -9,3 +9,10 @@ end
 @testset "docstrings on every exported name" begin
     @test isempty(owned_undocumented(InfluenceDiagrams))
 end
+
+@testset "decision_elimination documents its default constancy tolerance" begin
+    # Review finding 6: the signature said `atol = 1e-9`, the default before `nothing`, which
+    # follows `normalization_atol`.
+    doc = string(@doc InfluenceDiagrams.decision_elimination)
+    @test occursin("atol = nothing", doc) && !occursin("atol = 1e-9", doc)
+end

@@ -36,6 +36,14 @@ supports the evidence, throw `BayesianNetworks.ImpossibleEvidenceError`: probabi
 exactly zero. When a value-table product falls outside the normal Float64 range, the
 table cannot tell an underflow from a zero, so the search falls back to scoring each
 strategy individually and records `exact_fallback = true` in the diagnostics (ADR 0014).
+A model with tolerated negative entries (in `[-atol, 0)`) raises
+`IndeterminatePosteriorError` when some strategy's posterior is indeterminate, as
+[`expected_utility`](@ref) would for that strategy. That needs evidence and a negative
+entry that takes part: one on a joint state consistent with the evidence whose entries
+are all nonzero. Then the posterior is indeterminate if the evidence mass is not larger
+than the tolerance budget `(1 + atol)^n - 1` (`n` the number of variables, each with a
+mechanism once the strategy is instantiated), or if a posterior cell is negative. A
+negative entry that the evidence rules out does not count, and a prior is exempt.
 """
 struct ExhaustivePolicySearch <: DecisionBackend
     max_policies::Int
@@ -110,8 +118,12 @@ end
 # The value tables of the exhaustive backend: numerator Σ_x P_c(x) U(x) and
 # denominator Σ_x P_c(x), both accumulated over the `keep` variables (information and
 # action variables), with x ranging over the joint states consistent with the evidence.
+# With `track_negative`, also whether a tolerated negative entry takes part in a joint state
+# consistent with the evidence whose entries are all nonzero, for each cell of the `keep`
+# variables (`nothing` otherwise): it takes part in a strategy's instantiated network
+# exactly when the strategy selects such a cell.
 function _value_tables(m::InfluenceDiagramModel, keep::Vector{Symbol};
-                       max_states::Integer)
+                       max_states::Integer, track_negative::Bool=false)
     id = syntax(m)
     bm = m.model
     vars = variable_names(id)
@@ -142,6 +154,7 @@ function _value_tables(m::InfluenceDiagramModel, keep::Vector{Symbol};
     kdims = Tuple(dims[i] for i in kpos)
     N = zeros(Float64, kdims)
     Z = zeros(Float64, kdims)
+    negative = track_negative ? falses(kdims) : nothing
     # Whether a product of nonzero entries fell below binary64's normal range: then a
     # strategy's zero mass may be an underflow rather than an exact zero (ADR 0014). A
     # negative product comes from a tolerated negative entry.
@@ -150,26 +163,30 @@ function _value_tables(m::InfluenceDiagramModel, keep::Vector{Symbol};
         all(e -> ci[e[1]] == e[2], ev) || continue
         p = 1.0
         exact_zero = false
+        takes_part = false
         for (tab, ax) in factors_
             x = tab[ntuple(j -> ci[ax[j]], length(ax))...]
             if x == 0
                 exact_zero = true
                 break
             end
+            takes_part |= x < 0
             p *= x
         end
+        # A structural zero: no entry takes part, wherever the zero came.
         exact_zero && continue
+        k = CartesianIndex(ntuple(j -> ci[kpos[j]], length(kpos)))
+        track_negative && takes_part && (negative[k] = true)
         (p >= floatmin(Float64) && isfinite(p)) || (unreliable = true)
         p == 0 && continue
         u = 0.0
         for (tab, ax) in utils
             u += tab[ntuple(j -> ci[ax[j]], length(ax))...]
         end
-        k = CartesianIndex(ntuple(j -> ci[kpos[j]], length(kpos)))
         N[k] += p * u
         Z[k] += p
     end
-    return N, Z, unreliable
+    return N, Z, negative, unreliable
 end
 
 function optimize(m::InfluenceDiagramModel, b::ExhaustivePolicySearch;
@@ -211,7 +228,17 @@ function optimize(m::InfluenceDiagramModel, b::ExhaustivePolicySearch;
         a = variable_name(id, decision_variable(id, d))
         a in keep || push!(keep, a)
     end
-    N, Z, unreliable = _value_tables(m, keep; max_states=max_states)
+    # Tolerated negative entries (ADR 0014 decision 4), as the strategy-by-strategy search
+    # meets them in `BayesianNetworks.marginal`. A negative product makes the tables
+    # unreliable, so that search decides it. A negative entry that takes part in a positive
+    # product (an even number of them) makes a strategy's posterior indeterminate when its
+    # evidence mass is within the budget `(1 + atol)^n - 1` of zero, `n` counting every
+    # mechanism of the instantiated network, which has one per variable. A prior is exempt.
+    ev = evidence(m)
+    track = !isempty(ev) && _has_negative_entry(m)
+    N, Z, negative, unreliable = _value_tables(m, keep; max_states=max_states,
+                                               track_negative=track)
+    budget = track ? BayesianNetworks._joint_atol(atol, length(variable_names(id))) : 0.0
     # An underflowed or negative product makes a zero or small binary64 mass undecided, so
     # search strategy by strategy instead: `expected_utility` evaluates each one through
     # `BayesianNetworks.marginal`, which recomputes underflowed evidence exactly (ADR 0016)
@@ -233,6 +260,7 @@ function optimize(m::InfluenceDiagramModel, b::ExhaustivePolicySearch;
         tabs = ntuple(i -> index_tables[i][choice[i]], length(ds))
         num = 0.0
         den = 0.0
+        reaches_negative = false
         for ci in CartesianIndices(N)
             ok = true
             for i in eachindex(ds)
@@ -244,8 +272,12 @@ function optimize(m::InfluenceDiagramModel, b::ExhaustivePolicySearch;
             ok || continue
             num += N[ci]
             den += Z[ci]
+            track && (reaches_negative |= negative[ci])
         end
         den > 0 || continue
+        reaches_negative && den <= budget &&
+            throw(BayesianNetworks.IndeterminatePosteriorError(copy(ev),
+                                                               "the evidence mass $(den) is within the tolerance budget $(budget) of zero"))
         eu = num / den
         if eu > best
             best = eu

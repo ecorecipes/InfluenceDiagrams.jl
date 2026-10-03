@@ -57,6 +57,12 @@ ordered but neither knows the other's action: that is a forgetting diagram, and 
   cells (the `sources` hook; an exact run in `rational_exact` mode reads the companions). Policy
   entries follow the Lean label order and the exporter checks Julia's axes are that order. The
   default `solution=false` must stay byte-identical to v1 (`test/fixtures/dve-certificate-v1`).
+  The certificate is an `OrderedDict{String,Any}` built in the schema's property order, and every
+  nested object is a named tuple in schema order, so `JSON3.write` does not depend on Julia's
+  string hashing (a `Dict` changed order in Julia 1.13; the fixtures were recaptured once).
+  `OrderedDict` is the binding `BayesianNetworks` imports from OrderedCollections, taken with
+  `using BayesianNetworks: OrderedDict` so that this package adds no dependency, which would
+  desynchronise every manifest that pins it: keep that internal contract in step.
   Unsupported combinations are `DVEExportError(:UNSUPPORTED_SOLUTION_PROFILE)`.
 - `proofs/`: the Lean model (`instantiate`, `strategyKernel`, `expectedUtility`, `Strategy.fix`,
   information enlargement). Propositions 5 and 6 and `fix_decision` = hard intervention
@@ -160,11 +166,28 @@ ordered but neither knows the other's action: that is a forgetting diagram, and 
 - The valuation layer reuses BayesianNetworkInference's `_union_axes` and `_broadcastable` helpers for scope/axis agreement and alignment. Keep those internal cross-package contracts in step.
 - Every optimised path is checked against a slower oracle (`joint_distribution`, exhaustive policy search) on small models; DVE ties resolve to the first action label: `argmax_table` compares with `==`, so `-0.0` and `0.0` tie as the reals they are, and every backend rejects a NaN or infinite utility (`UtilityScopeError`). Ties that Float64 rounding creates or breaks remain an approximation; `stable=true` compares exact rationals.
 - Models are immutable values: every operation returns a new model.
-- Evidence mass (ADR 0014): `ImpossibleEvidenceError` means probability exactly zero. The Float64
-  DVE run throws the internal `_UnresolvedDecisionMass` when its mass is not a normal positive number,
-  and `decision_elimination` reruns in `Rational{BigInt}` (`exact_fallback = true`); the value-table
-  exhaustive search falls back to per-strategy scoring when a product is unreliable. Tolerated
-  negative entries with a mass within `_joint_atol` raise `IndeterminatePosteriorError`.
+- Evidence mass (ADR 0014): `ImpossibleEvidenceError` means probability exactly zero. The rule the
+  three packages share: a binary64 run is untrusted if its final mass is not a normal positive number,
+  or if any product it computed from operands that are all nonzero has magnitude below `floatmin`,
+  whether subnormal or rounded to 0.0 (a structural zero does not count, whatever the order). The
+  Float64 DVE run checks every product through `_checked_product` (the `product` hook of `_combine`
+  and `_sum_out`; the public `combine`/`sum_out` arithmetic is unchanged) and throws the internal
+  `_UnresolvedDecisionMass`; `_exact_rerun` repeats the schedule in `Rational{BigInt}`
+  (`exact_fallback = true`). The value-table exhaustive search falls back to per-strategy scoring
+  when a product is unreliable.
+- Tolerated negative entries (ADR 0014 decision 4, as BayesianNetworks' `marginal` states it): with
+  evidence, an entry takes part when it lies on a configuration consistent with the evidence whose
+  entries are all nonzero (an action value counts as consistent: some strategy reaches it). When one
+  takes part, a mass not above `_joint_atol(atol, n)` or a negative posterior cell raises
+  `IndeterminatePosteriorError`; `atol` is the normalisation tolerance (never DVE's constancy `atol`)
+  and `n` the number of variables, as in the instantiated network. A prior is exempt. DVE decides
+  "takes part" and the signs by Boolean support eliminations over its own `elim` schedule, never by
+  enumeration. The exact rerun accepts tolerated entries and applies the same rule to exact values,
+  which departs from ADR 0014/0016's "the fallback refuses any negative entry"; `stable=true` keeps
+  `FactorDomainError` (ADR 0015). Without evidence the search can beat DVE by a tolerance-sized amount
+  on an information row of negative mass (it maximizes the signed sum); the randomized test bounds
+  the gap. `_has_negative_entry` reads only the kernels mechanisms reference, not ones an
+  intervention replaced.
 
 ## Vignettes
 

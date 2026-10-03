@@ -316,11 +316,70 @@ function check_certificate_solution(m, c, reference::DecisionSolution; exact::Bo
     return c
 end
 
+# Whether every object of a parsed certificate lists its keys in the order the JSON Schema
+# lists its properties: `$ref`s are resolved, and of a `oneOf` the branch whose
+# properties are the object's keys is taken.
+function schema_key_order(value, node, defs)
+    ref = Symbol("\$ref")
+    resolve(n) = haskey(n, ref) ? defs[Symbol(last(split(n[ref], "/")))] : n
+    node = resolve(node)
+    if value isa JSON3.Object
+        if haskey(node, :oneOf)
+            node = only(b
+                        for b in map(resolve, node.oneOf)
+                        if haskey(b, :properties) &&
+                           Set(keys(b.properties)) == Set(keys(value)))
+        end
+        collect(keys(value)) == collect(keys(node.properties)) || return false
+        return all(schema_key_order(v, node.properties[k], defs) for (k, v) in pairs(value))
+    elseif value isa JSON3.Array && haskey(node, :items)
+        return all(schema_key_order(v, node.items, defs) for v in value)
+    end
+    return true
+end
+
+@testset "certificate keys follow the schema, whatever the Julia version" begin
+    # The top level was a `Dict{String,Any}`, which `JSON3.write` emits in string-hash
+    # order; that order changed in Julia 1.13 (review finding 3).
+    docs = joinpath(@__DIR__, "..", "docs", "src")
+    m, companions = dve_certificate_model()
+    rational = (numeric_mode=:rational_exact, exact_tables=companions)
+    cases = [1 => export_dve_certificate(m), 1 => export_dve_certificate(m; rational...),
+             1 => export_dve_certificate(observe(m, :W => :w1)),
+             2 => export_dve_certificate(observe(m, :W => :w1); solution=true),
+             2 => export_dve_certificate(m; rational...,
+                                         solution=DecisionVariableElimination(;
+                                                                              stable=true))]
+    for (version, c) in cases
+        schema = JSON3.read(read(joinpath(docs, "dve-certificate-v$(version).schema.json"),
+                                 String))
+        @test c isa InfluenceDiagrams.OrderedDict{String,Any}
+        @test collect(keys(c)) == String.(schema.required) ==
+              String.(collect(keys(schema.properties)))
+        @test schema_key_order(JSON3.read(JSON3.write(c)), schema,
+                               schema[Symbol("\$defs")])
+    end
+    # The check sees a swap at the top level and one nested in a rational companion.
+    schema = JSON3.read(read(joinpath(docs, "dve-certificate-v1.schema.json"), String))
+    text = JSON3.write(export_dve_certificate(m; rational...))
+    top = replace(text,
+                  "{\"format\":\"ecorecipes.dve-certificate\",\"version\":1," => "{\"version\":1,\"format\":\"ecorecipes.dve-certificate\",")
+    nested = replace(text,
+                     "\"q\":{\"num\":\"1\",\"den\":\"4\"}" => "\"q\":{\"den\":\"4\",\"num\":\"1\"}";
+                     count=1)
+    for swapped in (top, nested)
+        @test swapped != text
+        @test !schema_key_order(JSON3.read(swapped), schema, schema[Symbol("\$defs")])
+    end
+end
+
 @testset "DVE certificates with the solution" begin
     v1 = joinpath(@__DIR__, "fixtures", "dve-certificate-v1")
     @testset "the option off is the version-1 certificate, byte for byte" begin
-        # Captured before the solution profile existed. The exporter string carries the
-        # package version, so a version bump must refresh these files.
+        # The exporter string carries the package version, so a version bump must refresh
+        # these files. They were captured before the solution profile existed, and
+        # recaptured once when the keys were put in schema order (see
+        # docs/src/certificates.md); the content is unchanged.
         u = umbrella_model()
         @test JSON3.write(export_dve_certificate(u)) ==
               read(joinpath(v1, "umbrella.binary64.json"), String)

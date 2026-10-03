@@ -76,15 +76,22 @@ end
 
 _union_axes(f::Factor, g::Factor) = BayesianNetworkInference._union_axes(f, g, :Valuation)
 
+# The product of `factors`, multiplied from left to right as `reduce` does. Every product of
+# the algebra goes through a `product` function: the public operations pass this one, and the
+# binary64 run of decision elimination passes `_checked_product`, which forms the same
+# product and also checks it for underflow.
+_product(factors::AbstractVector{<:Factor}) = reduce(multiply, factors)
+
 # `f` extended to the scope `vars` (a superset, with `axes`) by constant broadcasting,
 # in the order `vars`.
-function _extend(f::Factor{T}, vars::Vector{Symbol}, axes::Vector{FiniteAxis}) where {T}
+function _extend(f::Factor{T}, vars::Vector{Symbol}, axes::Vector{FiniteAxis},
+                 product=_product) where {T}
     missing = [i for i in eachindex(vars) if !(vars[i] in f.vars)]
     g = f
     if !isempty(missing)
         ones_ = Factor(vars[missing], axes[missing],
                        ones(T, Tuple(length(axes[i]) for i in missing)))
-        g = multiply(f, ones_)
+        g = product([f, ones_])
     end
     return reorder(g, vars)
 end
@@ -104,14 +111,14 @@ _as_array(x::Real) = fill(x)
 
 # Pointwise quotient `num / den` with `0/0 := 0` (`den` broadcast over the scope of
 # `num`, which must contain it).
-function _divide(num::Factor, den::Factor)
+function _divide(num::Factor, den::Factor, product=_product)
     vars, axes = _union_axes(num, den)
     length(vars) == length(num.vars) ||
         throw(BayesianNetworkInference.ScopeError(:Valuation,
                                                   "the divisor's scope is not contained in the dividend's",
                                                   setdiff(den.vars, num.vars)))
     n = reorder(num, vars)
-    d = _extend(den, vars, axes)
+    d = _extend(den, vars, axes, product)
     table = map((a, b) -> b == 0 ? zero(a) : a / b, n.table, d.table)
     return Factor(vars, axes, _as_array(table))
 end
@@ -127,9 +134,15 @@ The combination `(φ₁ φ₂, ψ₁ + ψ₂)`.
 """
 combine(v::Valuation, w::Valuation) = Valuation(multiply(v.φ, w.φ), _add(v.ψ, w.ψ))
 combine(v::Valuation, w::Valuation, ws::Valuation...) = combine(combine(v, w), ws...)
-function combine(vs::AbstractVector{<:Valuation})
+combine(vs::AbstractVector{<:Valuation}) = _combine(vs, _product)
+
+# `combine(vs)`, with `product` forming the product of all the probability potentials at
+# once (see `_product`). Folding the potentials and the utility potentials separately
+# associates exactly as folding the valuations does.
+function _combine(vs::AbstractVector{<:Valuation}, product)
     isempty(vs) && return Valuation(unit_factor())
-    return reduce(combine, vs)
+    length(vs) == 1 && return only(vs)
+    return Valuation(product([v.φ for v in vs]), reduce(_add, [v.ψ for v in vs]))
 end
 
 """
@@ -139,17 +152,20 @@ Sum-elimination of the chance variable `x`: `φ' = Σ_x φ`, `ψ' = Σ_x (φ ψ)
 `0/0 := 0`. When `x` is in the scope of `ψ` but not of `φ`, `φ` is first broadcast over
 `x`, so that `Σ_x φ = |X| φ` and `ψ' = (Σ_x ψ) / |X|`.
 """
-function sum_out(v::Valuation, x::Symbol)
+sum_out(v::Valuation, x::Symbol) = _sum_out(v, x, _product)
+
+# `sum_out`, with `product` forming its products (see `_product`).
+function _sum_out(v::Valuation, x::Symbol, product)
     x in scope(v) || return v
     φ = v.φ
     if !(x in φ.vars)
         # broadcast φ over x alone (not over the rest of ψ's scope)
         i = findfirst(==(x), v.ψ.vars)
-        φ = _extend(φ, vcat(φ.vars, x), vcat(φ.axes, v.ψ.axes[i]))
+        φ = _extend(φ, vcat(φ.vars, x), vcat(φ.axes, v.ψ.axes[i]), product)
     end
     φ′ = marginalize(φ, x)
     if x in v.ψ.vars
-        ψ′ = _divide(marginalize(multiply(φ, v.ψ), x), φ′)
+        ψ′ = _divide(marginalize(product([φ, v.ψ]), x), φ′, product)
     else
         ψ′ = v.ψ
     end

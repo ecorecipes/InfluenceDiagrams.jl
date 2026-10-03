@@ -14,10 +14,19 @@ certificate["numeric"]
 certificate["topological_order"]
 ```
 
-The result is a JSON-compatible dictionary. An application or test environment
-that includes JSON3 can serialize it with `JSON3.write(certificate)`. Capture
-finishes before a dictionary is returned; profile, resource or companion
-failures do not return a partial certificate.
+The result is a JSON-compatible dictionary, an `OrderedDict{String,Any}`. An
+application or test environment that includes JSON3 can serialize it with
+`JSON3.write(certificate)`. Capture finishes before a dictionary is returned;
+profile, resource or companion failures do not return a partial certificate.
+
+Its keys, and the fields of every object inside it, follow the order of the
+properties in the JSON Schema, so the serialized key order does not depend on
+the Julia version. The top level used to be a `Dict{String,Any}`, which `JSON3`
+writes in the order of Julia's string hashing, and Julia 1.13 hashes strings
+differently from 1.12. The bytes of every certificate therefore changed once, on
+2026-10-02, when the keys were put in schema order. The test fixtures of
+version 1 were recaptured then, with their content unchanged. A consumer that
+parses the JSON, such as the Lean decoder, ignores key order and is unaffected.
 
 ## Preserved data
 
@@ -133,8 +142,10 @@ can be passed instead.
 ### What the run reads
 
 The run is the production driver of [`decision_elimination`](@ref): the
-binary64 path with its exact-rational fallback for an underflowed evidence mass
-(ADR 0014), or with `stable=true` the exact-rational path. It does not read the
+binary64 path with its exact-rational fallback for an untrusted run (ADR 0014),
+whose evidence mass is not a normal positive number or one of whose products
+of nonzero values fell below the normal range, or with `stable=true` the
+exact-rational path. It does not read the
 model again. Its initial factors are the certificate's own cells: the compiled
 mechanism factors and the materialized utility tables written above, so a
 utility callback is not called a second time.
@@ -283,8 +294,12 @@ These raise [`DVEExportError`](@ref) with code `:UNSUPPORTED_SOLUTION_PROFILE`:
 
 `trace=true` stays `:UNSUPPORTED_TRACE_PROFILE`, with or without a solution.
 Every policy row counts against `max_entries`. A failure of the run itself keeps
-its own type: for example, `IrregularDiagramError`, `ImpossibleEvidenceError`,
-or `FactorDomainError` for a negative cell in exact arithmetic.
+its own type. Examples are `IrregularDiagramError` and `ImpossibleEvidenceError`,
+`FactorDomainError` for a negative cell in a `stable=true` run, and
+`IndeterminatePosteriorError` when tolerated negative entries leave the
+posterior undetermined. The latter is the rule
+[`DecisionVariableElimination`](@ref) documents, so a certificate never records a
+value that the run itself refuses.
 
 ## Actual execution and compilation observations
 

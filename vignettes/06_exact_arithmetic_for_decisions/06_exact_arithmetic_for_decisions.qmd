@@ -251,7 +251,7 @@ tiny = influence_diagram(:X => [:a, :b], :Y => [:a, :b], :Act => [:leave, :act];
                          mechanisms = [:X => (), :Y => (:X,)],
                          decisions = [:Act => ()], utilities = [:V => (:Y, :Act)])
 rounded = bind_cpt(InfluenceDiagramModel(tiny),
-                   [:X => [1 - 1e-6, 1e-6], :Y => [1 + 1e-7 -1e-7; 0.5 0.5]];
+                   [:X => [1 - 1e-6, 1e-6], :Y => [0.5 0.5; 1 + 1e-7 -1e-7]];
                    atol = 1e-6)
 rounded = observe(bind_utility(rounded, :V => [0.0 1.0; 2.0 3.0]), :X => :b)
 try
@@ -261,9 +261,23 @@ catch e
 end
 ```
 
-The evidence mass here is $10^{-6}$, inside the tolerance budget of about $2 \times 10^{-6}$
-for two mechanisms. Removing the negative entry, or binding at a tolerance that rejects it,
-resolves the error.
+The evidence mass here is $10^{-6}$. That is inside the tolerance budget
+$(1 + 10^{-6})^3 - 1 \approx 3 \times 10^{-6}$, which counts three mechanisms: the two chance
+mechanisms and the decision's policy, as in the network a strategy instantiates. Removing the
+negative entry, or binding at a tolerance that rejects it, resolves the error.
+
+The negative entry counts because it lies on a state the evidence allows, `X = b` and
+`Y = b`. In the row of `X = a`, which the evidence rules out, it takes no part in the
+posterior, and the answer is determined. The exhaustive search gives the same answer:
+
+```{julia}
+ruled_out = bind_cpt(InfluenceDiagramModel(tiny),
+                     [:X => [1 - 1e-6, 1e-6], :Y => [1 + 1e-7 -1e-7; 0.5 0.5]];
+                     atol = 1e-6)
+ruled_out = observe(bind_utility(ruled_out, :V => [0.0 1.0; 2.0 3.0]), :X => :b)
+optimize(ruled_out; atol = 1e-6).expected_utility,
+optimize(ruled_out, ExhaustivePolicySearch(); atol = 1e-6).expected_utility
+```
 
 Note also that scoring a strategy goes through the brute-force joint evaluator rather than
 the bucket algorithm, so unlike `optimize` it is bounded by the number of joint states: the

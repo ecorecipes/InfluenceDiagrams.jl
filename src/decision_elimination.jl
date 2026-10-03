@@ -64,11 +64,34 @@ It costs more time and memory than ordinary Float64 arithmetic. Accepted
 rounded CPTs are not silently normalized; `exact_probability_guards` in the
 diagnostics distinguishes exact constancy from mere tolerance acceptance.
 
-With `stable=false` an evidence mass that is not a normal positive Float64 is not
-taken as impossibility: the same schedule is rerun in exact arithmetic and the
-diagnostics record `exact_fallback = true`. `ImpossibleEvidenceError` means
-probability exactly zero. A model with tolerated negative entries whose evidence mass
-is within the tolerance budget raises `IndeterminatePosteriorError` (ADR 0014).
+With `stable=false` the Float64 run is not trusted when its final evidence mass is not a
+normal positive Float64, or when a product it forms from nonzero operands falls below
+`floatmin(Float64)`, coming out subnormal or rounding to `0.0` (an underflowing probability
+row would otherwise look non-constant in an action). A product with an exactly zero
+operand does not count. Either way the same schedule is rerun in exact arithmetic and the
+diagnostics record `exact_fallback = true`. So an evidence mass that is not a normal
+positive Float64 is not taken as impossibility: `ImpossibleEvidenceError` means
+probability exactly zero.
+
+A model may hold tolerated negative entries (in `[-atol, 0)`). With evidence, such an entry
+takes part when it lies on a joint state consistent with the evidence whose entries are all
+nonzero. When one takes part, `IndeterminatePosteriorError` (ADR 0014) is raised if:
+
+- the evidence mass is not larger than the tolerance budget `(1 + atol)^n - 1`, where
+  `atol` is the normalisation tolerance (`optimize`'s `atol`, not this backend's) and `n`
+  counts the chance mechanisms and the decisions, as in the network
+  [`instantiate`](@ref) builds for a strategy;
+- or a posterior cell is negative: a joint state consistent with the evidence has a
+  negative probability.
+
+A negative entry that the evidence rules out, or that an exactly zero entry multiplies, does
+not count, and a prior (no evidence) is exempt. The exact rerun accepts tolerated entries
+and applies the same rule to exact values; `stable=true` does not accept them
+(`FactorDomainError`). Whether an entry takes part, and the signs, are decided exactly, by
+an elimination of the entries' zero pattern and signs over the run's own schedule. A joint
+state fixes every action, so some deterministic strategy reaches it. These are the
+conditions under which [`ExhaustivePolicySearch`](@ref) raises the error for some strategy,
+and [`expected_utility`](@ref) for that strategy, checked here for every strategy at once.
 
 What the policy tables are (docs/LEAN-JULIA-DISCREPANCIES-2026-09-30.md):
 
@@ -236,12 +259,13 @@ function _check_dve_structure(id::AbstractInfluenceDiagram, ev)
 end
 
 """
-    decision_elimination(m::InfluenceDiagramModel; order = MinFill(), atol = 1e-9, normalization_atol = 1e-8, stable=false) -> DecisionSolution
+    decision_elimination(m::InfluenceDiagramModel; order = MinFill(), atol = nothing, normalization_atol = 1e-8, stable=false) -> DecisionSolution
 
 Run decision variable elimination on `m` (see [`DecisionVariableElimination`](@ref)).
 `atol` is the relative per-row tolerance of the constancy check at each
-maximisation; `normalization_atol` is the tolerance of the kernel-normalisation
-precondition check (`optimize`'s `atol`).
+maximisation, and `nothing` (the default) uses `normalization_atol`.
+`normalization_atol` is the tolerance of the kernel-normalisation precondition check
+(`optimize`'s `atol`), and the tolerance of the budget for tolerated negative entries.
 The initial valuations are `(κ_X, 0)` for every chance mechanism (the factor
 `κ(x | parents)` of its kernel) and `(1, u_j)` for every utility, each conditioned on
 the model's evidence. The diagnostics are a named tuple with the elimination `order`
@@ -262,48 +286,200 @@ function decision_elimination(m::InfluenceDiagramModel;
     # diagrams `validate` accepts, which is what `atol = nothing` avoids.
     eff = atol === nothing ? Float64(normalization_atol) : Float64(atol)
     _check_probability_tolerance(eff)
-    return _run_decision_elimination(m, order, eff, stable)
+    return _run_decision_elimination(m, order, eff, Float64(normalization_atol), stable)
 end
 
-# The run of `decision_elimination` after its precondition checks. `observer` and `sources`
-# are passed to `_decision_elimination`; the certificate's solution profile uses them.
+# The run of `decision_elimination` after its precondition checks. `eff` is the constancy
+# tolerance and `normalization_atol` the kernel-normalisation tolerance the model was
+# validated with, which sets the budget for tolerated negative entries. `observer` and
+# `sources` are passed to `_decision_elimination`; the certificate's solution profile uses
+# them.
 function _run_decision_elimination(m::InfluenceDiagramModel, order, eff::Float64,
-                                   stable::Bool; observer=nothing, sources=nothing)
+                                   normalization_atol::Float64, stable::Bool;
+                                   observer=nothing, sources=nothing)
     stable &&
-        return _decision_elimination(m, order, eff, Rational{BigInt}, observer; sources)
+        return _decision_elimination(m, order, eff, Rational{BigInt}, observer; sources,
+                                     normalization_atol)
     # Evidence mass (ADR 0014): the binary64 run decides nothing when its mass is not a
-    # normal positive number, since a positive probability can underflow. Rerun the same
-    # bucket schedule in exact rational arithmetic, where only an exact zero raises
+    # normal positive number, since a positive probability can underflow, nor when a
+    # product of nonzero values fell below the normal range (`_checked_product`). Rerun the
+    # same bucket schedule in exact rational arithmetic, where only an exact zero raises
     # `ImpossibleEvidenceError`, and record the fallback in the diagnostics.
     try
-        return _decision_elimination(m, order, eff, Float64, observer; sources)
+        return _decision_elimination(m, order, eff, Float64, observer; sources,
+                                     normalization_atol)
     catch e
         e isa _UnresolvedDecisionMass || rethrow()
     end
-    _has_negative_entry(m) &&
-        throw(BayesianNetworks.IndeterminatePosteriorError(copy(evidence(m)),
-                                                           "the binary64 evidence mass is below the normal range and the model has a tolerated negative entry, which exact arithmetic does not accept"))
-    sol = _decision_elimination(m, order, eff, Rational{BigInt}, observer; sources)
+    return _exact_rerun(m, order, eff, normalization_atol; observer, sources)
+end
+
+# The exact rerun of an untrusted binary64 run (ADR 0014, ADR 0016): the same bucket
+# schedule in `Rational{BigInt}` on the values as bound, with the value rounded once. Unlike
+# `stable=true`, which keeps `FactorDomainError` for a negative entry (ADR 0015), it accepts
+# tolerated entries and decides them by the rule the binary64 run follows, on exact values
+# (`_check_tolerated_entries`), as BayesianNetworks' exact run does.
+function _exact_rerun(m::InfluenceDiagramModel, order, eff::Float64,
+                      normalization_atol::Float64; observer=nothing, sources=nothing)
+    sol = _decision_elimination(m, order, eff, Rational{BigInt}, observer; sources,
+                                normalization_atol, tolerated=true)
     return DecisionSolution(sol.expected_utility, sol.strategy,
                             merge(sol.diagnostics, (exact_fallback=true,)))
 end
 
-# Whether a bound chance kernel has a tolerated entry in [-atol, 0) (ADR 0007).
+# Whether a mechanism of the model has a tolerated entry in [-atol, 0) (ADR 0007). Only the
+# kernels that mechanisms reference count: an intervention leaves the kernel it replaced
+# bound under its old reference, where no mechanism reads it.
 function _has_negative_entry(m::InfluenceDiagramModel)
-    return any(k -> k isa FiniteKernel && any(<(0), k.table), values(kernels(m.model)))
+    id = syntax(m)
+    return any(mechanisms(id)) do mech
+        return any(<(0), kernel(m.model, variable_name(id, target(id, mech))).table)
+    end
+end
+
+# The products of the binary64 run (see `_product`), which also decide whether the run is
+# trusted. The rule, which the binary64 runs of BayesianNetworks and
+# BayesianNetworkInference follow too: the run is untrusted if its final mass is not a
+# normal positive number, or if a product it computes from operands that are all nonzero has
+# magnitude below `floatmin(Float64)`, whether the product comes out subnormal or rounds all
+# the way to 0.0 (ADR 0014). Such a product has lost significand bits, or all of them, so a
+# probability row can look non-constant in an action when it is not, and every value formed
+# from it inherits the error. `_run_decision_elimination` repeats an untrusted run exactly.
+#
+# A product with an exactly zero operand is a structural zero and does not count, wherever
+# the zero comes among the operands, so each cell of a combination is judged by all its
+# operands at once and the verdict does not depend on the order of multiplication. An
+# operand already below `floatmin` marks the run untrusted by itself.
+function _checked_product(factors::AbstractVector{Factor{Float64}})
+    result = reduce(multiply, factors)
+    length(factors) == 1 && return result
+    any(f -> any(issubnormal, f.table), factors) && throw(_UnresolvedDecisionMass())
+    any(issubnormal, result.table) && throw(_UnresolvedDecisionMass())
+    if any(iszero, result.table) && _may_underflow(factors)
+        # The cells whose operands are all nonzero, in the result's axis order.
+        nonzero = reduce(multiply, [_support(f, !iszero) for f in factors])
+        any(i -> nonzero.table[i] && iszero(result.table[i]), eachindex(result.table)) &&
+            throw(_UnresolvedDecisionMass())
+    end
+    return result
+end
+
+# Whether a product of nonzero operands can round to 0.0: every partial product, in the
+# order `reduce` multiplies, is at least the product of the operands' smallest nonzero
+# magnitudes up to that point. A factor with no nonzero entry makes every cell a
+# structural zero.
+function _may_underflow(factors::AbstractVector{Factor{Float64}})
+    bound = 1.0
+    for f in factors
+        smallest = minimum((abs(x) for x in f.table if !iszero(x)); init=Inf)
+        isinf(smallest) && return false
+        bound *= smallest
+        bound < floatmin(Float64) && return true
+    end
+    return false
+end
+
+# ADR 0014 decision 4 for a run with evidence, a tolerated negative entry among the
+# conditioned chance factors `conditioned`, and evidence mass `pe`: a trusted binary64 run,
+# or the exact rerun on exact values. `ExhaustivePolicySearch` and `expected_utility`
+# evaluate a strategy on its instantiated network, where `BayesianNetworks.marginal` applies
+# this rule to the posterior of all the variables. A negative entry takes part when it lies
+# on a joint state consistent with the evidence whose entries are all nonzero; one that the
+# evidence rules out, or that an exactly zero entry multiplies, does not. When one takes
+# part, the posterior is indeterminate if the evidence mass is not larger than the budget
+# `(1 + atol)^n - 1`, or if a posterior cell is negative. A joint state fixes every action,
+# so some deterministic strategy reaches it, and the run raises when some strategy would.
+# `atol` is the normalisation tolerance, and `n` counts the mechanisms of an instantiated
+# network: one per chance variable and one policy per decision. The evidence has no action
+# among its ancestors, so its mass does not depend on the strategy, except through the
+# kernels' normalisation tolerance.
+function _check_tolerated_entries(pe, ev, conditioned, atol, n, order)
+    _takes_part(conditioned, order) || return nothing
+    budget = BayesianNetworks._joint_atol(atol, n)
+    if !(pe > budget)
+        pe < floatmin(Float64) &&
+            throw(BayesianNetworks.IndeterminatePosteriorError(copy(ev),
+                                                               "a tolerated negative entry lies on a configuration consistent with evidence whose mass is below binary64's normal range"))
+        mass = pe isa Float64 ? pe : _nearest_binary64(pe)
+        throw(BayesianNetworks.IndeterminatePosteriorError(copy(ev),
+                                                           "the evidence mass $(mass) is within the tolerance budget $(budget) of zero"))
+    end
+    _negative_product(conditioned, order) &&
+        throw(BayesianNetworks.IndeterminatePosteriorError(copy(ev),
+                                                           "a posterior cell is negative: a tolerated negative entry gives a joint state consistent with the evidence a negative probability"))
+    return nothing
+end
+
+# Support eliminations: whether a tolerated negative entry takes part, and whether some joint
+# state has a negative product, decided exactly from the zero pattern and the signs of the
+# entries. They never enumerate joint states. Each factor becomes a pair of Boolean factors
+# that mark, for its states, two properties of a product; a product of pairs follows the
+# signs, and eliminating a variable asks whether some state of it has the property
+# (`maximize` of Booleans is `or`). Ranging over every action value is ranging over the
+# strategies. `order` is the run's own schedule, so no table is larger than the run's.
+#
+# `_takes_part`: all entries nonzero, and all entries nonzero with one of them negative.
+function _takes_part(factors, order)
+    pairs = [(_support(f, !iszero), _support(f, <(0))) for f in factors]
+    function product((a1, h1), (a2, h2))
+        return (multiply(a1, a2),
+                _or(multiply(h1, a2), multiply(a1, h2)))
+    end
+    return only(last(_eliminate_support(pairs, order, product)).table)
+end
+
+# `_negative_product`: all entries nonzero with an even number of them negative, and with an
+# odd number of them negative.
+function _negative_product(factors, order)
+    pairs = [(_support(f, >(0)), _support(f, <(0))) for f in factors]
+    function product((e1, o1), (e2, o2))
+        return (_or(multiply(e1, e2), multiply(o1, o2)),
+                _or(multiply(e1, o2), multiply(o1, e2)))
+    end
+    return only(last(_eliminate_support(pairs, order, product)).table)
+end
+
+_support(f::Factor, test) = Factor(f.vars, f.axes, map(test, f.table))
+# Two Boolean factors over the same scope in the same order.
+_or(f::Factor{Bool}, g::Factor{Bool}) = Factor(f.vars, f.axes, map(|, f.table, g.table))
+
+function _eliminate_support(pairs, order, product)
+    remaining = collect(pairs)
+    # The run eliminates every variable of its factors; any other comes last.
+    order = collect(order)
+    for p in pairs, x in first(p).vars
+        x in order || push!(order, x)
+    end
+    for x in order
+        touching = filter(p -> x in first(p).vars, remaining)
+        isempty(touching) && continue
+        filter!(p -> !(x in first(p).vars), remaining)
+        u, v = reduce(product, touching)
+        push!(remaining, (maximize(u, x), maximize(v, x)))
+    end
+    return reduce(product, remaining)
 end
 
 # `sources`, when given, is called as `sources(:chance, name)` and `sources(:utility, name)`
 # and returns the initial factor to use instead of the bound kernel's or utility's
 # (`nothing` keeps the bound one). The DVE certificate passes the exact tables it exports.
+# `atol` is the constancy tolerance; `normalization_atol` sets the budget for tolerated
+# negative entries. An exact run refuses a negative entry with `FactorDomainError`, as
+# `stable=true` documents (ADR 0015), unless `tolerated` (the exact rerun of an untrusted
+# binary64 run, `_exact_rerun`).
 function _decision_elimination(m::InfluenceDiagramModel, order, atol, ::Type{T},
-                               observer=nothing; sources=nothing) where {T}
+                               observer=nothing; sources=nothing,
+                               normalization_atol::Real, tolerated::Bool=false) where {T}
     stable = T == Rational{BigInt}
+    # The binary64 run checks every product it forms for underflow.
+    product = stable ? _product : _checked_product
     id = syntax(m)
     bm = m.model
     ev = evidence(m)
     _check_dve_structure(id, ev)
     vals = Valuation{T}[]
+    # The chance factors conditioned on the evidence, for the tolerated-entry rule.
+    conditioned = Factor{T}[]
     for mech in mechanisms(id)
         x = variable_name(id, target(id, mech))
         ps = Symbol[variable_name(id, p) for p in inputs(id, mech)]
@@ -311,7 +487,8 @@ function _decision_elimination(m::InfluenceDiagramModel, order, atol, ::Type{T},
         given = sources === nothing ? nothing : sources(:chance, x)
         factor = given === nothing ? Factor(bound_kernel, ps, x) : given
         if stable
-            bad = findfirst(value -> !(isfinite(value) && value >= 0), factor.table)
+            bad = findfirst(value -> !(isfinite(value) && (tolerated || value >= 0)),
+                            factor.table)
             bad === nothing ||
                 throw(BayesianNetworkInference.FactorDomainError(:stable_decision_elimination,
                                                                  copy(factor.vars),
@@ -323,7 +500,9 @@ function _decision_elimination(m::InfluenceDiagramModel, order, atol, ::Type{T},
                                          (kind="chance", name=x, parents=ps,
                                           source=bound_kernel, compiled=factor,
                                           value=Valuation(probability)))
-        push!(vals, Valuation(condition(probability, ev)))
+        sliced = condition(probability, ev)
+        push!(conditioned, sliced)
+        push!(vals, Valuation(sliced))
     end
     for (name, u) in m.utilities
         given = sources === nothing ? nothing : sources(:utility, name)
@@ -362,9 +541,9 @@ function _decision_elimination(m::InfluenceDiagramModel, order, atol, ::Type{T},
                 for v in vals
                     push!(x in scope(v) ? touching : rest, v)
                 end
-                combined = combine(touching)
+                combined = _combine(touching, product)
                 max_size = max(max_size, length(combined.φ.table), length(combined.ψ.table))
-                reduced = sum_out(combined, x)
+                reduced = _sum_out(combined, x, product)
                 if observer !== nothing
                     observer(:chance,
                              (variable=x, inputs=findall(v -> x in scope(v), vals),
@@ -392,7 +571,9 @@ function _decision_elimination(m::InfluenceDiagramModel, order, atol, ::Type{T},
                 observer === nothing || observer(:inactive,
                                                  (variable=a, decision=dname, action=first(action.labels)))
             else
-                combined = combine(touching)
+                # A probability row that underflowed stops a binary64 run here, before
+                # `max_out` would compare its rounded entries.
+                combined = _combine(touching, product)
                 max_size = max(max_size, length(combined.φ.table), length(combined.ψ.table))
                 if stable && a in combined.φ.vars
                     position = findfirst(==(a), combined.φ.vars)
@@ -422,19 +603,16 @@ function _decision_elimination(m::InfluenceDiagramModel, order, atol, ::Type{T},
             push!(elim, a)
         end
     end
-    final = combine(vals)
+    final = _combine(vals, product)
     observer === nothing || observer(:final, final)
     isempty(scope(final)) || throw(UneliminatedVariablesError(collect(scope(final))))
     pe = only(final.φ.table)
-    if !stable && !isempty(ev)
-        (isfinite(pe) && pe >= floatmin(Float64)) || throw(_UnresolvedDecisionMass())
-        if _has_negative_entry(m)
-            budget = BayesianNetworks._joint_atol(atol, length(mechanisms(id)))
-            pe > budget ||
-                throw(BayesianNetworks.IndeterminatePosteriorError(copy(ev),
-                                                                   "the evidence mass $(pe) is within the tolerance budget $(budget) of zero"))
-        end
-    end
+    stable || (isfinite(pe) && pe >= floatmin(Float64)) || throw(_UnresolvedDecisionMass())
+    # Tolerated negative entries (ADR 0014 decision 4), in a trusted binary64 run and in the
+    # exact rerun alike. A prior (no evidence) is exempt: it is the model's own law.
+    !isempty(ev) && any(f -> any(<(0), f.table), conditioned) &&
+        _check_tolerated_entries(pe, ev, conditioned, normalization_atol,
+                                 length(variables(id)), elim)
     # Exact arithmetic: only an exact zero reaches this.
     (isempty(ev) || pe > 0) ||
         throw(BayesianNetworks.ImpossibleEvidenceError(copy(ev)))

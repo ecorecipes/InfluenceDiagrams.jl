@@ -180,15 +180,27 @@ therefore avoid those failures while retaining the same information
 restrictions.
 
 The default backends do not report an underflow as impossibility (ADR 0014).
-When the ordinary run ends with an evidence mass that is not a normal positive
-Float64, `DecisionVariableElimination` reruns the same schedule in exact
-rational arithmetic and `ExhaustivePolicySearch` scores strategies one at a
-time through `BayesianNetworks.marginal`, whose own fallback is exact and
-correctly rounded (ADR 0016); both record `exact_fallback = true` in
-the diagnostics. `ImpossibleEvidenceError` therefore means probability exactly
-zero. A model with tolerated negative entries (in `[-atol, 0)`) whose evidence
-mass is not larger than the tolerance budget has no determined answer and
-raises `IndeterminatePosteriorError` instead of returning one.
+A binary64 run is untrusted if its final mass is not a normal positive
+Float64, or if a product it computed from nonzero operands has magnitude
+below `floatmin`, whether subnormal or rounded to `0.0`; a product with an
+exactly zero operand does not count. `DecisionVariableElimination` then reruns
+the same schedule in exact rational arithmetic, and `ExhaustivePolicySearch`
+scores strategies one at a time through `BayesianNetworks.marginal`, whose
+own fallback is exact and correctly rounded (ADR 0016). Both record
+`exact_fallback = true` in the diagnostics. `ImpossibleEvidenceError`
+therefore means probability exactly zero.
+
+A model may hold tolerated negative entries (in `[-atol, 0)`). With evidence,
+such an entry takes part when it lies on a state consistent with the evidence
+whose entries are all nonzero. A state consistent with the evidence ranges over
+every action value, so some strategy reaches it. When an entry takes part, the
+answer is not determined if the evidence mass is not larger than the tolerance
+budget `(1 + atol)^n - 1`, or if a posterior cell is negative. Then every
+backend raises `IndeterminatePosteriorError` instead of returning an answer.
+Here `atol` is the normalisation tolerance and `n` the number of variables, as
+in an instantiated network. An entry that the evidence rules out does not
+count, and a prior is exempt. The exact rerun applies the same rule to exact
+values; `stable=true` refuses a negative entry (`FactorDomainError`).
 
 Exact arithmetic on stored values is not the same as exact normalization of
 those values. A rounded CPT accepted within the model's `atol` need not sum
