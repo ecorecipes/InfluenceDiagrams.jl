@@ -390,15 +390,17 @@ Julia/compiler/IEEE correctness theorem.
 
 ## Vignettes
 
-Rendered vignettes live in [`vignettes/`](vignettes/) and are published in the
-[documentation](https://ecorecipes.github.io/InfluenceDiagrams.jl/):
+| # | Vignette | Description |
+|---|---|---|
+| 1 | [Influence diagrams as attributed C-sets](https://github.com/ecorecipes/InfluenceDiagrams.jl/blob/main/vignettes/01_influence_diagrams/01_influence_diagrams.md) | The schema: decisions, information arcs, utilities and precedence; validation; conversion to and from Bayesian networks |
+| 2 | [Policies, instantiation and expected utility](https://github.com/ecorecipes/InfluenceDiagrams.jl/blob/main/vignettes/02_policies_and_expected_utility/02_policies_and_expected_utility.md) | Policies and strategies, `instantiate` as a Bayesian network, and expected utility |
+| 3 | [Optimisation: exhaustive search versus decision variable elimination](https://github.com/ecorecipes/InfluenceDiagrams.jl/blob/main/vignettes/03_optimisation_exhaustive_vs_dve/03_optimisation_exhaustive_vs_dve.md) | Exhaustive policy search, the valuation algebra and the strong elimination order, with agreement and timing |
+| 4 | [Value of information](https://github.com/ecorecipes/InfluenceDiagrams.jl/blob/main/vignettes/04_value_of_information/04_value_of_information.md) | The value of information on the umbrella problem, a test-then-act problem and the grazing survey |
+| 5 | [Composing ecology and management](https://github.com/ecorecipes/InfluenceDiagrams.jl/blob/main/vignettes/05_composing_ecology_and_management/05_composing_ecology_and_management.md) | The five analyses of the grazing-management diagram built on the reference ecological network |
+| 6 | [Exact arithmetic for decisions](https://github.com/ecorecipes/InfluenceDiagrams.jl/blob/main/vignettes/06_exact_arithmetic_for_decisions/06_exact_arithmetic_for_decisions.md) | Where Float64 cannot decide, the exact `stable=true` backend and the automatic fallback, and what exact means |
 
-1. Influence diagrams: decisions, information arcs, utilities and validation.
-2. Policies and expected utility, and `instantiate` as a Bayesian network.
-3. Optimisation: exhaustive policy search against decision variable elimination.
-4. Value of information and of perfect information.
-5. Composing an ecological model with a management decision.
-6. Exact arithmetic for decisions: where `stable=true` matters and where it does not.
+Each vignette is also published as a tutorial in the [documentation](https://ecorecipes.github.io/InfluenceDiagrams.jl/);
+the sources are the `.qmd` files in [`vignettes/`](vignettes/).
 
 ## Development
 
