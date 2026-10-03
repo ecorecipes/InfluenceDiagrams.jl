@@ -286,9 +286,13 @@ analyses to published ecological networks.
 
 ## References
 
+```@raw html
 <div id="refs" class="references csl-bib-body hanging-indent">
+```
 
+```@raw html
 <div id="ref-Marcot2006" class="csl-entry">
+```
 
 Marcot, Bruce G., J. Douglas Steventon, Glenn D. Sutherland, and Robert
 K. McCann. 2006. “Guidelines for Developing and Updating Bayesian Belief
@@ -296,15 +300,23 @@ Networks Applied to Ecological Modeling and Conservation.” *Canadian
 Journal of Forest Research* 36 (12): 3063–74.
 <https://doi.org/10.1139/x06-135>.
 
+```@raw html
 </div>
+```
 
+```@raw html
 <div id="ref-Runge2011" class="csl-entry">
+```
 
 Runge, Michael C., Sarah J. Converse, and James E. Lyons. 2011. “Which
 Uncertainty? Using Expert Elicitation and Expected Value of Information
 to Design an Adaptive Program.” *Biological Conservation* 144 (4):
 1214–23. <https://doi.org/10.1016/j.biocon.2010.12.020>.
 
+```@raw html
 </div>
+```
 
+```@raw html
 </div>
+```

@@ -148,8 +148,10 @@ bn = instantiate(m1)
 syntax(bn)
 ```
 
+```@raw html
 <div class="c-set">
-<span class="c-set-summary">BayesianNetworks.BayesNet {Variable:3, State:7, Mechanism:3, Input:2, Label:0, Position:0, Ref:0}</span>
+```
+BayesianNetworks.BayesNet {Variable:3, State:7, Mechanism:3, Input:2, Label:0, Position:0, Ref:0}
 
 | Variable | variable_name | space_ref |
 |---------:|--------------:|----------:|
@@ -178,7 +180,9 @@ syntax(bn)
 |     1 |               1 |              1 |              1 |
 |     2 |               3 |              2 |              1 |
 
+```@raw html
 </div>
+```
 
 Proposition 5 says the result is a valid closed network, which is
 checked structurally and numerically:
@@ -290,13 +294,21 @@ given one.
 
 ## References
 
+```@raw html
 <div id="refs" class="references csl-bib-body hanging-indent">
+```
 
+```@raw html
 <div id="ref-Shachter1986" class="csl-entry">
+```
 
 Shachter, Ross D. 1986. “Evaluating Influence Diagrams.” *Operations
 Research* 34 (6): 871–82. <https://doi.org/10.1287/opre.34.6.871>.
 
+```@raw html
 </div>
+```
 
+```@raw html
 </div>
+```

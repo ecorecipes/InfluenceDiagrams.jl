@@ -273,38 +273,58 @@ twice over to price an observation.
 
 ## References
 
+```@raw html
 <div id="refs" class="references csl-bib-body hanging-indent">
+```
 
+```@raw html
 <div id="ref-JensenJensenDittmer1994" class="csl-entry">
+```
 
 Jensen, Frank, Finn V. Jensen, and Søren L. Dittmer. 1994. “From
 Influence Diagrams to Junction Trees.” *Proceedings of the Tenth
 Conference on Uncertainty in Artificial Intelligence (UAI 1994)*,
 367–73.
 
+```@raw html
 </div>
+```
 
+```@raw html
 <div id="ref-LauritzenNilsson2001" class="csl-entry">
+```
 
 Lauritzen, Steffen L., and Dennis Nilsson. 2001. “Representing and
 Solving Decision Problems with Limited Information.” *Management
 Science* 47 (9): 1235–51. <https://doi.org/10.1287/mnsc.47.9.1235.9779>.
 
+```@raw html
 </div>
+```
 
+```@raw html
 <div id="ref-Shachter1986" class="csl-entry">
+```
 
 Shachter, Ross D. 1986. “Evaluating Influence Diagrams.” *Operations
 Research* 34 (6): 871–82. <https://doi.org/10.1287/opre.34.6.871>.
 
+```@raw html
 </div>
+```
 
+```@raw html
 <div id="ref-TatmanShachter1990" class="csl-entry">
+```
 
 Tatman, Joseph A., and Ross D. Shachter. 1990. “Dynamic Programming and
 Influence Diagrams.” *IEEE Transactions on Systems, Man, and
 Cybernetics* 20 (2): 365–79. <https://doi.org/10.1109/21.52545>.
 
+```@raw html
 </div>
+```
 
+```@raw html
 </div>
+```

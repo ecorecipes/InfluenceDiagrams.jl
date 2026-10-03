@@ -346,6 +346,10 @@ arithmetic rather than about the model.
 
 ## References
 
+```@raw html
 <div id="refs">
+```
 
+```@raw html
 </div>
+```

@@ -386,45 +386,69 @@ that arise when no-forgetting is dropped, which is what
 information before investing in monitoring, and is the source of the
 framing of the grazing example.
 
+```@raw html
 <div id="refs" class="references csl-bib-body hanging-indent">
+```
 
+```@raw html
 <div id="ref-Howard1966" class="csl-entry">
+```
 
 Howard, Ronald A. 1966. “Information Value Theory.” *IEEE Transactions
 on Systems Science and Cybernetics* 2 (1): 22–26.
 <https://doi.org/10.1109/TSSC.1966.300074>.
 
+```@raw html
 </div>
+```
 
+```@raw html
 <div id="ref-LauritzenNilsson2001" class="csl-entry">
+```
 
 Lauritzen, Steffen L., and Dennis Nilsson. 2001. “Representing and
 Solving Decision Problems with Limited Information.” *Management
 Science* 47 (9): 1235–51. <https://doi.org/10.1287/mnsc.47.9.1235.9779>.
 
+```@raw html
 </div>
+```
 
+```@raw html
 <div id="ref-Raiffa1968" class="csl-entry">
+```
 
 Raiffa, Howard. 1968. *Decision Analysis: Introductory Lectures on
 Choices Under Uncertainty*. Addison-Wesley.
 
+```@raw html
 </div>
+```
 
+```@raw html
 <div id="ref-Runge2011" class="csl-entry">
+```
 
 Runge, Michael C., Sarah J. Converse, and James E. Lyons. 2011. “Which
 Uncertainty? Using Expert Elicitation and Expected Value of Information
 to Design an Adaptive Program.” *Biological Conservation* 144 (4):
 1214–23. <https://doi.org/10.1016/j.biocon.2010.12.020>.
 
+```@raw html
 </div>
+```
 
+```@raw html
 <div id="ref-Shachter1986" class="csl-entry">
+```
 
 Shachter, Ross D. 1986. “Evaluating Influence Diagrams.” *Operations
 Research* 34 (6): 871–82. <https://doi.org/10.1287/opre.34.6.871>.
 
+```@raw html
 </div>
+```
 
+```@raw html
 </div>
+```

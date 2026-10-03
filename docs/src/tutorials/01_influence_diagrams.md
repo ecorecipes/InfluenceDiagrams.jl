@@ -101,8 +101,10 @@ id = influence_diagram(:Weather => [:sunny, :rainy],
                        utilities = [:U => (:Weather, :Umbrella)])
 ```
 
+```@raw html
 <div class="c-set">
-<span class="c-set-summary">InfluenceDiagrams.InfluenceDiagram {Variable:3, State:7, Mechanism:2, Input:1, Decision:1, InformationInput:1, Utility:1, UtilityInput:2, DecisionPrecedence:0, Label:0, Position:0, Ref:0}</span>
+```
+InfluenceDiagrams.InfluenceDiagram {Variable:3, State:7, Mechanism:2, Input:1, Decision:1, InformationInput:1, Utility:1, UtilityInput:2, DecisionPrecedence:0, Label:0, Position:0, Ref:0}
 
 | Variable | variable_name | space_ref |
 |---------:|--------------:|----------:|
@@ -146,7 +148,9 @@ id = influence_diagram(:Weather => [:sunny, :rainy],
 |            1 |            1 |                1 |                1 |
 |            2 |            1 |                3 |                2 |
 
+```@raw html
 </div>
+```
 
 Every object is inspectable. Decisions are named after their action
 variable unless told otherwise, and the information set is returned in
@@ -336,37 +340,57 @@ strategy is worth.
 
 ## References
 
+```@raw html
 <div id="refs" class="references csl-bib-body hanging-indent">
+```
 
+```@raw html
 <div id="ref-BielzaGomezShenoy2011" class="csl-entry">
+```
 
 Bielza, Concha, Manuel Gómez, and Prakash P. Shenoy. 2011. “A Review of
 Representation Issues and Modeling Challenges with Influence Diagrams.”
 *Omega* 39 (3): 227–41. <https://doi.org/10.1016/j.omega.2010.07.003>.
 
+```@raw html
 </div>
+```
 
+```@raw html
 <div id="ref-HowardMatheson2005" class="csl-entry">
+```
 
 Howard, Ronald A., and James E. Matheson. 2005. “Influence Diagrams.”
 *Decision Analysis* 2 (3): 127–43.
 <https://doi.org/10.1287/deca.1050.0020>.
 
+```@raw html
 </div>
+```
 
+```@raw html
 <div id="ref-LauritzenNilsson2001" class="csl-entry">
+```
 
 Lauritzen, Steffen L., and Dennis Nilsson. 2001. “Representing and
 Solving Decision Problems with Limited Information.” *Management
 Science* 47 (9): 1235–51. <https://doi.org/10.1287/mnsc.47.9.1235.9779>.
 
+```@raw html
 </div>
+```
 
+```@raw html
 <div id="ref-Shachter1986" class="csl-entry">
+```
 
 Shachter, Ross D. 1986. “Evaluating Influence Diagrams.” *Operations
 Research* 34 (6): 871–82. <https://doi.org/10.1287/opre.34.6.871>.
 
+```@raw html
 </div>
+```
 
+```@raw html
 </div>
+```
