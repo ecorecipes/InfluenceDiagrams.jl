@@ -223,7 +223,7 @@ t_dve = @elapsed sol_dve = optimize(g)
  seconds_exhaustive = round(t_ex; digits = 3), seconds_dve = round(t_dve; digits = 3))
 ```
 
-    (exhaustive = 36.52414686249998, dve = 36.524146862500004, seconds_exhaustive = 0.518, seconds_dve = 0.001)
+    (exhaustive = 36.52414686249998, dve = 36.524146862500004, seconds_exhaustive = 0.244, seconds_dve = 0.001)
 
 ``` julia
 (julia = string(VERSION), cpu = Sys.CPU_NAME, threads = Threads.nthreads(),
