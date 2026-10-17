@@ -82,6 +82,8 @@ IrregularDiagramError
 EvidenceOnActionError
 UneliminatedVariablesError
 DVEExportError
+ExogenousCoverageError
+ContextStateCountError
 ```
 
 ## Policies and strategies
@@ -165,6 +167,7 @@ DecisionBackend
 ExhaustivePolicySearch
 DecisionVariableElimination
 DecisionSolution
+DecisionContext
 optimize
 decision_elimination
 strong_elimination_order

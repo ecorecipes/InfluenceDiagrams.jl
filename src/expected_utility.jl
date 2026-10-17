@@ -150,7 +150,7 @@ function expected_utility(bm::BayesModel; max_states::Integer=1_000_000,
 end
 
 """
-    expected_utility(m::InfluenceDiagramModel, strategy = strategy(m); max_states = 1_000_000, atol = DEFAULT_ATOL, stable=false) -> Float64
+    expected_utility(m::InfluenceDiagramModel, strategy = strategy(m); max_states = 1_000_000, atol = DEFAULT_ATOL, stable=false, context = nothing) -> Float64
     expected_utility(m, :D => :a; kwargs...)
     expected_utility(m, [:D => :a, :E => :b]; kwargs...)
 
@@ -165,10 +165,29 @@ joint or conditional evaluation, so rounded models use the same normalization
 tolerance throughout both oracle and optimized paths.
 `stable=true` selects per-utility log-domain marginals and compensated accumulation;
 the default retains the original reference arithmetic for reproducibility.
+
+`context` is a [`DecisionContext`](@ref): the model may then have exogenous variables
+(chance variables without a mechanism), which its prior `μ` must cover exactly, and its
+terminal utility `c` is added to the total utility `U`, so the result is
+`Σ_x μ(x) E_σ[U + c | x]`. It is computed by the reference algorithm, once per joint
+prior state `x` of positive mass: the exogenous variables are fixed at `x` with
+[`do_intervention`](@ref), the terminal becomes an ordinary utility node (read on the
+diagonal where a variable repeats), and the conditional expected utilities are weighted by
+`μ(x)` and added (with `stable = true`, each conditional one is stable and the sum
+compensated). A context raises `ArgumentError` when the model carries evidence; see
+[`DecisionContext`](@ref) for its other checks. `context = nothing` (the default) or an
+empty `DecisionContext()` leaves the computation exactly as above.
 """
 function expected_utility(m::InfluenceDiagramModel, σ::Strategy=m.strategy;
                           max_states::Integer=1_000_000,
-                          atol::Real=BayesianNetworks.DEFAULT_ATOL, stable::Bool=false)
+                          atol::Real=BayesianNetworks.DEFAULT_ATOL, stable::Bool=false,
+                          context::Union{Nothing,DecisionContext}=nothing)
+    ctx = _active_context(context)
+    if ctx !== nothing
+        return _contextual_expected_utility(_context_cases(m, ctx; atol=atol), σ;
+                                            max_states=max_states, atol=atol,
+                                            stable=stable)
+    end
     _check_evidence_variables(syntax(m), evidence(m))
     return expected_utility(instantiate(m, σ; atol=atol); max_states=max_states, atol=atol,
                             stable)

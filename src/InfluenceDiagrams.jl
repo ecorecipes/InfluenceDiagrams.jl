@@ -117,7 +117,7 @@ export InfluenceDiagramError, UnknownDecisionError, UnknownUtilityError,
        PolicySignatureError, UtilityScopeError, IncompleteStrategyError,
        MissingUtilityError, PolicySearchTooLargeError, UnsupportedAggregationError,
        IrregularDiagramError, EvidenceOnActionError, UneliminatedVariablesError,
-       DVEExportError
+       DVEExportError, ExogenousCoverageError, ContextStateCountError
 # schemas.jl
 export SchInfluenceDiagram, AbstractInfluenceDiagram, InfluenceDiagramUntyped,
        InfluenceDiagram
@@ -149,6 +149,8 @@ export InfluenceDiagramModel, bayes_model, strategy, bound_utilities, bind_utili
        all_deterministic_strategies, n_deterministic_strategies
 # instantiate.jl
 export instantiate, policy_mechanism_name
+# context.jl
+export DecisionContext
 # expected_utility.jl
 export total_utility, expected_utility
 # exhaustive.jl
@@ -180,6 +182,7 @@ include("policies.jl")
 include("utilities.jl")
 include("model.jl")
 include("instantiate.jl")
+include("context.jl")
 include("expected_utility.jl")
 include("exhaustive.jl")
 include("valuation.jl")

@@ -233,6 +233,49 @@ struct IrregularDiagramError <: InfluenceDiagramError
     what::Symbol
 end
 
+"""
+    ExogenousCoverageError(uncovered, not_exogenous)
+
+The prior of a [`DecisionContext`](@ref) does not list exactly the exogenous variables of
+the model (chance variables without a mechanism): `uncovered` are exogenous variables it
+leaves out (all of them when the context has no prior), and `not_exogenous` are variables
+it lists that have a mechanism or are action variables.
+"""
+struct ExogenousCoverageError <: InfluenceDiagramError
+    uncovered::Vector{Symbol}
+    not_exogenous::Vector{Symbol}
+end
+
+"""
+    ContextStateCountError(part, variable, expected, got)
+
+The table of a [`DecisionContext`](@ref)'s `part` (`:prior` or `:terminal`) has `got`
+entries along the axis of `variable`, which has `expected` states.
+"""
+struct ContextStateCountError <: InfluenceDiagramError
+    part::Symbol
+    variable::Symbol
+    expected::Int
+    got::Int
+end
+
+function Base.showerror(io::IO, e::ExogenousCoverageError)
+    print(io, "ExogenousCoverageError: the context's prior must cover exactly the ",
+          "exogenous variables (no mechanism, not an action)")
+    isempty(e.uncovered) ||
+        print(io, "; it leaves out ", join(e.uncovered, ", "))
+    isempty(e.not_exogenous) ||
+        print(io, "; it lists ", join(e.not_exogenous, ", "),
+              ", which have a mechanism or are action variables")
+    return nothing
+end
+
+function Base.showerror(io::IO, e::ContextStateCountError)
+    return print(io, "ContextStateCountError: the context's ", e.part, " table has ", e.got,
+                 " entries along the axis of :", e.variable, ", which has ", e.expected,
+                 " states")
+end
+
 function Base.showerror(io::IO, e::UnknownDecisionError)
     return print(io, "UnknownDecisionError: no decision named :", e.name,
                  " and no decision controls a variable named :", e.name)

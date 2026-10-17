@@ -45,6 +45,13 @@ are all nonzero. Then the posterior is indeterminate if the evidence mass is not
 than the tolerance budget `(1 + atol)^n - 1` (`n` the number of variables, each with a
 mechanism once the strategy is instantiated), or if a posterior cell is negative. A
 negative entry that the evidence rules out does not count, and a prior is exempt.
+
+With a [`DecisionContext`](@ref) (the `context` keyword of [`optimize`](@ref)) every
+branch maximises the contextual expected utility `Σ_x μ(x) E_σ[U + c | x]`: the value
+tables carry the prior `μ` as one more factor and the terminal `c` as one more utility (read
+on the diagonal of a repeated variable), and `brute_force = true` and `stable = true` score
+each strategy with `expected_utility(m, σ; context)`, the reference decomposition over the
+prior states. The model may then have exogenous variables, as the context requires.
 """
 struct ExhaustivePolicySearch <: DecisionBackend
     max_policies::Int
@@ -98,6 +105,12 @@ strategy can be installed with [`set_policy`](@ref)). `atol` is the
 kernel-normalisation tolerance of the precondition check, to be matched to the `atol` a
 model read from a file was parsed with; the tolerance of
 [`DecisionVariableElimination`](@ref)'s own constancy check is a field of the backend.
+
+`context` (keyword, default `nothing`) is a [`DecisionContext`](@ref): a joint prior over
+the model's exogenous variables, which the model may then have instead of being closed, and
+a terminal utility added to the total utility. Only [`ExhaustivePolicySearch`](@ref) takes
+one; [`DecisionVariableElimination`](@ref) raises `ArgumentError`, as does a context on a
+model with evidence. An empty `DecisionContext()` is the same as none.
 """
 function optimize(m::InfluenceDiagramModel;
                   backend::DecisionBackend=DecisionVariableElimination(),
@@ -110,9 +123,19 @@ end
 # condition; `validate(::InfluenceDiagramModel)` throws `EvidenceOnActionError`).
 # `atol` is the kernel-normalisation tolerance, which must match the one a model read
 # from a file was parsed with.
+# With an (active) decision context the model need not be closed: its exogenous variables
+# must be exactly those the context's prior covers (`_check_context`, which also refuses
+# evidence), and everything else is checked as without one.
 function _check_solvable(m::InfluenceDiagramModel;
-                         atol::Real=BayesianNetworks.DEFAULT_ATOL)
-    validate(m; closed=true, unique_names=true, semantics=true, atol=atol)
+                         atol::Real=BayesianNetworks.DEFAULT_ATOL,
+                         context::Union{Nothing,DecisionContext}=nothing)
+    if context === nothing
+        validate(m; closed=true, unique_names=true, semantics=true, atol=atol)
+    else
+        _refuse_context_evidence(m)
+        validate(m; closed=false, unique_names=true, semantics=true, atol=atol)
+        _check_context(m, context; atol=atol)
+    end
     return nothing
 end
 
@@ -123,8 +146,11 @@ end
 # consistent with the evidence whose entries are all nonzero, for each cell of the `keep`
 # variables (`nothing` otherwise): it takes part in a strategy's instantiated network
 # exactly when the strategy selects such a cell.
+# With a decision `context`, its prior is one more factor (first, over its variables) and its
+# terminal one more utility (last; a repeated variable indexes its diagonal).
 function _value_tables(m::InfluenceDiagramModel, keep::Vector{Symbol};
-                       max_states::Integer, track_negative::Bool=false)
+                       max_states::Integer, track_negative::Bool=false,
+                       context::Union{Nothing,DecisionContext}=nothing)
     id = syntax(m)
     bm = m.model
     vars = variable_names(id)
@@ -149,6 +175,16 @@ function _value_tables(m::InfluenceDiagramModel, keep::Vector{Symbol};
         all(isfinite, table) ||
             throw(UtilityScopeError(name, :value, "finite utility entries", table))
         push!(utils, (table, Int[pos[a.name] for a in axes]))
+    end
+    if context !== nothing
+        if context.prior !== nothing
+            pvars, μ = context.prior
+            pushfirst!(factors_, (μ, Int[pos[x] for x in pvars]))
+        end
+        if context.terminal !== nothing
+            tvars, c = context.terminal
+            push!(utils, (c, Int[pos[x] for x in tvars]))
+        end
     end
     ev = [(pos[x], label_index(only(factors(space(bm, x))), s)) for (x, s) in evidence(m)]
     kpos = Int[pos[x] for x in keep]
@@ -192,8 +228,10 @@ end
 
 function optimize(m::InfluenceDiagramModel, b::ExhaustivePolicySearch;
                   max_states::Integer=1_000_000,
-                  atol::Real=BayesianNetworks.DEFAULT_ATOL)
-    _check_solvable(m; atol=atol)
+                  atol::Real=BayesianNetworks.DEFAULT_ATOL,
+                  context::Union{Nothing,DecisionContext}=nothing)
+    ctx = _active_context(context)
+    _check_solvable(m; atol=atol, context=ctx)
     id = syntax(m)
     ds = decision_order(id)
     names_ = Symbol[decision_name(id, d) for d in ds]
@@ -204,9 +242,17 @@ function optimize(m::InfluenceDiagramModel, b::ExhaustivePolicySearch;
     best = -Inf
     best_strategy = Strategy()
     if b.brute_force || b.stable
+        # With a context, the reference decomposition over the prior states, built once.
+        cases = ctx === nothing ? nothing : _context_cases(m, ctx; atol=atol)
         for σ in all_deterministic_strategies(m)
             eu = try
-                expected_utility(m, σ; max_states=max_states, atol=atol, stable=b.stable)
+                if cases === nothing
+                    expected_utility(m, σ; max_states=max_states, atol=atol,
+                                     stable=b.stable)
+                else
+                    _contextual_expected_utility(cases, σ; max_states=max_states,
+                                                 atol=atol, stable=b.stable)
+                end
             catch err
                 err isa BayesianNetworks.ImpossibleEvidenceError || rethrow()
                 continue
@@ -237,7 +283,7 @@ function optimize(m::InfluenceDiagramModel, b::ExhaustivePolicySearch;
     ev = evidence(m)
     track = !isempty(ev) && _has_negative_entry(m)
     N, Z, negative, unreliable = _value_tables(m, keep; max_states=max_states,
-                                               track_negative=track)
+                                               track_negative=track, context=ctx)
     budget = track ? BayesianNetworks._joint_atol(atol, length(variable_names(id))) : 0.0
     # An underflowed or negative product makes a zero or small binary64 mass undecided, so
     # search strategy by strategy instead: `expected_utility` evaluates each one through
@@ -245,7 +291,7 @@ function optimize(m::InfluenceDiagramModel, b::ExhaustivePolicySearch;
     # and skips only strategies that make the evidence exactly impossible (ADR 0014).
     if unreliable
         sol = optimize(m, ExhaustivePolicySearch(b.max_policies, true, false);
-                       max_states, atol)
+                       max_states, atol, context=ctx)
         return DecisionSolution(sol.expected_utility, sol.strategy,
                                 merge(sol.diagnostics, (exact_fallback=true,)))
     end

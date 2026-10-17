@@ -641,7 +641,10 @@ function _decision_elimination(m::InfluenceDiagramModel, order, atol, ::Type{T},
 end
 
 function optimize(m::InfluenceDiagramModel, b::DecisionVariableElimination;
-                  atol::Real=BayesianNetworks.DEFAULT_ATOL)
+                  atol::Real=BayesianNetworks.DEFAULT_ATOL,
+                  context::Union{Nothing,DecisionContext}=nothing)
+    _active_context(context) === nothing ||
+        throw(ArgumentError("DecisionVariableElimination does not take a decision context; optimise against a context with ExhaustivePolicySearch"))
     return decision_elimination(m; order=b.order, atol=b.atol, normalization_atol=atol,
                                 stable=b.stable)
 end

@@ -171,6 +171,15 @@ ordered but neither knows the other's action: that is a forgetting diagram, and 
 - The valuation layer reuses BayesianNetworkInference's `_union_axes` and `_broadcastable` helpers for scope/axis agreement and alignment. Keep those internal cross-package contracts in step.
 - Every optimised path is checked against a slower oracle (`joint_distribution`, exhaustive policy search) on small models; DVE ties resolve to the first action label: `argmax_table` compares with `==`, so `-0.0` and `0.0` tie as the reals they are, and every backend rejects a NaN or infinite utility (`UtilityScopeError`). Ties that Float64 rounding creates or breaks remain an approximation; `stable=true` compares exact rationals.
 - Models are immutable values: every operation returns a new model.
+- Decision contexts (`src/context.jl`): `DecisionContext(; prior, terminal)` is a joint prior over the
+  exogenous variables (no mechanism, not an action; the prior must list exactly those) and a terminal
+  utility (variables may repeat, read on the diagonal), taken by `expected_utility` and
+  `optimize(m, ::ExhaustivePolicySearch)` through `context`. Only then may a model be open
+  (`_check_solvable` relaxes `closed` under a context, nothing else). The value tables carry the
+  prior as a factor and the terminal as a utility; the reference (`brute_force`, `stable`) fixes the
+  exogenous variables per prior state with `do_intervention`. Evidence or DVE with a context is
+  `ArgumentError`. `nothing` or an empty context takes the unchanged path, operation for operation.
+  CategoricalInfluenceDiagrams' `contextual_optimize` delegates to it: keep the semantics in step.
 - Evidence mass (ADR 0014): `ImpossibleEvidenceError` means probability exactly zero. The rule the
   three packages share: a binary64 run is untrusted if its final mass is not a normal positive number,
   or if any product it computed from operands that are all nonzero has magnitude below `floatmin`,
