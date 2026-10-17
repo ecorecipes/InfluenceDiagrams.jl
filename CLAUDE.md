@@ -21,6 +21,11 @@ record API gaps instead.
 - `src/policies.jl`, `src/utilities.jl`, `src/model.jl`: `InfluenceDiagramModel` = `BayesModel{InfluenceDiagram}` + bound utilities + `Strategy`; decision operations edit the strategy, never the syntax (except `do_intervention` on an action, which removes the decision).
 - `src/instantiate.jl`, `src/expected_utility.jl`: Proposition 5 and 6; the brute-force reference.
 - `src/exhaustive.jl`, `src/valuation.jl`, `src/decision_elimination.jl`: the oracle and the `(φ, ψ)` division algebra with the strong elimination order `I₀ ≺ D₁ ≺ I₁ ≺ … ≺ Dₙ ≺ Iₙ`; exact only with no-forgetting, checked at run time (`IrregularDiagramError`).
+  The oracle's order is `all_deterministic_strategies` (`src/model.jl`; model and syntax forms, a lazy
+  iterator over `Iterators.product` of each decision's `all_deterministic_policies` in `decision_order`,
+  first decision fastest, equally named decisions once); its brute-force branch iterates it, the
+  value-table branch indexes the same per-decision lists. `n_deterministic_strategies` is the `BigInt`
+  count. CategoricalInfluenceDiagrams' tests and vignettes enumerate strategies with it.
 
 ## No-forgetting, and why `validate` does not require it
 

@@ -16,9 +16,10 @@ abstract type DecisionBackend end
 """
     ExhaustivePolicySearch(; max_policies = 1_000_000, brute_force = false, stable = false)
 
-Enumerate every deterministic strategy (the product over decisions of
-[`all_deterministic_policies`](@ref)) and return the best one; the first strategy in
-enumeration order attaining the maximum is returned when several tie. Throws
+Enumerate every deterministic strategy ([`all_deterministic_strategies`](@ref): the
+product over decisions of [`all_deterministic_policies`](@ref), the first decision in
+[`decision_order`](@ref) varying fastest) and return the best one; the first strategy in
+that order attaining the maximum is returned when several tie. Throws
 [`PolicySearchTooLargeError`](@ref) when there are more than `max_policies` strategies.
 
 By default each strategy is scored from a value table computed once by enumerating
@@ -196,15 +197,14 @@ function optimize(m::InfluenceDiagramModel, b::ExhaustivePolicySearch;
     id = syntax(m)
     ds = decision_order(id)
     names_ = Symbol[decision_name(id, d) for d in ds]
-    total = prod(BigInt[n_deterministic_policies(m, d) for d in ds]; init=BigInt(1))
+    # `_check_solvable` demands unique names, so every decision of `ds` has its own policy
+    # and this is the product over `ds` of `n_deterministic_policies`.
+    total = n_deterministic_strategies(m)
     total <= b.max_policies || throw(PolicySearchTooLargeError(total, b.max_policies))
-    per_decision = [all_deterministic_policies(m, d) for d in ds]
     best = -Inf
     best_strategy = Strategy()
     if b.brute_force || b.stable
-        for choice in Iterators.product(per_decision...)
-            σ = Strategy(Dict{Symbol,AbstractPolicy}(names_[i] => choice[i]
-                                                     for i in eachindex(names_)))
+        for σ in all_deterministic_strategies(m)
             eu = try
                 expected_utility(m, σ; max_states=max_states, atol=atol, stable=b.stable)
             catch err
@@ -249,6 +249,9 @@ function optimize(m::InfluenceDiagramModel, b::ExhaustivePolicySearch;
         return DecisionSolution(sol.expected_utility, sol.strategy,
                                 merge(sol.diagnostics, (exact_fallback=true,)))
     end
+    # The value table indexes each decision's policies, in the order of
+    # `all_deterministic_strategies` (the first decision fastest).
+    per_decision = [all_deterministic_policies(m, d) for d in ds]
     kpos = Dict{Symbol,Int}(x => i for (i, x) in enumerate(keep))
     info_pos = [Int[kpos[x] for x in information_names(id, d)] for d in ds]
     act_pos = [kpos[variable_name(id, decision_variable(id, d))] for d in ds]

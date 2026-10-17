@@ -312,6 +312,126 @@ function all_deterministic_policies(m::InfluenceDiagramModel, d)
                                       _action_axis(m, did))
 end
 
+# Strategy enumeration
+######################
+
+# The axes of a decision read from the syntax, as `_information_axes` and `_action_axis`
+# read them from a model's spaces: `axis(id, v)` for each information variable in
+# `information_position` order, and for the action variable.
+function _information_axes(id::AbstractInfluenceDiagram, d)
+    return FiniteAxis[axis(id, v) for v in decision_information(id, d)]
+end
+_action_axis(id::AbstractInfluenceDiagram, d) = axis(id, decision_variable(id, d))
+
+# The decisions whose policies make up a strategy: `decision_order`, keeping the first of
+# the decisions that share a name (a strategy is keyed by name).
+function _strategy_decisions(id::AbstractInfluenceDiagram)
+    seen = Set{Symbol}()
+    ds = Int[]
+    for d in decision_order(id)
+        name = decision_name(id, d)
+        name in seen && continue
+        push!(seen, name)
+        push!(ds, d)
+    end
+    return ds
+end
+
+# A lazy iterator over the strategies of `Iterators.product(policies...)`: the policy
+# lists of the decisions `names`, the first decision varying fastest.
+struct _StrategyIterator{P}
+    names::Vector{Symbol}
+    product::P
+end
+
+Base.IteratorSize(::Type{<:_StrategyIterator}) = Base.HasLength()
+Base.length(it::_StrategyIterator) = length(it.product)
+Base.eltype(::Type{<:_StrategyIterator}) = Strategy
+
+function Base.iterate(it::_StrategyIterator, state...)
+    next = iterate(it.product, state...)
+    next === nothing && return nothing
+    choice, s = next
+    σ = Strategy(Dict{Symbol,AbstractPolicy}(it.names[i] => choice[i]
+                                             for i in eachindex(it.names)))
+    return σ, s
+end
+
+function Base.show(io::IO, it::_StrategyIterator)
+    return print(io, "all_deterministic_strategies(", length(it), " strategies over ",
+                 it.names, ")")
+end
+
+"""
+    all_deterministic_strategies(m::InfluenceDiagramModel)
+    all_deterministic_strategies(id::AbstractInfluenceDiagram)
+
+A lazy iterator over every deterministic [`Strategy`](@ref): one
+[`DeterministicPolicy`](@ref) per decision, every combination of the
+[`all_deterministic_policies`](@ref) of the decisions in [`decision_order`](@ref), the
+first decision varying fastest (the order of `Iterators.product`). This is the order in
+which [`ExhaustivePolicySearch`](@ref) scores them, so the first maximum it reports is the
+first maximum of this sequence. It has [`n_deterministic_strategies`](@ref) elements, and
+`collect` gives a `Vector{Strategy}`; a diagram without decisions has one, empty, strategy.
+
+The model form reads the information and action axes from the model's spaces, as
+[`all_deterministic_policies`](@ref) does; the syntax form reads them from the diagram,
+the axes `axis(id, v)` gives (the variable's states in `state_position` order).
+
+Decisions that share a name (possible in a composite of open diagrams, where equally
+named decisions share one policy) appear once: a strategy is keyed by decision name, and
+the first of them in `decision_order` defines the axes.
+
+The policies of each decision are listed when the iterator is built, the strategies only
+as they are iterated. More than `typemax(Int)` strategies, or policies of one decision,
+throw [`PolicySearchTooLargeError`](@ref); `DecisionPrecedenceCycleError` and
+`CyclicBayesNetError` pass through from [`decision_order`](@ref).
+"""
+function all_deterministic_strategies(m::InfluenceDiagramModel)
+    id = syntax(m)
+    ds = _strategy_decisions(id)
+    # Counted before any policy list is built, which could otherwise exhaust memory.
+    total = n_deterministic_strategies(m)
+    total > typemax(Int) && throw(PolicySearchTooLargeError(total, typemax(Int)))
+    return _StrategyIterator(Symbol[decision_name(id, d) for d in ds],
+                             Iterators.product((all_deterministic_policies(m, d)
+                                                for d in ds)...))
+end
+
+function all_deterministic_strategies(id::AbstractInfluenceDiagram)
+    ds = _strategy_decisions(id)
+    total = n_deterministic_strategies(id)
+    total > typemax(Int) && throw(PolicySearchTooLargeError(total, typemax(Int)))
+    return _StrategyIterator(Symbol[decision_name(id, d) for d in ds],
+                             Iterators.product((_syntax_policies(id, d) for d in ds)...))
+end
+
+function _syntax_policies(id::AbstractInfluenceDiagram, d::Integer)
+    return all_deterministic_policies(decision_name(id, d), _information_axes(id, d),
+                                      _action_axis(id, d))
+end
+
+"""
+    n_deterministic_strategies(m::InfluenceDiagramModel) -> BigInt
+    n_deterministic_strategies(id::AbstractInfluenceDiagram) -> BigInt
+
+The number of deterministic strategies, exactly, as a `BigInt`: the product of
+[`n_deterministic_policies`](@ref) over the decisions that
+[`all_deterministic_strategies`](@ref) enumerates (one per decision name, in
+[`decision_order`](@ref)), with the axes read from the model or from the syntax as there.
+This is the count [`ExhaustivePolicySearch`](@ref) compares with its `max_policies`.
+"""
+function n_deterministic_strategies(m::InfluenceDiagramModel)
+    return prod(BigInt[n_deterministic_policies(m, d)
+                       for d in _strategy_decisions(syntax(m))]; init=BigInt(1))
+end
+
+function n_deterministic_strategies(id::AbstractInfluenceDiagram)
+    return prod(BigInt[n_deterministic_policies(_information_axes(id, d),
+                                                _action_axis(id, d))
+                       for d in _strategy_decisions(id)]; init=BigInt(1))
+end
+
 """
     set_policy(m::InfluenceDiagramModel, decision, p::AbstractPolicy) -> InfluenceDiagramModel
     set_policy(m, strategy::Strategy)

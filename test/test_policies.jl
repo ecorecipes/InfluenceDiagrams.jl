@@ -135,4 +135,69 @@
         @test missing_policies(σ, two_stage_diagram()) == [:Test, :Drill]
         @test occursin("ConstantPolicy", sprint(show, σ))
     end
+
+    @testset "strategy enumeration" begin
+        # The order of the exhaustive search: `Iterators.product` over `decision_order`.
+        function product_order(m)
+            id = syntax(m)
+            ds = decision_order(id)
+            names_ = [decision_name(id, d) for d in ds]
+            return [Strategy(Dict{Symbol,AbstractPolicy}(names_[i] => c[i]
+                                                         for i in eachindex(ds)))
+                    for c in
+                        vec(collect(Iterators.product((all_deterministic_policies(m, d)
+                                                       for d in ds)...)))]
+        end
+        for (m, n) in ((umbrella_model(), 8), (two_stage_model(), 2 * 2^6))
+            id = syntax(m)
+            it = all_deterministic_strategies(m)
+            σs = collect(it)
+            @test σs isa Vector{Strategy}
+            @test n_deterministic_strategies(m) == n
+            @test n_deterministic_strategies(m) isa BigInt
+            @test length(it) == length(σs) == n
+            @test n_deterministic_strategies(id) == n
+            @test allunique(σs)
+            @test all(σ -> is_complete(σ, id), σs)
+            @test all(σ -> all(validate_policy(m, d, σ[d]) === nothing
+                               for d in decision_names(id)), σs)
+            @test σs == product_order(m)
+            # The syntax form reads the same axes from the diagram.
+            @test collect(all_deterministic_strategies(id)) == σs
+            @test occursin("$n strategies", sprint(show, it))
+            # The exhaustive optimum is the first maximum of this sequence.
+            eus = [expected_utility(m, σ) for σ in σs]
+            first_best = σs[findfirst(==(maximum(eus)), eus)]
+            for backend in
+                (ExhaustivePolicySearch(), ExhaustivePolicySearch(; brute_force=true))
+                sol = optimize(m, backend)
+                @test sol.strategy == first_best
+                @test sol.expected_utility ≈ maximum(eus)
+                @test sol.diagnostics.nstrategies == n
+            end
+        end
+        # The first decision varies fastest.
+        σs = collect(all_deterministic_strategies(two_stage_model()))
+        @test policy_table(σs[1][:Test]) != policy_table(σs[2][:Test])
+        @test policy_table(σs[1][:Drill]) == policy_table(σs[2][:Drill])
+        # A diagram without decisions has one, empty, strategy.
+        nod = influence_diagram(:X => [:a, :b]; utilities=[:U => :X])
+        @test collect(all_deterministic_strategies(nod)) == [Strategy()]
+        @test n_deterministic_strategies(nod) == 1
+        # Equally named decisions appear once, the first in decision order defining the axes.
+        dup = two_stage_diagram()
+        set_subpart!(dup, decision_id(dup, :Drill), :decision_name, :Test)
+        @test n_deterministic_strategies(dup) == 2
+        σd = collect(all_deterministic_strategies(dup))
+        @test length(σd) == 2 && all(σ -> collect(keys(σ)) == [:Test], σd)
+        @test all(σ -> σ[:Test].action == BayesianNetworks.axis(dup, :Test) &&
+                      isempty(σ[:Test].information), σd)
+        # Too many strategies to enumerate: counted exactly, refused before any list is built.
+        big = influence_diagram((Symbol("I", i) => [:t, :f] for i in 1:7)...,
+                                :A => [:a, :b];
+                                decisions=[:A => Tuple(Symbol("I", i) for i in 1:7)],
+                                utilities=[:U => :A])
+        @test n_deterministic_strategies(big) == BigInt(2)^128
+        @test_throws PolicySearchTooLargeError all_deterministic_strategies(big)
+    end
 end

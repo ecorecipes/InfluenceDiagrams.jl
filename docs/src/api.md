@@ -97,6 +97,8 @@ validate_policy
 deterministic_policy
 all_deterministic_policies
 n_deterministic_policies
+all_deterministic_strategies
+n_deterministic_strategies
 Strategy
 policies
 is_complete

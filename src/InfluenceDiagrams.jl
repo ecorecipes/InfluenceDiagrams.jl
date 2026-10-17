@@ -145,7 +145,8 @@ export AbstractUtility, TabularUtility, FunctionUtility, utility_value, utility_
 # model.jl
 export InfluenceDiagramModel, bayes_model, strategy, bound_utilities, bind_utility,
        utility, missing_utilities, fix_decision, set_policy, unset_policy, with_information,
-       without_information, with_no_forgetting, action_space, information_space
+       without_information, with_no_forgetting, action_space, information_space,
+       all_deterministic_strategies, n_deterministic_strategies
 # instantiate.jl
 export instantiate, policy_mechanism_name
 # expected_utility.jl
