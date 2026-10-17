@@ -396,6 +396,22 @@ end
         @test optimize(cut, ExhaustivePolicySearch(); context=loose,
                        atol=1e-6).expected_utility ≈
               77 atol = 1e-4
+        # Accepted, the prior is used as given, not renormalised: the value tables agree with
+        # the reference decomposition to rounding, well inside the 1e-7 a renormalisation
+        # would move the value by.
+        for prior in ([0.7, 0.3 + 1e-7], [0.7 - 4e-7, 0.3])
+            ctx = DecisionContext(; prior=[:Weather] => prior,
+                                  terminal=[:Umbrella] => [-2.0, 3.0])
+            fast = optimize(cut, ExhaustivePolicySearch(); context=ctx, atol=1e-6)
+            slow = optimize(cut, ExhaustivePolicySearch(; brute_force=true); context=ctx,
+                            atol=1e-6)
+            @test fast.diagnostics.method == :value_table
+            @test fast.strategy == slow.strategy
+            @test isapprox(fast.expected_utility, slow.expected_utility; rtol=1e-14)
+            @test isapprox(fast.expected_utility,
+                           expected_utility(cut, fast.strategy; context=ctx, atol=1e-6);
+                           rtol=1e-14)
+        end
         # A prior on a closed model covers variables that have mechanisms.
         @test_throws ExogenousCoverageError optimize(umbrella_model(),
                                                      ExhaustivePolicySearch();

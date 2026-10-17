@@ -305,6 +305,10 @@ function optimize(m::InfluenceDiagramModel, b::ExhaustivePolicySearch;
     # Policies as tables of action indices.
     index_tables = [[map(a -> label_index(FiniteAxis(:a, act_labels[i]), a), p.table)
                      for p in per_decision[i]] for i in eachindex(ds)]
+    # A context's prior is a factor of `den`, and is never renormalised: its mass (one within
+    # `atol`) is multiplied back, so that only the kernels' mass is divided out, as without a
+    # context, and the value is `Σ_x μ(x) E_σ[U + c | x]` as the reference computes it.
+    prior_mass = ctx === nothing || ctx.prior === nothing ? nothing : sum(last(ctx.prior))
     for choice in Iterators.product(eachindex.(per_decision)...)
         tabs = ntuple(i -> index_tables[i][choice[i]], length(ds))
         num = 0.0
@@ -327,7 +331,7 @@ function optimize(m::InfluenceDiagramModel, b::ExhaustivePolicySearch;
         reaches_negative && den <= budget &&
             throw(BayesianNetworks.IndeterminatePosteriorError(copy(ev),
                                                                "the evidence mass $(den) is within the tolerance budget $(budget) of zero"))
-        eu = num / den
+        eu = prior_mass === nothing ? num / den : num / den * prior_mass
         if eu > best
             best = eu
             best_strategy = Strategy(Dict{Symbol,AbstractPolicy}(names_[i] => per_decision[i][choice[i]]

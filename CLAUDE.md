@@ -176,7 +176,8 @@ ordered but neither knows the other's action: that is a forgetting diagram, and 
   utility (variables may repeat, read on the diagonal), taken by `expected_utility` and
   `optimize(m, ::ExhaustivePolicySearch)` through `context`. Only then may a model be open
   (`_check_solvable` relaxes `closed` under a context, nothing else). The value tables carry the
-  prior as a factor and the terminal as a utility; the reference (`brute_force`, `stable`) fixes the
+  prior as a factor and the terminal as a utility, and multiply the prior's mass back into
+  `num / den`, so a prior accepted within `atol` is never renormalised; the reference (`brute_force`, `stable`) fixes the
   exogenous variables per prior state with `do_intervention`. Evidence or DVE with a context is
   `ArgumentError`. `nothing` or an empty context takes the unchanged path, operation for operation.
   CategoricalInfluenceDiagrams' `contextual_optimize` delegates to it: keep the semantics in step.
