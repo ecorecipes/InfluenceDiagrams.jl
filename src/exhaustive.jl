@@ -139,6 +139,43 @@ function _check_solvable(m::InfluenceDiagramModel;
     return nothing
 end
 
+# `_FlatTable(table, axes, strides)`: one kernel or utility table flattened for the
+# value-table pass. `table` is its entries in column-major order, `axes[j]` the position of
+# the `j`-th axis among the enumerated variables and `strides[j]` that axis's stride in
+# `table`. Concrete field types keep `_entry` type stable, which an `Array{Float64}` of
+# unknown rank does not: its rank is not in the type, so indexing one with a tuple of
+# run-time length dispatches dynamically once per joint state. This is the representation
+# `BayesianNetworks`' `_Factor` uses, and for the same reason. A repeated axis accumulates
+# both strides at the same index, which reads the table's diagonal, as a context terminal's
+# repeated variable must. With the function barrier of `_accumulate_value_tables!` this took
+# one solve of a 19-variable, 7,962,624-state composite diagram from 95.1 s to 0.61 s
+# (11.9 to 0.077 microseconds per joint state), the expected utility unchanged in every bit
+# (review of 2026-10-27).
+struct _FlatTable
+    table::Vector{Float64}
+    axes::Vector{Int}
+    strides::Vector{Int}
+end
+
+function _FlatTable(table::AbstractArray, axes::Vector{Int})
+    st = Vector{Int}(undef, length(axes))
+    acc = 1
+    for j in eachindex(axes)
+        st[j] = acc
+        acc *= size(table, j)
+    end
+    return _FlatTable(vec(convert(Array{Float64}, table)), axes, st)
+end
+
+# The entry of `f` at the joint assignment `ci`.
+@inline function _entry(f::_FlatTable, ci::CartesianIndex)
+    idx = 1
+    @inbounds for j in eachindex(f.axes)
+        idx += f.strides[j] * (ci[f.axes[j]] - 1)
+    end
+    return @inbounds f.table[idx]
+end
+
 # The value tables of the exhaustive backend: numerator Σ_x P_c(x) U(x) and
 # denominator Σ_x P_c(x), both accumulated over the `keep` variables (information and
 # action variables), with x ranging over the joint states consistent with the evidence.
@@ -158,15 +195,16 @@ function _value_tables(m::InfluenceDiagramModel, keep::Vector{Symbol};
     n <= max_states || throw(ModelTooLargeError(Int(min(n, typemax(Int))), max_states))
     pos = Dict{Symbol,Int}(x => i for (i, x) in enumerate(vars))
     dims = Tuple(nstates(id, x) for x in vars)
-    factors_ = Tuple{Array{Float64},Vector{Int}}[]
+    factors_ = _FlatTable[]
     for mech in mechanisms(id)
         x = variable_name(id, target(id, mech))
         k = kernel(bm, x)
         push!(factors_,
-              (convert(Array{Float64}, k.table),
-               Int[pos[x]; Int[pos[variable_name(id, p)] for p in inputs(id, mech)]]))
+              _FlatTable(k.table,
+                         Int[pos[x];
+                             Int[pos[variable_name(id, p)] for p in inputs(id, mech)]]))
     end
-    utils = Tuple{Array{Float64},Vector{Int}}[]
+    utils = _FlatTable[]
     for (name, u) in m.utilities
         axes = _utility_axes(m, utility_id(id, name))
         table = utility_table(u, axes)
@@ -174,35 +212,66 @@ function _value_tables(m::InfluenceDiagramModel, keep::Vector{Symbol};
         # no expected value.
         all(isfinite, table) ||
             throw(UtilityScopeError(name, :value, "finite utility entries", table))
-        push!(utils, (table, Int[pos[a.name] for a in axes]))
+        push!(utils, _FlatTable(table, Int[pos[a.name] for a in axes]))
     end
     if context !== nothing
         if context.prior !== nothing
             pvars, μ = context.prior
-            pushfirst!(factors_, (μ, Int[pos[x] for x in pvars]))
+            pushfirst!(factors_, _FlatTable(μ, Int[pos[x] for x in pvars]))
         end
         if context.terminal !== nothing
             tvars, c = context.terminal
-            push!(utils, (c, Int[pos[x] for x in tvars]))
+            push!(utils, _FlatTable(c, Int[pos[x] for x in tvars]))
         end
     end
-    ev = [(pos[x], label_index(only(factors(space(bm, x))), s)) for (x, s) in evidence(m)]
+    ev = Tuple{Int,Int}[(pos[x], label_index(only(factors(space(bm, x))), s))
+                        for (x, s) in evidence(m)]
     kpos = Int[pos[x] for x in keep]
     kdims = Tuple(dims[i] for i in kpos)
     N = zeros(Float64, kdims)
     Z = zeros(Float64, kdims)
     negative = track_negative ? falses(kdims) : nothing
-    # Whether a product of nonzero entries fell below binary64's normal range: then a
-    # strategy's zero mass may be an underflow rather than an exact zero (ADR 0014). A
-    # negative product comes from a tolerated negative entry.
+    # The strides of the `keep` variables in the column-major `N`, `Z` and `negative`, so
+    # that a cell is reached by one linear index rather than a `CartesianIndex` built from a
+    # tuple of run-time length.
+    kstrides = Vector{Int}(undef, length(kpos))
+    let acc = 1
+        for j in eachindex(kpos)
+            kstrides[j] = acc
+            acc *= kdims[j]
+        end
+    end
+    # `dims` is built from the variable list, so its length is not in its type: the pass
+    # runs behind a function barrier, which specialises the walk on the number of variables
+    # instead of leaving every `CartesianIndex` operation in it dynamic.
+    unreliable = _accumulate_value_tables!(N, Z, negative, dims, factors_, utils, ev, kpos,
+                                           kstrides, track_negative)
+    return N, Z, negative, unreliable
+end
+
+# One pass over the joint states `dims`, accumulating `N` and `Z` (and `negative`) as
+# `_value_tables` documents. Specialised on the number of variables. Returns whether a
+# product of nonzero entries fell below binary64's normal range: then a strategy's zero mass
+# may be an underflow rather than an exact zero (ADR 0014). A negative product comes from a
+# tolerated negative entry.
+function _accumulate_value_tables!(N::Array{Float64}, Z::Array{Float64},
+                                   negative::Union{Nothing,BitArray},
+                                   dims::NTuple{M,Int}, factors_::Vector{_FlatTable},
+                                   utils::Vector{_FlatTable}, ev::Vector{Tuple{Int,Int}},
+                                   kpos::Vector{Int}, kstrides::Vector{Int},
+                                   track_negative::Bool) where {M}
     unreliable = false
     for ci in CartesianIndices(dims)
-        all(e -> ci[e[1]] == e[2], ev) || continue
+        consistent = true
+        @inbounds for e in ev
+            ci[e[1]] == e[2] || (consistent = false; break)
+        end
+        consistent || continue
         p = 1.0
         exact_zero = false
         takes_part = false
-        for (tab, ax) in factors_
-            x = tab[ntuple(j -> ci[ax[j]], length(ax))...]
+        for f in factors_
+            x = _entry(f, ci)
             if x == 0
                 exact_zero = true
                 break
@@ -212,18 +281,21 @@ function _value_tables(m::InfluenceDiagramModel, keep::Vector{Symbol};
         end
         # A structural zero: no entry takes part, wherever the zero came.
         exact_zero && continue
-        k = CartesianIndex(ntuple(j -> ci[kpos[j]], length(kpos)))
-        track_negative && takes_part && (negative[k] = true)
+        k = 1
+        @inbounds for j in eachindex(kpos)
+            k += kstrides[j] * (ci[kpos[j]] - 1)
+        end
+        track_negative && takes_part && (@inbounds negative[k] = true)
         (p >= floatmin(Float64) && isfinite(p)) || (unreliable = true)
         p == 0 && continue
         u = 0.0
-        for (tab, ax) in utils
-            u += tab[ntuple(j -> ci[ax[j]], length(ax))...]
+        for f in utils
+            u += _entry(f, ci)
         end
-        N[k] += p * u
-        Z[k] += p
+        @inbounds N[k] += p * u
+        @inbounds Z[k] += p
     end
-    return N, Z, negative, unreliable
+    return unreliable
 end
 
 function optimize(m::InfluenceDiagramModel, b::ExhaustivePolicySearch;
