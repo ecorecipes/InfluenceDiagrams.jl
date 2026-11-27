@@ -285,7 +285,6 @@ function optimize(m::InfluenceDiagramModel, b::BranchAndBoundPolicySearch;
         throw(ArgumentError("BranchAndBoundPolicySearch does not take evidence; optimise a model with evidence with ExhaustivePolicySearch"))
     id = syntax(m)
     ds = decision_order(id)
-    names_ = Symbol[decision_name(id, d) for d in ds]
     keep = Symbol[]
     for d in ds
         for x in information_names(id, d)
@@ -326,15 +325,7 @@ function optimize(m::InfluenceDiagramModel, b::BranchAndBoundPolicySearch;
         iterations < 50 || break
     end
     value = _selected_sum(n, cells, tables) / _selected_sum(z, cells, tables)
-    policies = Dict{Symbol,AbstractPolicy}()
-    for (i, d) in enumerate(ds)
-        information = _information_axes(m, d)
-        act = _action_axis(m, d)
-        labels = reshape(Symbol[act.labels[a] for a in tables[i]],
-                         Tuple(length(a) for a in information))
-        policies[names_[i]] = DeterministicPolicy(names_[i], information, act, labels)
-    end
-    return DecisionSolution(value, Strategy(policies),
+    return DecisionSolution(value, _strategy_from_indices(m, ds, tables),
                             (method=:branch_and_bound, nodes=nodes, root_bound=root_bound,
                              incumbent_start=incumbent_start,
                              ratio_iterations=iterations,

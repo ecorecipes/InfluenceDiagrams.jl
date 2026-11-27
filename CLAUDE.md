@@ -35,7 +35,20 @@ record API gaps instead.
   products with `ArgumentError`; `SearchNodeLimitError` at `max_nodes`. Returns an optimal strategy, not
   necessarily the oracle's first. Tested against the oracle (`test/test_branch_and_bound.jl`); no Lean
   proof covers it. The origin note at the top of the file (DecisionProgramming.jl's problem class, no
-  shared code) stays. An integer-programming backend in an extension is planned as a second route.
+  shared code) stays.
+- `src/mixed_integer.jl` and `ext/InfluenceDiagramsJuMPExt.jl`: `MixedIntegerPolicySearch(optimizer)`, the
+  programme on the junction-tree polytope (Parmentier et al. 2020; the RJT model of DecisionProgramming.jl,
+  written independently from the papers; the origin note stays). The core file has the backend type,
+  `rooted_junction_tree` (pure, exported, property-tested) and the `optimize` method, which checks the
+  preconditions and throws `ArgumentError` when the extension is not loaded; the extension states and
+  solves the programme. **JuMP is a weak dependency and, with HiGHS, a test dependency only**: never
+  move either to `[deps]`. It maximises `Σ P U` (kernels accepted within `atol` are not renormalised, so
+  the strategy can differ from the oracle's by a tolerance-sized amount), reports this package's
+  `expected_utility` of the returned strategy when the joint has at most `max_states` states
+  (`diagnostics.verified`) and the solver's objective otherwise, refuses evidence and a context, and
+  throws `MixedIntegerSolverError` unless the solver proves an optimum. No Lean proof covers it.
+  `ParmentierEtAl2020` and `HerralaEtAl2024` were added to `docs/src/references.bib` and
+  `vignettes/references.bib` here; the canonical workspace copy needs them too.
 
 ## No-forgetting, and why `validate` does not require it
 

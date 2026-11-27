@@ -228,6 +228,7 @@
                   PolicySignatureError(:D, :action, 1, 2),
                   UtilityScopeError(:U, :table, (2,), (3,)), IncompleteStrategyError([:D]),
                   PolicySearchTooLargeError(10, 5), SearchNodeLimitError(10, 5),
+                  MixedIntegerSolverError(:TIME_LIMIT),
                   UnsupportedAggregationError(:M, [0.5]),
                   IrregularDiagramError(:D, [:X], :information),
                   IrregularDiagramError(:D, [:X], :probability),

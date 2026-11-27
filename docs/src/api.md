@@ -78,6 +78,7 @@ IncompleteStrategyError
 MissingUtilityError
 PolicySearchTooLargeError
 SearchNodeLimitError
+MixedIntegerSolverError
 UnsupportedAggregationError
 IrregularDiagramError
 EvidenceOnActionError
@@ -167,6 +168,8 @@ trace_decision_elimination
 DecisionBackend
 ExhaustivePolicySearch
 BranchAndBoundPolicySearch
+MixedIntegerPolicySearch
+rooted_junction_tree
 DecisionVariableElimination
 DecisionSolution
 DecisionContext

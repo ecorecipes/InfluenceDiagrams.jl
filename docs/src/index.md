@@ -51,6 +51,18 @@ Part of the ecorecipes compositional Bayesian-network ecosystem:
   DecisionProgramming.jl (Salo, Andelmin and Oliveira, 2022), which solves it as an
   integer programme; this is an independent implementation with a different method.
   Checked against the oracle on random diagrams; not covered by the Lean proofs.
+- `optimize` with `MixedIntegerPolicySearch(optimizer)`: a mixed-integer linear programme on
+  a rooted junction tree (`rooted_junction_tree`), exact on limited-memory diagrams up to
+  the solver's tolerances and without enumerating the joint states, so its size follows the
+  clusters and not the diagram: a chain of twenty periods with `2^61` joint states and
+  clusters of eight states solves in 0.05 s. **It needs JuMP and a solver** (for example
+  HiGHS), which are not dependencies of this package: the programme is in an extension that
+  loads with `using JuMP`. The strategy the solver returns is scored by this package's own
+  `expected_utility` when the diagram is small enough to enumerate, and the diagnostics say
+  whether it was. No evidence or decision context. The formulation is the RJT model of
+  DecisionProgramming.jl ([ParmentierEtAl2020](@cite); [HerralaEtAl2024](@cite)),
+  implemented independently from the papers. Checked against the other backends; not
+  covered by the Lean proofs.
 - `expected_value_of_information` and `expected_value_of_perfect_information`.
   `with_information` propagates the new information arc to every later decision (SPEC
   section 35's `info(X, D)` under perfect recall), so both work with the default backend

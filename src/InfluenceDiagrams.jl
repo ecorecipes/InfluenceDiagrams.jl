@@ -20,7 +20,8 @@ ordinary `BayesModel` (Proposition 5), from which [`expected_utility`](@ref) fol
 over the [`Valuation`](@ref) algebra (Proposition 7, property-tested), and
 [`expected_value_of_information`](@ref) measures what observing a variable is worth.
 [`BranchAndBoundPolicySearch`](@ref) is a third backend, exact on diagrams that forget
-without enumerating their strategies.
+without enumerating their strategies, and [`MixedIntegerPolicySearch`](@ref) a fourth,
+which does not enumerate the joint states either and needs JuMP and a solver loaded.
 
 Decision variable elimination is exact only on diagrams with *no-forgetting* (perfect
 recall): everything known at a decision is still known at every later one. That is not a
@@ -118,6 +119,7 @@ export InfluenceDiagramError, UnknownDecisionError, UnknownUtilityError,
        DecisionUniquenessError, InvalidInformationSetError, DecisionPrecedenceCycleError,
        PolicySignatureError, UtilityScopeError, IncompleteStrategyError,
        MissingUtilityError, PolicySearchTooLargeError, SearchNodeLimitError,
+       MixedIntegerSolverError,
        UnsupportedAggregationError,
        IrregularDiagramError, EvidenceOnActionError, UneliminatedVariablesError,
        DVEExportError, ExogenousCoverageError, ContextStateCountError
@@ -158,6 +160,7 @@ export DecisionContext
 export total_utility, expected_utility
 # exhaustive.jl
 export DecisionBackend, ExhaustivePolicySearch, BranchAndBoundPolicySearch,
+       MixedIntegerPolicySearch, rooted_junction_tree,
        DecisionSolution, optimize
 # valuation.jl
 export Valuation, combine, sum_out, max_out
@@ -190,6 +193,7 @@ include("context.jl")
 include("expected_utility.jl")
 include("exhaustive.jl")
 include("branch_and_bound.jl")
+include("mixed_integer.jl")
 include("valuation.jl")
 include("exact_arithmetic.jl")
 include("decision_elimination.jl")

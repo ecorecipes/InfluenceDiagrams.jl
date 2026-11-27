@@ -163,6 +163,17 @@ struct SearchNodeLimitError <: InfluenceDiagramError
 end
 
 """
+    MixedIntegerSolverError(status)
+
+The solver given to [`MixedIntegerPolicySearch`](@ref) stopped with `status` (JuMP's
+termination status, as a `Symbol`) and not at a proven optimum, so no strategy is
+returned: a time or node limit, or a numerical failure.
+"""
+struct MixedIntegerSolverError <: InfluenceDiagramError
+    status::Symbol
+end
+
+"""
     EvidenceOnActionError(variable, decision, state)
 
 Evidence was set on `variable`, which is the action variable of `decision`. An action
@@ -342,6 +353,11 @@ end
 function Base.showerror(io::IO, e::MissingUtilityError)
     return print(io, "MissingUtilityError: utility node :", e.utility, " has reference ",
                  e.ref, ", which does not resolve to a bound utility")
+end
+
+function Base.showerror(io::IO, e::MixedIntegerSolverError)
+    return print(io, "MixedIntegerSolverError: the solver stopped with status ", e.status,
+                 " and not at a proven optimum")
 end
 
 function Base.showerror(io::IO, e::SearchNodeLimitError)
