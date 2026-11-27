@@ -77,6 +77,7 @@ UtilityScopeError
 IncompleteStrategyError
 MissingUtilityError
 PolicySearchTooLargeError
+SearchNodeLimitError
 UnsupportedAggregationError
 IrregularDiagramError
 EvidenceOnActionError
@@ -165,6 +166,7 @@ trace_decision_elimination
 ```@docs
 DecisionBackend
 ExhaustivePolicySearch
+BranchAndBoundPolicySearch
 DecisionVariableElimination
 DecisionSolution
 DecisionContext

@@ -40,6 +40,17 @@ Part of the ecorecipes compositional Bayesian-network ecosystem:
   `with_no_forgetting` supplies it, and the solver's `IrregularDiagramError` names both
   ways out. The *regular* of [Shachter1986](@cite) is the weaker property that a directed path runs
   through all the decisions.
+- `optimize` with `BranchAndBoundPolicySearch`: exact on limited-memory diagrams without
+  enumerating strategies. It bounds the value by letting every decision see what any
+  decision sees, branches on a policy row the bound asks two actions of, and starts from
+  single policy updating ([LauritzenNilsson2001](@cite)). It needs no optimisation package.
+  Team problems with `10^12` strategies solve in under a second; the bound weakens as the
+  number of decisions that cannot see each other grows (four such decisions with six
+  signals each took 48 s). It still enumerates the joint states once, as the oracle does,
+  and takes no evidence or decision context. The problem class follows
+  DecisionProgramming.jl (Salo, Andelmin and Oliveira, 2022), which solves it as an
+  integer programme; this is an independent implementation with a different method.
+  Checked against the oracle on random diagrams; not covered by the Lean proofs.
 - `expected_value_of_information` and `expected_value_of_perfect_information`.
   `with_information` propagates the new information arc to every later decision (SPEC
   section 35's `info(X, D)` under perfect recall), so both work with the default backend

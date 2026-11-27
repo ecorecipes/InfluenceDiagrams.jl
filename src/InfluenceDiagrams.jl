@@ -19,6 +19,8 @@ ordinary `BayesModel` (Proposition 5), from which [`expected_utility`](@ref) fol
 [`ExhaustivePolicySearch`](@ref) (the oracle) or by [`DecisionVariableElimination`](@ref)
 over the [`Valuation`](@ref) algebra (Proposition 7, property-tested), and
 [`expected_value_of_information`](@ref) measures what observing a variable is worth.
+[`BranchAndBoundPolicySearch`](@ref) is a third backend, exact on diagrams that forget
+without enumerating their strategies.
 
 Decision variable elimination is exact only on diagrams with *no-forgetting* (perfect
 recall): everything known at a decision is still known at every later one. That is not a
@@ -115,7 +117,8 @@ end
 export InfluenceDiagramError, UnknownDecisionError, UnknownUtilityError,
        DecisionUniquenessError, InvalidInformationSetError, DecisionPrecedenceCycleError,
        PolicySignatureError, UtilityScopeError, IncompleteStrategyError,
-       MissingUtilityError, PolicySearchTooLargeError, UnsupportedAggregationError,
+       MissingUtilityError, PolicySearchTooLargeError, SearchNodeLimitError,
+       UnsupportedAggregationError,
        IrregularDiagramError, EvidenceOnActionError, UneliminatedVariablesError,
        DVEExportError, ExogenousCoverageError, ContextStateCountError
 # schemas.jl
@@ -154,7 +157,8 @@ export DecisionContext
 # expected_utility.jl
 export total_utility, expected_utility
 # exhaustive.jl
-export DecisionBackend, ExhaustivePolicySearch, DecisionSolution, optimize
+export DecisionBackend, ExhaustivePolicySearch, BranchAndBoundPolicySearch,
+       DecisionSolution, optimize
 # valuation.jl
 export Valuation, combine, sum_out, max_out
 # decision_elimination.jl
@@ -185,6 +189,7 @@ include("instantiate.jl")
 include("context.jl")
 include("expected_utility.jl")
 include("exhaustive.jl")
+include("branch_and_bound.jl")
 include("valuation.jl")
 include("exact_arithmetic.jl")
 include("decision_elimination.jl")

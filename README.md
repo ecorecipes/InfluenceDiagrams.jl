@@ -56,6 +56,17 @@ Semantic layer:
   Adding memory is an explicit model change, not a semantics-preserving repair:
   costly-signaling examples have limited-memory value `3/4` but perfect-recall
   value `1`, with both optima independently enumerated.
+- `optimize` with `BranchAndBoundPolicySearch`: exact on limited-memory diagrams without
+  enumerating strategies. It bounds the value by letting every decision see what any
+  decision sees, branches on a policy row the bound asks two actions of, and starts from
+  single policy updating (Lauritzen and Nilsson, 2001). It needs no optimisation package.
+  Team problems with `10^12` strategies solve in under a second; the bound weakens as the
+  number of decisions that cannot see each other grows (four such decisions with six
+  signals each took 48 s). It still enumerates the joint states once, as the oracle does,
+  and takes no evidence or decision context. The problem class follows
+  DecisionProgramming.jl (Salo, Andelmin and Oliveira, 2022), which solves it as an
+  integer programme; this is an independent implementation with a different method.
+  Checked against the oracle on random diagrams; not covered by the Lean proofs.
 - `expected_value_of_information`, `expected_value_of_perfect_information` (SPEC section 35).
   `with_information` propagates the new arc to every later decision, which is what `info(X, D)`
   means under perfect recall, so both work with the default backend on sequential diagrams

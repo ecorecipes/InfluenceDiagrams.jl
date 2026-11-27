@@ -26,6 +26,16 @@ record API gaps instead.
   first decision fastest, equally named decisions once); its brute-force branch iterates it, the
   value-table branch indexes the same per-decision lists. `n_deterministic_strategies` is the `BigInt`
   count. CategoricalInfluenceDiagrams' tests and vignettes enumerate strategies with it.
+- `src/branch_and_bound.jl`: `BranchAndBoundPolicySearch`, exact on limited-memory diagrams without
+  enumerating strategies and with no optimisation dependency. It reads the oracle's `_value_tables`
+  (so it enumerates the joint states once and shares `max_states`), bounds a node by choosing the best
+  action tuple for each value of the observed chance variables, branches on a policy row asked for two
+  actions, starts from single policy updating, and maximises `num / den` by Dinkelbach's iteration
+  because accepted kernels are not renormalised. It refuses evidence, a decision context and unreliable
+  products with `ArgumentError`; `SearchNodeLimitError` at `max_nodes`. Returns an optimal strategy, not
+  necessarily the oracle's first. Tested against the oracle (`test/test_branch_and_bound.jl`); no Lean
+  proof covers it. The origin note at the top of the file (DecisionProgramming.jl's problem class, no
+  shared code) stays. An integer-programming backend in an extension is planned as a second route.
 
 ## No-forgetting, and why `validate` does not require it
 
