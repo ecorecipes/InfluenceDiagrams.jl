@@ -151,6 +151,29 @@ function PolicySearchTooLargeError(nstrategies::Integer, limit::Integer)
 end
 
 """
+    SearchNodeLimitError(nodes, limit)
+
+[`BranchAndBoundPolicySearch`](@ref) searched `nodes` nodes, more than its `max_nodes`
+limit, without proving a strategy optimal. Raise `max_nodes`, or use
+[`DecisionVariableElimination`](@ref) if the diagram has no-forgetting.
+"""
+struct SearchNodeLimitError <: InfluenceDiagramError
+    nodes::Int
+    limit::Int
+end
+
+"""
+    MixedIntegerSolverError(status)
+
+The solver given to [`MixedIntegerPolicySearch`](@ref) stopped with `status` (JuMP's
+termination status, as a `Symbol`) and not at a proven optimum, so no strategy is
+returned: a time or node limit, or a numerical failure.
+"""
+struct MixedIntegerSolverError <: InfluenceDiagramError
+    status::Symbol
+end
+
+"""
     EvidenceOnActionError(variable, decision, state)
 
 Evidence was set on `variable`, which is the action variable of `decision`. An action
@@ -330,6 +353,17 @@ end
 function Base.showerror(io::IO, e::MissingUtilityError)
     return print(io, "MissingUtilityError: utility node :", e.utility, " has reference ",
                  e.ref, ", which does not resolve to a bound utility")
+end
+
+function Base.showerror(io::IO, e::MixedIntegerSolverError)
+    return print(io, "MixedIntegerSolverError: the solver stopped with status ", e.status,
+                 " and not at a proven optimum")
+end
+
+function Base.showerror(io::IO, e::SearchNodeLimitError)
+    return print(io, "SearchNodeLimitError: the branch and bound search reached ", e.nodes,
+                 " nodes, over the limit of ", e.limit,
+                 " (raise max_nodes, or use DecisionVariableElimination on a diagram with no-forgetting)")
 end
 
 function Base.showerror(io::IO, e::PolicySearchTooLargeError)
