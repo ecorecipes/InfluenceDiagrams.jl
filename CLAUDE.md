@@ -31,8 +31,9 @@ record API gaps instead.
   (so it enumerates the joint states once and shares `max_states`), bounds a node by choosing the best
   action tuple for each value of the observed chance variables, branches on a policy row asked for two
   actions, starts from single policy updating, and maximises `num / den` by Dinkelbach's iteration
-  because accepted kernels are not renormalised. It refuses evidence, a decision context and unreliable
-  products with `ArgumentError`; `SearchNodeLimitError` at `max_nodes`. Returns an optimal strategy, not
+  because accepted kernels are not renormalised (which is also how it takes evidence: the mass is then the
+  evidence's probability, and the search starts from the strategy that maximises it). It refuses a decision
+  context, evidence with a negative kernel entry and unreliable products with `ArgumentError`; `SearchNodeLimitError` at `max_nodes`. Returns an optimal strategy, not
   necessarily the oracle's first. Tested against the oracle (`test/test_branch_and_bound.jl`); no Lean
   proof covers it. The origin note at the top of the file (DecisionProgramming.jl's problem class, no
   shared code) stays.
@@ -74,7 +75,10 @@ Decision variable elimination is exact only under no-forgetting. The choice made
 
 Note that `decision_order` linearises a partial order by part id, so two decisions with no arcs between them are
 ordered but neither knows the other's action: that is a forgetting diagram, and `with_no_forgetting` is the repair.
-- `src/formats_bridge.jl`, `src/examples.jl`: Netica/GeNIe/HUGIN bridge; umbrella, SPEC §46 grazing, two-stage examples.
+- `src/formats_bridge.jl`, `src/examples.jl`: Netica/GeNIe/HUGIN bridge; umbrella, SPEC §46 grazing, two-stage examples;
+  `used_car_buyer_model` and `pig_breeding_model(; months)`, limited-memory problems whose published answers
+  (31; 726.8121, the policy and P(ill at the sale) = 0.305167 for four months, as the DecisionProgramming.jl
+  documentation prints them) are targets in `test/test_published_examples.jl`: change a target only against the source.
 - `src/certificates.jl`: complete version-1 DVE model-data export. Source IDs are strings;
   explicit zero-based coordinates are lexicographic, not `vec` order. Raw CPTs and actual
   diagonal factors must agree. Binary64 bits are retained; rational companions are explicit,

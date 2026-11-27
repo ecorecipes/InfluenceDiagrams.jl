@@ -63,7 +63,7 @@ Semantic layer:
   Team problems with `10^12` strategies solve in under a second; the bound weakens as the
   number of decisions that cannot see each other grows (four such decisions with six
   signals each took 48 s). It still enumerates the joint states once, as the oracle does,
-  and takes no evidence or decision context. The problem class follows
+  and takes evidence but no decision context. The problem class follows
   DecisionProgramming.jl (Salo, Andelmin and Oliveira, 2022), which solves it as an
   integer programme; this is an independent implementation with a different method.
   Checked against the oracle on random diagrams; not covered by the Lean proofs.
@@ -85,7 +85,11 @@ Semantic layer:
   (`no_forgetting = false` keeps the single-arc, limited-memory reading).
 - `read_influence_diagram` / `write_influence_diagram` for Netica `.dne`, GeNIe `.xdsl` and HUGIN
   `.net` through BayesianNetworkFormats.jl; `umbrella_model`, `reference_grazing_model`
-  (SPEC section 46) and `two_stage_model` examples.
+  (SPEC section 46) and `two_stage_model` examples; and two limited-memory problems with
+  published answers, `used_car_buyer_model` (Howard 1977; expected profit 31) and
+  `pig_breeding_model` (Lauritzen and Nilsson 2001; 726.81 for four months), whose results
+  as printed in the DecisionProgramming.jl documentation all three limited-memory backends
+  reproduce.
 
 ## Formal proof scope
 
