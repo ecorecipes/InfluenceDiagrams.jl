@@ -2,8 +2,10 @@
 Worked examples: the umbrella problem of Shachter 1986 (cited as `Shachter1986`),
 the SPEC §46 reference ecological
 influence diagram (matching the `grazing_reference_id` fixtures of
-BayesianNetworkFormats.jl) and a two-stage test-then-act problem used to exercise
-sequential decisions.
+BayesianNetworkFormats.jl), a two-stage test-then-act problem used to exercise
+sequential decisions, and two limited-memory problems with published answers: the used
+car buyer (Howard 1977) and pig breeding (Lauritzen and Nilsson 2001), with the numbers
+of the DecisionProgramming.jl documentation, whose results the tests reproduce.
 """
 
 """
@@ -174,4 +176,84 @@ function two_stage_model()
     res[2, 2, :] = [0.0, 0.0, 1.0]
     m = bind_cpt(m, [:Oil => [0.5, 0.5], :Result => res])
     return bind_utility(m, [:Payoff => [-60.0 0.0; 100.0 0.0], :TestCost => [-10.0, 0.0]])
+end
+
+"""
+    used_car_buyer_model() -> InfluenceDiagramModel
+
+The used car buyer of [Howard1977](@cite), with the numbers of the DecisionProgramming.jl
+documentation (profits in US dollars, the source's own). A car is a `lemon` with
+probability 0.2 and a `peach` otherwise (`Car`). The buyer first decides whether to
+`Test` it, for 25 dollars; the `Result` is `no_test`, or the car's kind exactly. The
+`Purchase` (`without_guarantee`, `with_guarantee`, `none`) sees the result and nothing
+else. Buying pays 100 without the guarantee and 40 with it, less repairs: 200 for a lemon
+and 40 for a peach without the guarantee, nothing for a lemon and 20 for a peach with it.
+
+`Purchase` does not observe `Test`, so the diagram has no no-forgetting and
+[`DecisionVariableElimination`](@ref) refuses it, although the result says whether a test
+was made. The optimum is to test, buy a lemon with the guarantee and a peach without, for
+an expected profit of 31; without the test the best is 28.
+"""
+function used_car_buyer_model()
+    id = influence_diagram(:Car => [:lemon, :peach], :Test => [:no_test, :test],
+                           :Result => [:no_test, :lemon, :peach],
+                           :Purchase => [:without_guarantee, :with_guarantee, :none];
+                           mechanisms=[:Result => (:Car, :Test)],
+                           decisions=[:Test => (), :Purchase => :Result],
+                           utilities=[:Fee => :Test, :Profit => :Purchase,
+                                      :Repairs => (:Car, :Purchase)])
+    result = zeros(2, 2, 3)                    # (car, test) -> result
+    result[1, 1, :] = [1, 0, 0]
+    result[1, 2, :] = [0, 1, 0]
+    result[2, 1, :] = [1, 0, 0]
+    result[2, 2, :] = [0, 0, 1]
+    m = bind_cpt(InfluenceDiagramModel(id), [:Car => [0.2, 0.8], :Result => result])
+    return bind_utility(m,
+                        [:Fee => [0.0, -25.0], :Profit => [100.0, 40.0, 0.0],
+                         :Repairs => [-200.0 0.0 0.0; -40.0 -20.0 0.0]])
+end
+
+"""
+    pig_breeding_model(; months = 4) -> InfluenceDiagramModel
+
+The pig breeding problem of [LauritzenNilsson2001](@cite), the standard limited-memory
+influence diagram, with their numbers (Danish kroner, the source's own). A pig is grown
+for `months` months and sold: for 300 if it is ill then, for 1000 if healthy (`Sale`). It
+is ill at the start with probability 0.1 (`Health1`). In each month but the last a test
+(`Test_k`) is positive with probability 0.8 for an ill pig and 0.1 for a healthy one, and
+the decision `Treat_k` (`treat`, `pass`) sees **that month's test only**. Treating costs
+100 (`Cost_k`). An ill pig stays ill with probability 0.5 if treated and 0.9 if not; a
+healthy one falls ill with probability 0.1 if treated and 0.2 if not.
+
+With four months the optimum is 726.8121: do not treat in the first month whatever the
+test says, and treat on a positive test in the second and third. The number of joint
+states is `2^(3 months - 2)`, and the clusters of [`rooted_junction_tree`](@ref) stay at
+eight states whatever `months` is.
+"""
+function pig_breeding_model(; months::Integer=4)
+    months >= 2 || throw(ArgumentError("months must be at least 2, got $(months)"))
+    health = [Symbol(:Health, k) for k in 1:months]
+    tests = [Symbol(:Test, k) for k in 1:(months - 1)]
+    treat = [Symbol(:Treat, k) for k in 1:(months - 1)]
+    costs = [Symbol(:Cost, k) for k in 1:(months - 1)]
+    id = influence_diagram((h => [:ill, :healthy] for h in health)...,
+                           (t => [:positive, :negative] for t in tests)...,
+                           (d => [:treat, :pass] for d in treat)...;
+                           mechanisms=vcat([tests[k] => health[k] for k in 1:(months - 1)],
+                                           [health[k + 1] => (health[k], treat[k])
+                                            for k in 1:(months - 1)]),
+                           decisions=[treat[k] => tests[k] for k in 1:(months - 1)],
+                           utilities=vcat([costs[k] => treat[k] for k in 1:(months - 1)],
+                                          [:Sale => health[end]]))
+    next = zeros(2, 2, 2)                      # (health, treat) -> next health
+    next[1, 1, :] = [0.5, 0.5]
+    next[1, 2, :] = [0.9, 0.1]
+    next[2, 1, :] = [0.1, 0.9]
+    next[2, 2, :] = [0.2, 0.8]
+    m = bind_cpt(InfluenceDiagramModel(id), health[1] => [0.1, 0.9])
+    for k in 1:(months - 1)
+        m = bind_cpt(m, [tests[k] => [0.8 0.2; 0.1 0.9], health[k + 1] => next])
+        m = bind_utility(m, costs[k] => [-100.0, 0.0])
+    end
+    return bind_utility(m, :Sale => [300.0, 1000.0])
 end

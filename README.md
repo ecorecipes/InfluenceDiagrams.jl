@@ -85,7 +85,11 @@ Semantic layer:
   (`no_forgetting = false` keeps the single-arc, limited-memory reading).
 - `read_influence_diagram` / `write_influence_diagram` for Netica `.dne`, GeNIe `.xdsl` and HUGIN
   `.net` through BayesianNetworkFormats.jl; `umbrella_model`, `reference_grazing_model`
-  (SPEC section 46) and `two_stage_model` examples.
+  (SPEC section 46) and `two_stage_model` examples; and two limited-memory problems with
+  published answers, `used_car_buyer_model` (Howard 1977; expected profit 31) and
+  `pig_breeding_model` (Lauritzen and Nilsson 2001; 726.81 for four months), whose results
+  as printed in the DecisionProgramming.jl documentation all three limited-memory backends
+  reproduce.
 
 ## Formal proof scope
 

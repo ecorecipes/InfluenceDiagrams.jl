@@ -177,7 +177,8 @@ export trace_decision_elimination
 export to_graphviz
 # examples.jl
 export umbrella_diagram, umbrella_model, reference_grazing_diagram,
-       reference_grazing_model, two_stage_diagram, two_stage_model
+       reference_grazing_model, two_stage_diagram, two_stage_model,
+       used_car_buyer_model, pig_breeding_model
 
 include("errors.jl")
 include("schemas.jl")

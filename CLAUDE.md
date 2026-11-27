@@ -74,7 +74,10 @@ Decision variable elimination is exact only under no-forgetting. The choice made
 
 Note that `decision_order` linearises a partial order by part id, so two decisions with no arcs between them are
 ordered but neither knows the other's action: that is a forgetting diagram, and `with_no_forgetting` is the repair.
-- `src/formats_bridge.jl`, `src/examples.jl`: Netica/GeNIe/HUGIN bridge; umbrella, SPEC §46 grazing, two-stage examples.
+- `src/formats_bridge.jl`, `src/examples.jl`: Netica/GeNIe/HUGIN bridge; umbrella, SPEC §46 grazing, two-stage examples;
+  `used_car_buyer_model` and `pig_breeding_model(; months)`, limited-memory problems whose published answers
+  (31; 726.8121, the policy and P(ill at the sale) = 0.305167 for four months, as the DecisionProgramming.jl
+  documentation prints them) are targets in `test/test_published_examples.jl`: change a target only against the source.
 - `src/certificates.jl`: complete version-1 DVE model-data export. Source IDs are strings;
   explicit zero-based coordinates are lexicographic, not `vec` order. Raw CPTs and actual
   diagonal factors must agree. Binary64 bits are retained; rational companions are explicit,
