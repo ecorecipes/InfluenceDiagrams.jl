@@ -176,10 +176,58 @@ end
         end
     end
 
+    @testset "evidence" begin
+        search = BranchAndBoundPolicySearch()
+        rng = MersenneTwister(12)
+        compared = 0
+        for trial in 1:150
+            m = random_influence_model(rng; max_actions=3, max_chance_states=4,
+                                       max_info_states=4)
+            iseven(trial) && (m = forgetful(rng, m))
+            id = syntax(m)
+            chance = chance_names(id)
+            for x in shuffle(rng, chance)[1:min(length(chance), rand(rng, 1:2))]
+                m = observe(m, x => rand(rng, states(id, x)))
+            end
+            ex = try
+                optimize(m, ExhaustivePolicySearch())
+            catch e
+                e isa PolicySearchTooLargeError || rethrow()
+                continue
+            end
+            bb = optimize(m, search)
+            compared += 1
+            @test isapprox(bb.expected_utility, ex.expected_utility; atol=1e-9)
+            @test isapprox(expected_utility(m, bb.strategy), ex.expected_utility;
+                           atol=1e-9)
+        end
+        @test compared >= 120
+        @test optimize(observe(umbrella_model(), :Forecast => :rainy),
+                       search).expected_utility ≈
+              optimize(observe(umbrella_model(), :Forecast => :rainy)).expected_utility
+        # Evidence that only some strategies make possible: a result of `lemon` needs the
+        # test. The first strategy in the search's order does not test.
+        car = observe(used_car_buyer_model(), :Result => :lemon)
+        seen = optimize(car, search)
+        @test seen.expected_utility ≈
+              optimize(car, ExhaustivePolicySearch()).expected_utility
+        @test seen.strategy[:Test]() === :test
+        @test seen.expected_utility ≈ 15       # 40 for buying with the guarantee, less 25
+        # Evidence no strategy makes possible.
+        never = bind_cpt(umbrella_model(), :Weather => [1.0, 0.0])
+        @test_throws BayesianNetworks.ImpossibleEvidenceError optimize(observe(never,
+                                                                               :Weather => :rainy),
+                                                                       search)
+        # A tolerated negative entry is left to the oracle, with evidence or without: a
+        # negative product makes the value tables untrusted.
+        negative = bind_cpt(umbrella_model(), :Weather => [1.0 + 1e-10, -1e-10])
+        @test_throws ArgumentError optimize(observe(negative, :Forecast => :rainy), search)
+        @test_throws ArgumentError optimize(negative, search)
+        @test optimize(negative, ExhaustivePolicySearch()).expected_utility isa Float64
+    end
+
     @testset "what it refuses" begin
         m = umbrella_model()
-        @test_throws ArgumentError optimize(observe(m, :Forecast => :rainy),
-                                            BranchAndBoundPolicySearch())
         @test_throws ArgumentError optimize(m, BranchAndBoundPolicySearch();
                                             context=DecisionContext(;
                                                                     terminal=([:Weather],

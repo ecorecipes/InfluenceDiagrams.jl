@@ -31,8 +31,9 @@ record API gaps instead.
   (so it enumerates the joint states once and shares `max_states`), bounds a node by choosing the best
   action tuple for each value of the observed chance variables, branches on a policy row asked for two
   actions, starts from single policy updating, and maximises `num / den` by Dinkelbach's iteration
-  because accepted kernels are not renormalised. It refuses evidence, a decision context and unreliable
-  products with `ArgumentError`; `SearchNodeLimitError` at `max_nodes`. Returns an optimal strategy, not
+  because accepted kernels are not renormalised (which is also how it takes evidence: the mass is then the
+  evidence's probability, and the search starts from the strategy that maximises it). It refuses a decision
+  context, evidence with a negative kernel entry and unreliable products with `ArgumentError`; `SearchNodeLimitError` at `max_nodes`. Returns an optimal strategy, not
   necessarily the oracle's first. Tested against the oracle (`test/test_branch_and_bound.jl`); no Lean
   proof covers it. The origin note at the top of the file (DecisionProgramming.jl's problem class, no
   shared code) stays.

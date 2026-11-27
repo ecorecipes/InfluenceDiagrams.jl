@@ -48,10 +48,16 @@ The strategy returned is optimal; when several are, it need not be the one
 [`ExhaustivePolicySearch`](@ref) returns (the first in its order). A policy row that no
 state reaches gets the first action label.
 
-Not supported, and refused with `ArgumentError`: evidence, a [`DecisionContext`](@ref),
-and a model in which a product of nonzero probabilities falls below the normal range of
-`Float64` (ADR 0014: such a run is untrusted). [`ExhaustivePolicySearch`](@ref) handles
-all three.
+Evidence is taken: the sum of `Z` is then the probability of the evidence under the
+strategy, the ratio is the conditional expected utility, and the search starts from a
+strategy under which the evidence is most probable. Evidence that no strategy makes
+possible throws `BayesianNetworks.ImpossibleEvidenceError`.
+
+Not supported, and refused with `ArgumentError`: a [`DecisionContext`](@ref), and a model
+in which a product of nonzero probabilities is negative (a tolerated negative kernel
+entry: the rules of ADR 0014 for one are not implemented here) or falls below the normal
+range of `Float64` (ADR 0014: such a run is untrusted). [`ExhaustivePolicySearch`](@ref)
+handles both.
 
 Diagnostics: `(; method = :branch_and_bound, nodes, root_bound, incumbent_start,
 ratio_iterations, nstrategies)`, where `root_bound` is the bound before any branching and
@@ -281,8 +287,12 @@ function optimize(m::InfluenceDiagramModel, b::BranchAndBoundPolicySearch;
     context === nothing || _active_context(context) === nothing ||
         throw(ArgumentError("BranchAndBoundPolicySearch does not take a decision context; optimise against a context with ExhaustivePolicySearch"))
     _check_solvable(m; atol=atol)
-    isempty(evidence(m)) ||
-        throw(ArgumentError("BranchAndBoundPolicySearch does not take evidence; optimise a model with evidence with ExhaustivePolicySearch"))
+    # With evidence the mass of a strategy is the probability of the evidence under it, and
+    # the rules for a tolerated negative entry (ADR 0014 decision 4) are not implemented
+    # here.
+    conditioned = !isempty(evidence(m))
+    conditioned && _has_negative_entry(m) &&
+        throw(ArgumentError("BranchAndBoundPolicySearch does not take evidence on a model with a negative kernel entry; use ExhaustivePolicySearch"))
     id = syntax(m)
     ds = decision_order(id)
     keep = Symbol[]
@@ -295,7 +305,7 @@ function optimize(m::InfluenceDiagramModel, b::BranchAndBoundPolicySearch;
     end
     N, Z, _, unreliable = _value_tables(m, keep; max_states=max_states)
     unreliable &&
-        throw(ArgumentError("a product of nonzero probabilities fell below the normal range of Float64, so the value tables are untrusted (ADR 0014); use ExhaustivePolicySearch, which scores such a model strategy by strategy"))
+        throw(ArgumentError("a product of nonzero probabilities is negative or below the normal range of Float64, so the value tables are untrusted (ADR 0014); use ExhaustivePolicySearch, which scores such a model strategy by strategy"))
     kpos = Dict{Symbol,Int}(x => i for (i, x) in enumerate(keep))
     info_pos = [Int[kpos[x] for x in information_names(id, d)] for d in ds]
     act_pos = Int[kpos[variable_name(id, decision_variable(id, d))] for d in ds]
@@ -303,6 +313,13 @@ function optimize(m::InfluenceDiagramModel, b::BranchAndBoundPolicySearch;
     n, z = vec(N), vec(Z)
     tables = [ones(Int, cells.nrows[i]) for i in eachindex(ds)]
     nodes = 0
+    if conditioned
+        # Start from a strategy under which the evidence is most probable; if even that
+        # has probability zero, the evidence is impossible under every strategy.
+        tables, mass, _, searched = _maximise_selected_sum(z, cells, tables, b.max_nodes)
+        nodes += searched
+        mass > 0 || throw(BayesianNetworks.ImpossibleEvidenceError(copy(evidence(m))))
+    end
     iterations = 0
     root_bound = NaN
     incumbent_start = NaN

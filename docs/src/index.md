@@ -47,7 +47,7 @@ Part of the ecorecipes compositional Bayesian-network ecosystem:
   Team problems with `10^12` strategies solve in under a second; the bound weakens as the
   number of decisions that cannot see each other grows (four such decisions with six
   signals each took 48 s). It still enumerates the joint states once, as the oracle does,
-  and takes no evidence or decision context. The problem class follows
+  and takes evidence but no decision context. The problem class follows
   DecisionProgramming.jl (Salo, Andelmin and Oliveira, 2022), which solves it as an
   integer programme; this is an independent implementation with a different method.
   Checked against the oracle on random diagrams; not covered by the Lean proofs.
