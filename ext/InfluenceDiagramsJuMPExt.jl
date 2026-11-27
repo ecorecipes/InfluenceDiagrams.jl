@@ -88,7 +88,8 @@ function ID._mixed_integer_optimize(m::InfluenceDiagramModel, b::MixedIntegerPol
             for (k, ci) in enumerate(cells)
                 JuMP.add_to_expression!(totals[_sub_index(ci, rest, dims)], μx[k])
                 JuMP.@constraint(model,
-                                 μx[k] <= mass * zi[_sub_index(ci, at, dims), ci[length(dims)]])
+                                 μx[k] <=
+                                 mass * zi[_sub_index(ci, at, dims), ci[length(dims)]])
             end
             JuMP.@constraint(model, [j in eachindex(marginal)], totals[j] == marginal[j])
         else
