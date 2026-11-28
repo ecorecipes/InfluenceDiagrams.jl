@@ -39,8 +39,9 @@
         @test_throws UtilityScopeError utility_value(u, :rainy)
         @test_throws UtilityScopeError bind_utility(m, :U => [1.0, 2.0])
         m2 = bind_utility(m,
-                          :U => (w, a) -> w == :rainy ? (a == :take ? 70 : 0) :
-                                          (a == :take ? 20 : 100))
+                          :U =>
+                              (w, a) -> w == :rainy ? (a == :take ? 70 : 0) :
+                                        (a == :take ? 20 : 100))
         @test utility(m2, :U) isa FunctionUtility
         @test utility_table(utility(m2, :U), utility(m1, :U).scope) ==
               [20.0 100.0; 70.0 0.0]
@@ -223,11 +224,12 @@
         @test validate(m) === nothing
         @test validate(m; closed=true, unique_names=true, semantics=true) === nothing
         bad = InfluenceDiagramModel(syntax(m); kernels=kernels(m),
-                                    utilities=Dict{Symbol,AbstractUtility}(:U => TabularUtility([FiniteAxis(:Weather,
-                                                                                                            [:sunny,
-                                                                                                             :rainy])],
-                                                                                                [1.0,
-                                                                                                 2.0])))
+                                    utilities=Dict{Symbol,AbstractUtility}(:U =>
+                                                                               TabularUtility([FiniteAxis(:Weather,
+                                                                                                          [:sunny,
+                                                                                                           :rainy])],
+                                                                                              [1.0,
+                                                                                               2.0])))
         @test_throws UtilityScopeError validate(bad)
     end
 
@@ -256,5 +258,31 @@
               BayesModel
         @test_throws BayesNetError instantiate(m,
                                                Strategy(:Umbrella => ConstantPolicy(:take)))
+    end
+
+    @testset "rational TabularUtility preserves exact arithmetic" begin
+        id = influence_diagram(:W => [:sunny, :rainy], :D => [:take, :leave];
+                               mechanisms=[:W => ()], decisions=[:D => Symbol[]],
+                               utilities=[:U => (:W, :D)])
+        m = bind_cpt(InfluenceDiagramModel(id), :W => [3 // 5, 2 // 5])
+        m = bind_utility(m, :U => [20 // 1 100 // 1; 70 // 1 0 // 1])
+        u = utility(m, :U)
+        @test u isa TabularUtility{Rational{Int}}
+        @test utility_value(u, :sunny, :leave) === 100 // 1
+        @test utility_table(u) isa Matrix{Rational{Int}}
+        @test utility_factor(u) isa Factor{Rational{Int}}
+        @test total_utility(m, [:W => :rainy, :D => :take]) === 70 // 1
+        @test expected_utility(m, :D => :take) ≈ 40.0
+        @test expected_utility(m, :D => :leave) ≈ 60.0
+        @test optimize(m).expected_utility ≈ 60.0
+        @test optimize(m; backend=ExhaustivePolicySearch()).expected_utility ≈ 60.0
+        # Explicit rational parameterization for integer tables
+        ax = [FiniteAxis(:W, [:sunny, :rainy])]
+        u_ex = TabularUtility{Rational{Int}}(ax, [1, 3])
+        @test u_ex isa TabularUtility{Rational{Int}}
+        @test utility_value(u_ex, :rainy) === 3 // 1
+        # Default integer table keeps Float64 for certificate compatibility
+        u_int = TabularUtility(ax, [1, 3])
+        @test u_int isa TabularUtility{Float64}
     end
 end

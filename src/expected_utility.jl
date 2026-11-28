@@ -29,7 +29,8 @@ of an instantiated network, or of a dictionary of utilities.
 """
 function total_utility(us::AbstractDict{Symbol,<:AbstractUtility},
                        assignment::AbstractDict{Symbol,Symbol})
-    return sum((utility_value(u, assignment) for u in values(us)); init=0.0)
+    isempty(us) && return 0.0
+    return sum(utility_value(u, assignment) for u in values(us))
 end
 
 function total_utility(us::AbstractDict{Symbol,<:AbstractUtility},
@@ -44,7 +45,7 @@ total_utility(bm::BayesModel, assignment) = total_utility(_utilities_of(bm), ass
 function _expectation(J::JointTable, us::AbstractDict{Symbol,<:AbstractUtility},
                       axes_of)
     pos = Dict{Symbol,Int}(x => i for (i, x) in enumerate(J.variables))
-    tables = Tuple{Array{Float64},Vector{Int}}[]
+    tables = Tuple{Array,Vector{Int}}[]
     for (name, u) in us
         axes = axes_of(u)
         for a in axes
@@ -65,7 +66,7 @@ function _expectation(J::JointTable, us::AbstractDict{Symbol,<:AbstractUtility},
         p == 0 && continue
         u = 0.0
         for (tab, ax) in tables
-            u += tab[ntuple(j -> ci[ax[j]], length(ax))...]
+            u += Float64(tab[ntuple(j -> ci[ax[j]], length(ax))...])
         end
         eu += p * u
     end

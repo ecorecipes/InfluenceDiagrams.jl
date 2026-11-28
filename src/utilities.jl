@@ -16,16 +16,20 @@ assignment and [`scope`](@ref) with its argument names.
 abstract type AbstractUtility end
 
 """
+    TabularUtility{T<:Real}(scope::Vector{FiniteAxis}, table::AbstractArray{<:Real})
     TabularUtility(scope::Vector{FiniteAxis}, table::AbstractArray{<:Real})
 
 A utility given as a table over its scope: `size(table) == (length.(scope)...)`, with a
-0-dimensional array (or a number) for an empty scope. Throws
-[`UtilityScopeError`](@ref) (`what == :table`) for a table of the wrong size.
+0-dimensional array (or a number) for an empty scope. Rational tables keep their exact
+element type (`Rational`); other real tables are stored as `Float64` unless an explicit
+type parameter `T` is supplied. Throws [`UtilityScopeError`](@ref) (`what == :table`) for
+a table of the wrong size.
 """
-struct TabularUtility <: AbstractUtility
+struct TabularUtility{T<:Real} <: AbstractUtility
     scope::Vector{FiniteAxis}
-    table::Array{Float64}
-    function TabularUtility(scope::AbstractVector{FiniteAxis}, table::AbstractArray{<:Real})
+    table::Array{T}
+    function TabularUtility{T}(scope::AbstractVector{FiniteAxis},
+                               table::AbstractArray{<:Real}) where {T<:Real}
         expected = Tuple(length(a) for a in scope)
         size(table) == expected ||
             throw(UtilityScopeError(isempty(scope) ? :utility : first(scope).name, :table,
@@ -34,11 +38,20 @@ struct TabularUtility <: AbstractUtility
             throw(UtilityScopeError(first(scope).name, :duplicate,
                                     unique([a.name for a in scope]),
                                     [a.name for a in scope]))
-        return new(collect(FiniteAxis, scope), convert(Array{Float64}, collect(table)))
+        return new{T}(collect(FiniteAxis, scope), convert(Array{T}, collect(table)))
     end
 end
 
+function TabularUtility(scope::AbstractVector{FiniteAxis},
+                        table::AbstractArray{T}) where {T<:Real}
+    S = T <: Rational ? T : Float64
+    return TabularUtility{S}(scope, table)
+end
+
 TabularUtility(scope::AbstractVector{FiniteAxis}, x::Real) = TabularUtility(scope, fill(x))
+function TabularUtility{T}(scope::AbstractVector{FiniteAxis}, x::Real) where {T<:Real}
+    return TabularUtility{T}(scope, fill(x))
+end
 
 Base.:(==)(a::TabularUtility, b::TabularUtility) = a.scope == b.scope && a.table == b.table
 Base.hash(u::TabularUtility, h::UInt) = hash(u.table, hash(u.scope, h))
